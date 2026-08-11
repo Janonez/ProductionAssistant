@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>ProductionAssistant</RootNamespace>
+    <AssemblyName>ProductionAssistant</AssemblyName>
+    <Version>1.4.0</Version>
+    <AssemblyVersion>1.4.0.0</AssemblyVersion>
+    <FileVersion>1.4.0.0</FileVersion>
+    <InformationalVersion>1.4.0</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\production-assistant-logo.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The current local proxy cannot complete TLS to api.nuget.org; re-enable with -p:NuGetAudit=true after fixing the proxy. -->
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.250907003" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProductionAssistant.Core\ProductionAssistant.Core.csproj" />
+    <ProjectReference Include="..\ProductionAssistant.Infrastructure\ProductionAssistant.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="Assets\ReportEditor\editor-source.js;Assets\ReportEditor\package.json;Assets\ReportEditor\package-lock.json;Assets\ReportEditor\node_modules\**" />
+    <Content Include="Assets\production-assistant-logo.png"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\production-assistant-logo.ico"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\ReportEditor\editor.html"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\ReportEditor\editor.js"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CopyWinUIResourcesToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <WinUIXbf Include="$(TargetDir)**\*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WinUIXbf)"
+          DestinationFiles="@(WinUIXbf->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).pri"
+          DestinationFolder="$(PublishDir)"
+          Condition="Exists('$(TargetDir)$(AssemblyName).pri')" />
+  </Target>
+</Project>

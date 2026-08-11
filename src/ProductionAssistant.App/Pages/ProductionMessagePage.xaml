@@ -1,0 +1,243 @@
+<Page
+    x:Class="ProductionAssistant.Pages.ProductionMessagePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid Padding="32,24,32,32" RowSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="PageTitleText" Style="{StaticResource TitleTextBlockStyle}"
+                       FontSize="32"
+                       FontWeight="Bold"
+                       Text="生产消息 Notion 入库" />
+
+            <Border x:Name="ConfigurationContent" Grid.Row="1" Grid.RowSpan="2"
+                    Style="{StaticResource CardStyle}" Padding="18">
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Notion 数据源" />
+                        <Button Grid.Column="1"
+                                x:Name="BindSourcesButton"
+                                Click="BindSourcesButton_Click"
+                                Content="绑定" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <InfoBar x:Name="CuttingBindingInfoBar"
+                                 IsOpen="True"
+                                 IsClosable="False"
+                                 HorizontalAlignment="Left"
+                                 Severity="Informational"
+                                 Title="下料数据库"
+                                 Message="未绑定" />
+                        <InfoBar x:Name="TowerBindingInfoBar"
+                                 IsOpen="True"
+                                 IsClosable="False"
+                                 HorizontalAlignment="Left"
+                                 Severity="Informational"
+                                 Title="塔筒产线数据库"
+                                 Message="未绑定" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Grid x:Name="UseContent" Grid.Row="1" Grid.RowSpan="2" ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        VerticalAlignment="Stretch"
+                        Style="{StaticResource CardStyle}"
+                        Padding="18">
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="28" />
+                            <RowDefinition Height="44" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock VerticalAlignment="Center"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Text="粘贴消息" />
+                        <TextBox Grid.Row="2"
+                                 x:Name="MessageInputBox"
+                                 MinHeight="160"
+                                 VerticalContentAlignment="Top"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 PlaceholderText="粘贴生产消息；批量时每条以日期开头并换行" />
+                        <Grid Grid.Row="1" MinHeight="44" ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center"
+                                       Text="默认业务日期" />
+                            <CalendarDatePicker Grid.Column="1"
+                                                x:Name="DefaultDatePicker"
+                                                MinWidth="120"
+                                                PlaceholderText="请选择日期"
+                                                HorizontalAlignment="Left" />
+                            <Button Grid.Column="3"
+                                    x:Name="ParseButton"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Click="ParseButton_Click"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Content="解析并预览" />
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Column="1"
+                        VerticalAlignment="Stretch"
+                        Style="{StaticResource CardStyle}"
+                        Padding="18">
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="28" />
+                            <RowDefinition Height="Auto" MinHeight="44" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock VerticalAlignment="Center"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="解析预览" />
+                        </Grid>
+                        <Grid Grid.Row="1" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <InfoBar x:Name="ResultInfoBar"
+                                     HorizontalAlignment="Left"
+                                     VerticalAlignment="Center"
+                                     IsOpen="True"
+                                     IsClosable="False"
+                                     Severity="Informational"
+                                     Title="等待解析 · 暂无预览" />
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        Margin="0,6,0,0"
+                                        Spacing="12">
+                                <Button x:Name="ImportButton"
+                                        Click="ImportButton_Click"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        IsEnabled="False"
+                                        Content="确认写入" />
+                                <ProgressRing x:Name="ImportBusyRing"
+                                              Width="22"
+                                              Height="22"
+                                              IsActive="False"
+                                              Visibility="Collapsed" />
+                            </StackPanel>
+                        </Grid>
+                        <ScrollViewer Grid.Row="2"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="MessagesList"
+                                      HorizontalContentAlignment="Stretch"
+                                      VerticalAlignment="Top">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border HorizontalAlignment="Stretch"
+                                            Margin="0,0,0,12"
+                                            BorderBrush="{StaticResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Padding="12">
+                                        <StackPanel Spacing="8">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock FontSize="16"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding CardTitle}" />
+                                                <TextBlock Grid.Column="1"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Text="{Binding StatusText}" />
+                                            </Grid>
+                                            <StackPanel Spacing="8">
+                                            <Grid Margin="0,4,0,0" ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <CalendarDatePicker Header="业务日期"
+                                                                    Width="140"
+                                                                    HorizontalAlignment="Left"
+                                                                    Date="{Binding BusinessDateSelection, Mode=TwoWay}"
+                                                                    PlaceholderText="请选择日期" />
+                                                <ComboBox Grid.Column="1"
+                                                          Header="数据库"
+                                                          ItemsSource="{Binding TypeOptions}"
+                                                          SelectedItem="{Binding TypeDisplay, Mode=TwoWay}" />
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding PreviewFields}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="0,0,0,4"
+                                                                Padding="10,6"
+                                                                HorizontalAlignment="Stretch"
+                                                                Background="{StaticResource GlassSubtleBrush}"
+                                                                BorderBrush="{StaticResource CardBorderBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="8">
+                                                            <Grid ColumnSpacing="12">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock VerticalAlignment="Center"
+                                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                                           TextWrapping="Wrap"
+                                                                           Text="{Binding Label}" />
+                                                                <TextBlock Grid.Column="1"
+                                                                           VerticalAlignment="Center"
+                                                                           FontSize="16"
+                                                                           FontWeight="SemiBold"
+                                                                           Text="{Binding Value}" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                       TextWrapping="Wrap"
+                                                       Text="{Binding WarningText}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

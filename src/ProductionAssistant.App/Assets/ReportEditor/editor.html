@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: light dark; font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: transparent; color: CanvasText; }
+    #editor { min-height: 248px; padding: 11px 12px; font-size: 14px; line-height: 1.65; outline: none; }
+    .ProseMirror { min-height: 224px; outline: none; }
+    .ProseMirror p { margin: 0; }
+    .field-token {
+      display: inline-flex; align-items: center; gap: 5px; max-width: min(240px, calc(100% - 4px));
+      margin: 0 2px; padding: 1px 8px; border-radius: 7px;
+      background: color-mix(in srgb, AccentColor 13%, Canvas);
+      color: CanvasText; box-shadow: inset 0 0 0 1px color-mix(in srgb, AccentColor 22%, transparent);
+      vertical-align: baseline; white-space: nowrap; user-select: all;
+    }
+    .field-token.ProseMirror-selectednode { box-shadow: inset 0 0 0 2px AccentColor; }
+    .date-token { background: color-mix(in srgb, AccentColor 9%, Canvas); }
+    .field-icon { font-size: 11px; color: AccentColor; }
+    .field-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    @media (prefers-color-scheme: dark) {
+      .field-token { color: CanvasText; background: color-mix(in srgb, AccentColor 24%, Canvas); }
+    }
+  </style>
+</head>
+<body>
+  <div id="editor"></div>
+  <script src="editor.js"></script>
+</body>
+</html>

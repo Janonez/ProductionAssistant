@@ -1,0 +1,36 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProductionAssistant.App", "src\ProductionAssistant.App\ProductionAssistant.csproj", "{BB84A197-4E25-48AB-99D6-A65452EF76AE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProductionAssistant.Core", "src\ProductionAssistant.Core\ProductionAssistant.Core.csproj", "{4F0C87C8-37E6-4C36-BEF2-224658AFDF65}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProductionAssistant.Infrastructure", "src\ProductionAssistant.Infrastructure\ProductionAssistant.Infrastructure.csproj", "{1414B9AC-8F7B-4D0A-A4C5-A84577266F6B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProductionAssistant.Tests", "tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj", "{B31AFA5A-ED52-4143-A775-980374134132}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BB84A197-4E25-48AB-99D6-A65452EF76AE}.Debug|x64.ActiveCfg = Debug|x64
+		{BB84A197-4E25-48AB-99D6-A65452EF76AE}.Debug|x64.Build.0 = Debug|x64
+		{BB84A197-4E25-48AB-99D6-A65452EF76AE}.Release|x64.ActiveCfg = Release|x64
+		{BB84A197-4E25-48AB-99D6-A65452EF76AE}.Release|x64.Build.0 = Release|x64
+		{4F0C87C8-37E6-4C36-BEF2-224658AFDF65}.Debug|x64.ActiveCfg = Debug|x64
+		{4F0C87C8-37E6-4C36-BEF2-224658AFDF65}.Debug|x64.Build.0 = Debug|x64
+		{4F0C87C8-37E6-4C36-BEF2-224658AFDF65}.Release|x64.ActiveCfg = Release|x64
+		{4F0C87C8-37E6-4C36-BEF2-224658AFDF65}.Release|x64.Build.0 = Release|x64
+		{1414B9AC-8F7B-4D0A-A4C5-A84577266F6B}.Debug|x64.ActiveCfg = Debug|x64
+		{1414B9AC-8F7B-4D0A-A4C5-A84577266F6B}.Debug|x64.Build.0 = Debug|x64
+		{1414B9AC-8F7B-4D0A-A4C5-A84577266F6B}.Release|x64.ActiveCfg = Release|x64
+		{1414B9AC-8F7B-4D0A-A4C5-A84577266F6B}.Release|x64.Build.0 = Release|x64
+		{B31AFA5A-ED52-4143-A775-980374134132}.Debug|x64.ActiveCfg = Debug|x64
+		{B31AFA5A-ED52-4143-A775-980374134132}.Debug|x64.Build.0 = Debug|x64
+		{B31AFA5A-ED52-4143-A775-980374134132}.Release|x64.ActiveCfg = Release|x64
+		{B31AFA5A-ED52-4143-A775-980374134132}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal

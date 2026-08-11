@@ -1,0 +1,163 @@
+<Page
+    x:Class="ProductionAssistant.Pages.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="{StaticResource PageBackgroundBrush}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="980" Margin="42" HorizontalAlignment="Left" Spacing="24">
+                <StackPanel Spacing="5">
+                    <TextBlock FontSize="30" FontWeight="SemiBold" Text="生产助手" />
+                    <TextBlock FontSize="14" Foreground="{StaticResource MutedTextBrush}"
+                               Text="选择工具开始操作；Notion 状态仅反映当前设备上的本地配置。" />
+                </StackPanel>
+
+                <InfoBar x:Name="NotionOverviewInfoBar"
+                         IsOpen="True" IsClosable="False"
+                         Title="Notion 配置">
+                    <InfoBar.ActionButton>
+                        <Button Content="打开设置" Click="OpenSettingsButton_Click" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
+                <StackPanel Spacing="12">
+                    <StackPanel Spacing="3">
+                        <TextBlock FontSize="21" FontWeight="SemiBold" Text="本地工具" />
+                        <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                   Text="在当前电脑上处理文件，不依赖 Notion。" />
+                    </StackPanel>
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Style="{StaticResource SettingsEntryButtonStyle}"
+                                MinHeight="132" Tag="plan-pdf" Click="ModuleCard_Click"
+                                AutomationProperties.Name="打开挂网计划 PDF 导出">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="52" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="52" Height="52" CornerRadius="14" Background="#A8E4F3ED">
+                                    <FontIcon HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              FontSize="24" Foreground="{StaticResource BrandGreenBrush}" Glyph="&#xE749;" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="挂网计划 PDF 导出" />
+                                    <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
+                                               Text="本地审查计划，统一打印格式并生成候选 PDF。" />
+                                    <TextBlock Foreground="{StaticResource BrandGreenBrush}" Text="本地可用" />
+                                </StackPanel>
+                                <FontIcon Grid.Column="2" VerticalAlignment="Center" Foreground="{StaticResource MutedTextBrush}" Glyph="&#xE76C;" />
+                            </Grid>
+                        </Button>
+                        <Button Grid.Column="1" Style="{StaticResource SettingsEntryButtonStyle}"
+                                MinHeight="132" Tag="production-meeting" Click="ModuleCard_Click"
+                                AutomationProperties.Name="打开生产会资料拆分">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="52" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="52" Height="52" CornerRadius="14" Background="#A8E4F3ED">
+                                    <FontIcon HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              FontSize="24" Foreground="{StaticResource BrandGreenBrush}" Glyph="&#xE8A5;" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="生产会资料拆分" />
+                                    <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
+                                               Text="把单 Sheet 生产会资料拆分为三个业务 Sheet。" />
+                                    <TextBlock Foreground="{StaticResource BrandGreenBrush}" Text="本地可用" />
+                                </StackPanel>
+                                <FontIcon Grid.Column="2" VerticalAlignment="Center" Foreground="{StaticResource MutedTextBrush}" Glyph="&#xE76C;" />
+                            </Grid>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel Spacing="12" Margin="0,2,0,34">
+                    <StackPanel Spacing="3">
+                        <TextBlock FontSize="21" FontWeight="SemiBold" Text="Notion 工具" />
+                        <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                   Text="使用前需要在当前设备上完成 Notion 连接和数据库绑定。" />
+                    </StackPanel>
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Style="{StaticResource SettingsEntryButtonStyle}"
+                                MinHeight="144" Tag="daily-weld" Click="ModuleCard_Click"
+                                AutomationProperties.Name="打开每日焊接数据模拟">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="52" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="52" Height="52" CornerRadius="14" Background="#A8E4F3ED">
+                                    <FontIcon HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              FontSize="24" Foreground="{StaticResource BrandGreenBrush}" Glyph="&#xE9D2;" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="每日焊接数据模拟" />
+                                    <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
+                                               Text="生成、调整每日焊接数量并导入 Notion。" />
+                                    <TextBlock x:Name="DailyWeldStatusText" FontWeight="SemiBold" Text="正在读取配置" />
+                                </StackPanel>
+                                <FontIcon Grid.Column="2" VerticalAlignment="Center" Foreground="{StaticResource MutedTextBrush}" Glyph="&#xE76C;" />
+                            </Grid>
+                        </Button>
+                        <Button Grid.Column="1" Style="{StaticResource SettingsEntryButtonStyle}"
+                                MinHeight="144" Tag="production-message" Click="ModuleCard_Click"
+                                AutomationProperties.Name="打开生产消息 Notion 入库">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="52" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="52" Height="52" CornerRadius="14" Background="#A8E4F3ED">
+                                    <FontIcon HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              FontSize="24" Foreground="{StaticResource BrandGreenBrush}" Glyph="&#xE8A4;" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="生产消息 Notion 入库" />
+                                    <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
+                                               Text="解析生产消息，确认后写入日报并关联累计库。" />
+                                    <TextBlock x:Name="ProductionMessageStatusText" FontWeight="SemiBold" Text="正在读取配置" />
+                                </StackPanel>
+                                <FontIcon Grid.Column="2" VerticalAlignment="Center" Foreground="{StaticResource MutedTextBrush}" Glyph="&#xE76C;" />
+                            </Grid>
+                        </Button>
+                    </Grid>
+                    <Button Style="{StaticResource SettingsEntryButtonStyle}"
+                            MinHeight="116" Tag="daily-report" Click="ModuleCard_Click"
+                            AutomationProperties.Name="打开日报自动推送">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="52" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="52" Height="52" CornerRadius="14" Background="#A8E4F3ED">
+                                <FontIcon HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          FontSize="24" Foreground="{StaticResource BrandGreenBrush}" Glyph="&#xE724;" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                                <TextBlock FontSize="17" FontWeight="SemiBold" Text="日报自动推送" />
+                                <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
+                                           Text="从 Notion 组合固定日报，每天 17:30 自动发送到钉钉群。" />
+                                <TextBlock x:Name="DailyReportStatusText" FontWeight="SemiBold" Text="正在读取配置" />
+                            </StackPanel>
+                            <FontIcon Grid.Column="2" VerticalAlignment="Center"
+                                      Foreground="{StaticResource MutedTextBrush}" Glyph="&#xE76C;" />
+                        </Grid>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

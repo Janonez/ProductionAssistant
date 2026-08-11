@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "esbuild editor-source.js --bundle --minify --format=iife --outfile=editor.js"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.29.0",
+    "@tiptap/starter-kit": "^3.29.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

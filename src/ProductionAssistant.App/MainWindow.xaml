@@ -1,0 +1,93 @@
+<Window
+    x:Class="ProductionAssistant.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="生产助手">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="AppTitleBar" Margin="0,0,140,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="48" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="PaneToggleButton" Width="48" Height="48"
+                    Padding="0" Background="Transparent"
+                    BorderThickness="0" IsTabStop="False"
+                    Click="PaneToggleButton_Click">
+                <FontIcon FontSize="16" Glyph="&#xE700;" />
+            </Button>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="9">
+                <Image Width="28" Height="28" VerticalAlignment="Center"
+                       Source="ms-appx:///Assets/production-assistant-logo.png" />
+                <TextBlock VerticalAlignment="Center" FontSize="14"
+                           FontWeight="SemiBold" Text="生产助手" />
+            </StackPanel>
+        </Grid>
+
+        <NavigationView
+            Grid.Row="1"
+            x:Name="AppNavigation"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
+            IsSettingsVisible="True"
+            IsTitleBarAutoPaddingEnabled="False"
+            OpenPaneLength="220"
+            CompactPaneLength="48"
+            PaneDisplayMode="Auto"
+            ExpandedModeThresholdWidth="980"
+            SelectionChanged="AppNavigation_SelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="HomeNavigationItem" Content="首页" Tag="home">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Home" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="PlanPdfModuleNavigationItem"
+                                    Content="挂网计划 PDF 导出" SelectsOnInvoked="False">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE749;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="PlanPdfNavigationItem" Content="使用页" Tag="plan-pdf" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="ProductionMeetingModuleNavigationItem"
+                                    Content="生产会资料拆分" SelectsOnInvoked="False">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="ProductionMeetingNavigationItem" Content="使用页" Tag="production-meeting" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="DailyWeldModuleNavigationItem"
+                                    Content="每日焊接数据模拟" SelectsOnInvoked="False">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE9D2;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="DailyWeldNavigationItem" Content="使用页" Tag="daily-weld" />
+                        <NavigationViewItem x:Name="DailyWeldConfigNavigationItem" Content="配置页" Tag="daily-weld-config" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="ProductionMessageModuleNavigationItem"
+                                    Content="生产消息 Notion 入库" SelectsOnInvoked="False">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A4;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="ProductionMessageNavigationItem" Content="使用页" Tag="production-message" />
+                        <NavigationViewItem x:Name="ProductionMessageConfigNavigationItem" Content="数据库配置" Tag="production-message-config" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="DailyReportModuleNavigationItem"
+                                    Content="日报自动推送" IsExpanded="True" SelectsOnInvoked="False">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE724;" /></NavigationViewItem.Icon>
+                    <NavigationViewItem.MenuItems>
+                        <NavigationViewItem x:Name="DailyReportNavigationItem" Content="模板编辑" Tag="daily-report" />
+                        <NavigationViewItem x:Name="DailyReportConfigNavigationItem" Content="推送配置" Tag="daily-report-config" />
+                        <NavigationViewItem x:Name="DailyReportRecordsNavigationItem" Content="运行记录" Tag="daily-report-records" />
+                    </NavigationViewItem.MenuItems>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+    </Grid>
+</Window>
