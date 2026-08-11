@@ -4,9 +4,7 @@
 
 ## 未发布
 
-- 将解决方案拆分为 App、Core、Infrastructure 和 Tests 四个项目。
-- 使用 xUnit 和 GitHub Actions 建立自动回归与发布流程。
-- 发布包改由 GitHub Release 保存，不再提交到源码仓库。
+- 暂无。
 
 ## 1.4.0
 

@@ -32,7 +32,7 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 - `ProductionAssistant.Infrastructure`：Notion、钉钉、Excel、PDF、DPAPI、本地文件和任务计划程序。
 - `ProductionAssistant.Tests`：引用真实生产程序集的自动化测试。
 
-详细边界见 [架构说明](docs/ARCHITECTURE.md)，日常提交与合并见 [Git 工作流程](docs/GIT_WORKFLOW.md)，构建、发布和人工验收见 [运维手册](docs/OPERATIONS.md)，产品规则见 [PRD](PRD.md)。
+各版本已经发布的用户可见变化见 [变更记录](CHANGELOG.md)。
 
 ## 发布
 
