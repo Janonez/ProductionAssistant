@@ -1,7 +1,9 @@
 {
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "esbuild editor-source.js --bundle --minify --format=iife --outfile=editor.js"
+    "build": "esbuild editor-source.js --bundle --minify --format=iife --outfile=editor.js",
+    "test": "node report-serializer.test.mjs"
   },
   "dependencies": {
     "@tiptap/core": "^3.29.0",

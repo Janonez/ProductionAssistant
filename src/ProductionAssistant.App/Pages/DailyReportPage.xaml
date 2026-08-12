@@ -1,139 +1,239 @@
-<Page
-    x:Class="ProductionAssistant.Pages.DailyReportPage"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<Page x:Class="ProductionAssistant.Pages.DailyReportPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid Background="{StaticResource PageBackgroundBrush}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       HorizontalContentAlignment="Stretch">
-            <StackPanel MaxWidth="1180" Margin="36,26,36,40" Spacing="16"
-                        HorizontalAlignment="Stretch">
-                <StackPanel Spacing="4">
-                    <TextBlock x:Name="PageTitleText" FontSize="30" FontWeight="SemiBold" Text="日报自动推送" />
-                    <TextBlock x:Name="PageDescriptionText" Foreground="{StaticResource MutedTextBrush}"
-                               Text="从多个 Notion 数据库读取当天数据，生成固定文字并自动发送到钉钉群。" />
-                </StackPanel>
-
+            <StackPanel MaxWidth="1180" Margin="36,26,36,40" Spacing="16" HorizontalAlignment="Stretch">
+                <Grid>
+                    <StackPanel>
+                        <TextBlock FontSize="30" FontWeight="SemiBold" Text="日报自动推送" />
+                        <TextBlock x:Name="PageDescriptionText" Foreground="{StaticResource MutedTextBrush}"
+                                   Text="管理日报内容、推送计划和运行记录。" />
+                    </StackPanel>
+                    <Button x:Name="NewJobButton" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Style="{StaticResource AccentButtonStyle}" Content="新建日报任务" Click="NewJobButton_Click" />
+                </Grid>
                 <InfoBar x:Name="StatusInfoBar" IsOpen="True" IsClosable="False"
                          Severity="Informational" Title="正在读取配置" />
 
-                <Grid x:Name="ContentGrid" ColumnSpacing="16" HorizontalAlignment="Stretch">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="3*" />
-                        <ColumnDefinition Width="2*" />
-                    </Grid.ColumnDefinitions>
+                <StackPanel x:Name="JobListPanel" Spacing="12">
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="任务列表" />
+                    <ListView x:Name="JobList" IsItemClickEnabled="True" SelectionMode="None"
+                              ItemClick="JobList_ItemClick">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="18" />
+                                <Setter Property="Margin" Value="0" />
+                                <Setter Property="CornerRadius" Value="14" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListViewItem">
+                                            <Grid Background="Transparent">
+                                                <VisualStateManager.VisualStateGroups>
+                                                    <VisualStateGroup x:Name="CommonStates">
+                                                        <VisualState x:Name="Normal" />
+                                                        <VisualState x:Name="PointerOver">
+                                                            <VisualState.Setters>
+                                                                <Setter Target="OuterShadow.Opacity" Value="1" />
+                                                                <Setter Target="InnerShadow.Opacity" Value="1" />
+                                                                <Setter Target="CardSurface.Background" Value="#E8FFFFFF" />
+                                                            </VisualState.Setters>
+                                                        </VisualState>
+                                                        <VisualState x:Name="Pressed">
+                                                            <VisualState.Setters>
+                                                                <Setter Target="OuterShadow.Opacity" Value="1" />
+                                                                <Setter Target="InnerShadow.Opacity" Value="1" />
+                                                                <Setter Target="CardSurface.Background" Value="#E8F2F2F2" />
+                                                            </VisualState.Setters>
+                                                        </VisualState>
+                                                        <VisualState x:Name="Selected" />
+                                                        <VisualState x:Name="PointerOverSelected">
+                                                            <VisualState.Setters>
+                                                                <Setter Target="OuterShadow.Opacity" Value="1" />
+                                                                <Setter Target="InnerShadow.Opacity" Value="1" />
+                                                                <Setter Target="CardSurface.Background" Value="#E8FFFFFF" />
+                                                            </VisualState.Setters>
+                                                        </VisualState>
+                                                        <VisualState x:Name="PressedSelected">
+                                                            <VisualState.Setters>
+                                                                <Setter Target="OuterShadow.Opacity" Value="1" />
+                                                                <Setter Target="InnerShadow.Opacity" Value="1" />
+                                                                <Setter Target="CardSurface.Background" Value="#E8F2F2F2" />
+                                                            </VisualState.Setters>
+                                                        </VisualState>
+                                                    </VisualStateGroup>
+                                                    <VisualStateGroup x:Name="FocusStates">
+                                                        <VisualState x:Name="Unfocused" />
+                                                        <VisualState x:Name="PointerFocused" />
+                                                        <VisualState x:Name="Focused">
+                                                            <VisualState.Setters>
+                                                                <Setter Target="FocusBorder.Opacity" Value="1" />
+                                                            </VisualState.Setters>
+                                                        </VisualState>
+                                                    </VisualStateGroup>
+                                                </VisualStateManager.VisualStateGroups>
 
-                    <StackPanel x:Name="TemplateContent" Spacing="16" HorizontalAlignment="Stretch">
-                        <Border Style="{StaticResource CardStyle}" Padding="18"
-                                HorizontalAlignment="Stretch">
-                            <StackPanel Spacing="10">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="消息模板" />
-                                <Border MinHeight="250" BorderBrush="{ThemeResource TextControlBorderBrush}"
-                                        BorderThickness="1" CornerRadius="4"
-                                        Background="{ThemeResource TextControlBackground}">
+                                                <Border x:Name="OuterShadow" Margin="0" CornerRadius="20"
+                                                        Background="#08000000" Opacity="0" />
+                                                <Border x:Name="InnerShadow" Margin="2" CornerRadius="18"
+                                                        Background="#0D000000" Opacity="0" />
+                                                <Border x:Name="CardSurface" Margin="6" CornerRadius="14"
+                                                        Background="{StaticResource GlassCardBrush}"
+                                                        BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1">
+                                                    <ContentPresenter Content="{TemplateBinding Content}"
+                                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                      ContentTransitions="{TemplateBinding ContentTransitions}"
+                                                                      Padding="{TemplateBinding Padding}"
+                                                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                                </Border>
+                                                <Border x:Name="FocusBorder" Margin="6" CornerRadius="14"
+                                                        BorderBrush="{ThemeResource SystemControlFocusVisualPrimaryBrush}"
+                                                        BorderThickness="2" Opacity="0" IsHitTestVisible="False" />
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="Transparent">
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="5">
+                                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding Name}" />
+                                            <TextBlock Foreground="{StaticResource MutedTextBrush}" Text="{Binding ScheduleText}" />
+                                            <TextBlock Foreground="{StaticResource MutedTextBrush}" Text="{Binding DingTalkStatus}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="6">
+                                            <TextBlock Text="{Binding StatusText}" HorizontalAlignment="Right" />
+                                            <TextBlock Text="{Binding LastRunText}" Foreground="{StaticResource MutedTextBrush}" HorizontalAlignment="Right" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                    <TextBlock x:Name="EmptyJobsText" Visibility="Collapsed" HorizontalAlignment="Center"
+                               Margin="0,40" Foreground="{StaticResource MutedTextBrush}"
+                               Text="还没有日报任务，点击“新建日报任务”开始配置。" />
+                </StackPanel>
+
+                <StackPanel x:Name="JobDetailPanel" Visibility="Collapsed" Spacing="16">
+                    <Button Content="← 返回任务列表" HorizontalAlignment="Left" Click="BackButton_Click" />
+
+                    <Border Style="{StaticResource CardStyle}" Padding="18">
+                        <StackPanel Spacing="10">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="任务概览" />
+                            <TextBox x:Name="JobNameBox" Header="任务名称" TextChanged="JobNameBox_TextChanged" />
+                            <TextBlock x:Name="JobOverviewText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button x:Name="EnableJobButton" Style="{StaticResource AccentButtonStyle}"
+                                        Content="启用任务" Click="EnableJobButton_Click" />
+                                <Button x:Name="DeleteJobButton" Content="删除任务" Click="DeleteJobButton_Click" />
+                            </StackPanel>
+                            <InfoBar x:Name="OverviewStatusInfoBar" IsOpen="False" IsClosable="True" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Padding="18">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="消息内容" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                    <Button x:Name="EditModeButton" Content="编辑" Click="EditModeButton_Click" />
+                                    <Button x:Name="PreviewModeButton" Content="实际预览" Click="PreviewModeButton_Click" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid>
+                                <Border x:Name="EditorBorder" MinHeight="250" BorderBrush="{ThemeResource TextControlBorderBrush}"
+                                        BorderThickness="1" CornerRadius="4" Background="{ThemeResource TextControlBackground}">
                                     <WebView2 x:Name="TemplateEditor" MinHeight="248" />
                                 </Border>
-                                <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
-                                           Text="输入固定文字并自由换行；插入的日期和 Notion 字段会显示为可整体选择和删除的胶囊。" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Button x:Name="InsertTodayButton" Content="插入业务日期"
-                                            IsEnabled="False" Click="InsertTodayButton_Click" />
-                                    <Button Content="保存草稿" Click="SaveDraftButton_Click" />
-                                    <Button Content="启用当前模板" Style="{StaticResource AccentButtonStyle}"
-                                            Click="ActivateTemplateButton_Click" />
-                                </StackPanel>
+                                <TextBox x:Name="PreviewBox" MinHeight="250" AcceptsReturn="True" IsReadOnly="True"
+                                         TextWrapping="Wrap" VerticalContentAlignment="Top" Visibility="Collapsed" />
+                            </Grid>
+                            <CalendarDatePicker x:Name="PreviewDatePicker" Header="预览业务日期" Width="180" HorizontalAlignment="Left" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button x:Name="InsertTodayButton" Content="插入业务日期" IsEnabled="False" Click="InsertTodayButton_Click" />
+                                <Button Content="保存草稿" Click="SaveDraftButton_Click" />
+                                <Button Content="测试发送" Click="TestSendButton_Click" />
+                                <Button Content="发布当前版本" Style="{StaticResource AccentButtonStyle}" Click="ActivateTemplateButton_Click" />
+                                <ProgressRing x:Name="BusyRing" Width="22" Height="22" IsActive="False" Visibility="Collapsed" />
                             </StackPanel>
-                        </Border>
+                            <InfoBar x:Name="ContentStatusInfoBar" IsOpen="False" IsClosable="True" />
+                        </StackPanel>
+                    </Border>
 
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                         <Border Style="{StaticResource CardStyle}" Padding="18">
                             <StackPanel Spacing="10">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="预览与测试" />
-                                <CalendarDatePicker x:Name="PreviewDatePicker" Header="选择测试日期"
-                                                    Width="180" HorizontalAlignment="Left" />
-                                <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
-                                           Text="可选择任意有数据的历史日期；该日期用于业务日期胶囊，并按对应的日、月、年查询 Notion。" />
-                                <TextBox x:Name="PreviewBox" MinHeight="170" AcceptsReturn="True"
-                                         IsReadOnly="True" TextWrapping="Wrap"
-                                         VerticalContentAlignment="Top" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Button Content="生成预览" Click="PreviewButton_Click" />
-                                    <Button Content="测试发送到群" Click="TestSendButton_Click" />
-                                    <ProgressRing x:Name="BusyRing" Width="22" Height="22"
-                                                  IsActive="False" Visibility="Collapsed" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-
-                    <StackPanel x:Name="ConfigurationContent" Grid.Column="1" Spacing="16" HorizontalAlignment="Stretch">
-                        <Border x:Name="FieldConfigurationCard" Style="{StaticResource CardStyle}" Padding="18">
-                            <StackPanel Spacing="10">
                                 <TextBlock FontSize="18" FontWeight="SemiBold" Text="插入 Notion 字段" />
-                                <ComboBox x:Name="DataSourceBox" Header="数据库"
-                                          DisplayMemberPath="Name"
-                                          SelectionChanged="DataSourceBox_SelectionChanged" />
-                                <TextBlock x:Name="SourceDetectionText"
-                                           Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
-                                           Text="选择数据库后，程序会自动识别日库、月库或年库及其日期字段。" />
-                                <ComboBox x:Name="ValuePropertyBox" Header="要插入的数据字段"
-                                          DisplayMemberPath="Name"
-                                          SelectionChanged="ValuePropertyBox_SelectionChanged" />
-                                <TextBox x:Name="FormatBox" Header="显示格式（可选）"
-                                         PlaceholderText="数字如 0.0；日期如 MM月dd日" />
-                                <Button x:Name="InsertFieldButton" Content="插入到模板光标处"
-                                        IsEnabled="False" Click="InsertFieldButton_Click" />
-                                <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
-                                           Text="胶囊按“周期 · 数据库 · 字段”显示，内部仍使用稳定字段 ID。" />
-                                <TextBlock x:Name="BindingSummaryText" Foreground="{StaticResource MutedTextBrush}"
-                                           TextWrapping="Wrap" Text="尚未绑定数据源" />
+                                <ComboBox x:Name="DataSourceBox" Header="数据库" DisplayMemberPath="Name" SelectionChanged="DataSourceBox_SelectionChanged" />
+                                <TextBlock x:Name="SourceDetectionText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <ComboBox x:Name="ValuePropertyBox" Header="数据字段" DisplayMemberPath="Name" SelectionChanged="ValuePropertyBox_SelectionChanged" />
+                                <TextBox x:Name="FormatBox" Header="显示格式（可选）" PlaceholderText="数字如 0.0；日期如 MM月dd日" />
+                                <Button x:Name="InsertFieldButton" Content="插入到模板光标处" IsEnabled="False" Click="InsertFieldButton_Click" />
+                                <TextBlock x:Name="BindingSummaryText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                                <InfoBar x:Name="NotionStatusInfoBar" IsOpen="False" IsClosable="True" />
                             </StackPanel>
                         </Border>
-
-                        <Border x:Name="DingTalkConfigurationCard" Visibility="Collapsed"
-                                Style="{StaticResource CardStyle}" Padding="18">
+                        <Border Grid.Column="1" Style="{StaticResource CardStyle}" Padding="18">
                             <StackPanel Spacing="10">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="钉钉机器人" />
-                                <PasswordBox x:Name="WebhookBox" Header="Webhook"
-                                             PlaceholderText="留空表示保留已保存值" />
-                                <PasswordBox x:Name="SecretBox" Header="加签 Secret"
-                                             PlaceholderText="留空表示保留已保存值" />
-                                <TextBlock x:Name="WebhookMaskText" Foreground="{StaticResource MutedTextBrush}"
-                                           TextWrapping="Wrap" />
-                                <TextBlock x:Name="SecretMaskText" Foreground="{StaticResource MutedTextBrush}" />
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="推送配置" />
+                                <PasswordBox x:Name="WebhookBox" Header="Webhook" />
+                                <PasswordBox x:Name="SecretBox" Header="加签 Secret" />
                                 <TextBlock x:Name="DingTalkConnectionText" TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <Button Content="保存配置" Click="SaveDingTalkButton_Click" />
                                     <Button Content="检测连接" Click="CheckDingTalkButton_Click" />
                                 </StackPanel>
+                                <InfoBar x:Name="DingTalkStatusInfoBar" IsOpen="False" IsClosable="True" />
                             </StackPanel>
                         </Border>
+                    </Grid>
 
-                        <Border x:Name="ScheduleConfigurationCard" Visibility="Collapsed"
-                                Style="{StaticResource CardStyle}" Padding="18">
-                            <StackPanel Spacing="10">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="定时发送" />
-                                <TimePicker x:Name="SendTimePicker" Header="每天发送时间"
-                                            MinuteIncrement="5" ClockIdentifier="24HourClock"
-                                            TimeChanged="SendTimePicker_TimeChanged" />
-                                <TextBlock x:Name="TaskStatusText" Text="正在读取任务状态" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Button Content="安装 / 更新任务" Click="InstallTaskButton_Click" />
-                                    <Button Content="停用任务" Click="RemoveTaskButton_Click" />
-                                </StackPanel>
+                    <Border Style="{StaticResource CardStyle}" Padding="18">
+                        <StackPanel Spacing="10">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="定时设置" />
+                            <TimePicker x:Name="SendTimePicker" Header="每天发送时间" MinuteIncrement="5"
+                                        ClockIdentifier="24HourClock" TimeChanged="SendTimePicker_TimeChanged" />
+                            <TextBlock x:Name="TaskStatusText" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Content="安装 / 更新任务" Click="InstallTaskButton_Click" />
+                                <Button Content="停用任务" Click="RemoveTaskButton_Click" />
                             </StackPanel>
-                        </Border>
-                        <Border x:Name="RunRecordCard" Visibility="Collapsed"
-                                Style="{StaticResource CardStyle}" Padding="18">
-                            <StackPanel Spacing="10">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="运行记录" />
-                                <TextBlock x:Name="RunStatusText" Foreground="{StaticResource MutedTextBrush}"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
-                                           Text="这里只显示本机最近一次自动运行状态；详细脱敏日志保存在本地应用数据目录。" />
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Grid>
+                            <InfoBar x:Name="ScheduleStatusInfoBar" IsOpen="False" IsClosable="True" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Padding="18">
+                        <StackPanel Spacing="10">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="运行记录" />
+                            <TextBlock Foreground="{StaticResource MutedTextBrush}" Text="自动运行和测试发送均记录；每个任务保留最近 100 条。" />
+                            <ListView x:Name="RunRecordList" SelectionMode="None" IsItemClickEnabled="True"
+                                      ItemClick="RunRecordList_ItemClick">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Padding="0,8" ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="150" /><ColumnDefinition Width="100" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding TimeText}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding SourceText}" />
+                                            <TextBlock Grid.Column="2" Text="{Binding DetailText}" TextWrapping="Wrap" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

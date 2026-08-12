@@ -53,11 +53,11 @@ public sealed partial class HomePage : Page
         });
         SetModuleStatus(ProductionMessageStatusText, productionMessageReady);
 
-        var report = DailyReportSettingsStore.Load();
-        var reportReady = report.ActiveTemplateVersion > 0 &&
-                          !string.IsNullOrWhiteSpace(report.ActiveTemplate) &&
-                          !string.IsNullOrWhiteSpace(report.EncryptedWebhook) &&
-                          !string.IsNullOrWhiteSpace(report.EncryptedSecret);
+        var reportReady = DailyReportSettingsStore.LoadCatalog().Jobs.Any(report =>
+            report.ActiveTemplateVersion > 0 &&
+            !string.IsNullOrWhiteSpace(report.ActiveTemplate) &&
+            !string.IsNullOrWhiteSpace(report.EncryptedWebhook) &&
+            !string.IsNullOrWhiteSpace(report.EncryptedSecret));
         SetModuleStatus(DailyReportStatusText, reportReady);
     }
 

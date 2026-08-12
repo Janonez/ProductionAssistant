@@ -22,7 +22,7 @@ public sealed partial class DailyReportService
     }
 
     public async Task<DailyReportBuildResult> BuildAsync(
-        DailyReportSettings settings,
+        DailyReportJob settings,
         string template,
         DateTime businessDate,
         CancellationToken cancellationToken = default)

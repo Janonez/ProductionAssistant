@@ -7,12 +7,15 @@
 - [ ] 已运行 `./scripts/verify.ps1`
 - [ ] 已启动 `publish/Debug/ProductionAssistant.exe`
 - [ ] 已人工验收受影响模块
+- [ ] UI 改动已检查正常、悬停、按下、键盘焦点和不同窗口宽度
 
 已验收：
 
 未验收：
 
+<!-- build/test/publish 通过不能替代 WinUI、Notion、钉钉、任务计划或真实文件的人工验收。 -->
+
 ## 发布影响
 
 - [ ] 无需发布
-- [ ] 需要更新版本、CHANGELOG、PRD/HANDOFF
+- [ ] 需要更新版本、CHANGELOG 或公开说明

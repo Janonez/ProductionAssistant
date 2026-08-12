@@ -77,14 +77,9 @@
                         <NavigationViewItem x:Name="ProductionMessageConfigNavigationItem" Content="数据库配置" Tag="production-message-config" />
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="DailyReportModuleNavigationItem"
-                                    Content="日报自动推送" IsExpanded="True" SelectsOnInvoked="False">
+                <NavigationViewItem x:Name="DailyReportNavigationItem"
+                                    Content="日报自动推送" Tag="daily-report">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE724;" /></NavigationViewItem.Icon>
-                    <NavigationViewItem.MenuItems>
-                        <NavigationViewItem x:Name="DailyReportNavigationItem" Content="模板编辑" Tag="daily-report" />
-                        <NavigationViewItem x:Name="DailyReportConfigNavigationItem" Content="推送配置" Tag="daily-report-config" />
-                        <NavigationViewItem x:Name="DailyReportRecordsNavigationItem" Content="运行记录" Tag="daily-report-records" />
-                    </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
             <Frame x:Name="ContentFrame" />

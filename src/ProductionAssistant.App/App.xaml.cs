@@ -34,7 +34,13 @@ public partial class App : Application
         if (Environment.GetCommandLineArgs().Any(argument =>
                 string.Equals(argument, "--send-daily-report", StringComparison.OrdinalIgnoreCase)))
         {
-            var exitCode = await new Services.DailyReportRunner().RunAsync();
+            var arguments = Environment.GetCommandLineArgs();
+            var jobIdIndex = Array.FindIndex(arguments,
+                argument => string.Equals(argument, "--job-id", StringComparison.OrdinalIgnoreCase));
+            var jobId = jobIdIndex >= 0 && jobIdIndex + 1 < arguments.Length ? arguments[jobIdIndex + 1] : string.Empty;
+            var exitCode = string.IsNullOrWhiteSpace(jobId)
+                ? Models.DailyReportExitCode.JobNotFound
+                : await new Services.DailyReportRunner().RunAsync(jobId);
             Environment.ExitCode = (int)exitCode;
             Exit();
             return;
