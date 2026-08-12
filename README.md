@@ -34,6 +34,14 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 
 各版本已经发布的用户可见变化见 [变更记录](CHANGELOG.md)。
 
+## 日报自动推送
+
+日报自动推送支持创建多个独立任务，组合 Notion 日、月、年数据生成消息，并按各自计划发送到钉钉群。每个任务统一管理消息内容、推送配置、定时设置和最近运行记录。
+
+模板采用草稿、实际预览、测试发送、发布流程；敏感凭据使用 Windows DPAPI 加密。旧版单一日报配置会自动迁移，迁移后需重新启用任务以安装新版定时计划。
+
+任务列表顶部汇总正常与异常数量：只有已启用任务计为正常，草稿和已停用任务均计为异常。任务必须停用后才能删除；从未安装 Windows 任务计划的新任务也可直接删除。任务详情中的操作结果跟随任务概览、消息内容、Notion 字段、推送配置和定时设置分区显示，删除成功使用一次性确认提示。
+
 ## 发布
 
 `publish/` 不进入 Git。推送 `v*` 标签后，GitHub Actions 验证项目、生成 Windows x64 ZIP 并附加到 GitHub Release。

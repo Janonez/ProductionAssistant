@@ -1,5 +1,6 @@
 import { Editor, Extension, Node, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
+import { documentText } from './report-serializer.js'
 
 const bridge = window.chrome?.webview
 const todayPlaceholder = 'today("yyyy年M月d日")'
@@ -58,25 +59,17 @@ const PlainLineBreak = Extension.create({
 let editor
 let fields = []
 
-function serialize(node) {
-  if (!node) return ''
-  if (node.type === 'text') return node.text || ''
-  if (node.type === 'fieldToken' || node.type === 'dateToken') return node.attrs?.placeholder || ''
-  if (node.type === 'hardBreak') return '\n'
-  const text = (node.content || []).map(serialize).join('')
-  return node.type === 'paragraph' ? `${text}\n` : text
-}
-
 function plainText() {
-  return serialize(editor.getJSON()).replace(/\n$/, '')
+  return documentText(editor.getJSON())
 }
 
-function postUpdate() {
-  bridge?.postMessage({ type: 'update', text: plainText(), document: JSON.stringify(editor.getJSON()) })
+function postState(type = 'update', requestId) {
+  bridge?.postMessage({ type, requestId, text: plainText(), document: JSON.stringify(editor.getJSON()) })
 }
 
 function textContent(text) {
-  const dateTokens = [...new Set(String(text || '').match(todayPattern) || [])]
+  const normalizedText = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const dateTokens = [...new Set(normalizedText.match(todayPattern) || [])]
     .map(placeholder => ({ placeholder, type: 'dateToken' }))
   const tokens = fields
     .filter(field => field.placeholder)
@@ -85,7 +78,7 @@ function textContent(text) {
     .sort((left, right) => right.placeholder.length - left.placeholder.length)
   return {
     type: 'doc',
-    content: String(text || '').split('\n').map(line => {
+    content: normalizedText.split('\n').map(line => {
       const content = []
       let offset = 0
       while (offset < line.length) {
@@ -113,6 +106,8 @@ function migrateTokens(node) {
     if (field) node.attrs = field
   }
   if (node.type === 'text' && node.text) {
+    node.text = node.text.replace(/\r/g, '')
+    if (!node.text) return []
     const content = []
     let offset = 0
     for (const match of node.text.matchAll(todayPattern)) {
@@ -153,14 +148,15 @@ function initialize(message) {
     }), FieldToken, DateToken, PlainLineBreak],
     content,
     autofocus: false,
-    onUpdate: postUpdate,
-    onCreate: postUpdate,
+    onUpdate: () => postState(),
+    onCreate: () => postState(),
   })
 }
 
 bridge?.addEventListener('message', event => {
   const message = event.data
   if (message.type === 'init') initialize(message)
+  else if (message.type === 'getState') postState('state', message.requestId)
   else if (message.type === 'insertField') {
     fields = fields.filter(field => field.placeholder !== message.field.placeholder).concat(message.field)
     editor?.chain().focus().insertContent({ type: 'fieldToken', attrs: message.field }).insertContent(' ').run()

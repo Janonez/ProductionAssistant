@@ -45,6 +45,56 @@ Assert(reportState.WasSent("2026-08-11", 2, "17:30"),
     "相同日期、模板和发送时间应阻止重复推送。");
 Assert(!reportState.WasSent("2026-08-11", 2, "17:35"),
     "修改发送时间后应允许当天重新推送。");
+var reportTestFolder = Path.Combine(Path.GetTempPath(), "ProductionAssistant.Tests", Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(reportTestFolder);
+Environment.SetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR", reportTestFolder);
+try
+{
+    var legacySettings = new DailyReportSettings
+    {
+        DraftTemplate = reportSettings.DraftTemplate,
+        ActiveTemplate = reportSettings.DraftTemplate,
+        ActiveTemplateVersion = 3,
+        SendTime = "17:35",
+        Sources = reportSettings.Sources,
+        Fields = reportSettings.Fields
+    };
+    File.WriteAllText(Path.Combine(reportTestFolder, "daily-report-settings.json"),
+        System.Text.Json.JsonSerializer.Serialize(legacySettings));
+    var migratedCatalog = DailyReportSettingsStore.LoadCatalog();
+    Assert(migratedCatalog.Jobs.Count == 1 &&
+           migratedCatalog.Jobs[0].Name == "生产消息塔日报" &&
+           migratedCatalog.Jobs[0].ActiveTemplateVersion == 3 &&
+           migratedCatalog.Jobs[0].SendTime == "17:35",
+        "旧日报配置没有完整迁移为任务实例。");
+    DailyReportSettingsStore.SaveCatalog(migratedCatalog);
+    Assert(DailyReportSettingsStore.LoadCatalog().Jobs.Count == 1,
+        "重复加载迁移配置时生成了重复任务。");
+
+    var migratedJob = migratedCatalog.Jobs[0];
+    for (var index = 0; index < 105; index++)
+        DailyReportSettingsStore.AddRunRecord(new DailyReportRunRecord
+        {
+            JobId = migratedJob.Id,
+            StartedAt = DateTimeOffset.Parse("2026-08-11T00:00:00+08:00").AddMinutes(index),
+            Source = index % 2 == 0 ? "automatic" : "test",
+            FinishedAt = DateTimeOffset.Parse("2026-08-11T00:01:00+08:00").AddMinutes(index),
+            Succeeded = true
+        });
+    var retainedRecords = DailyReportSettingsStore.LoadRunRecords(migratedJob.Id);
+    Assert(retainedRecords.Count == 100 && retainedRecords[0].StartedAt > retainedRecords[^1].StartedAt,
+        "运行记录没有按任务保留最近 100 条。");
+    Assert(DailyReportTaskScheduler.TaskName(migratedJob.Id).EndsWith(migratedJob.Id, StringComparison.Ordinal),
+        "Windows 任务名称没有使用稳定任务 ID。");
+    Assert(DailyReportSettingsStore.DeleteJob(migratedJob.Id) &&
+           DailyReportSettingsStore.LoadRunRecords(migratedJob.Id).Count == 0,
+        "删除日报任务时没有同步清理结构化运行记录。");
+}
+finally
+{
+    Environment.SetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR", null);
+    Directory.Delete(reportTestFolder, true);
+}
 var datedTitle = ProductionMessageParser.Split("2026-08-08 塔筒产线（周六）", anchor).Single();
 Assert(datedTitle.Date == new DateTime(2026, 8, 8), "带星期的塔筒标题日期解析失败。");
 Assert(ProductionMessageParser.Parse(datedTitle, 1, anchor, allowDefaultDate: false).Kind ==
