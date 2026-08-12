@@ -21,7 +21,7 @@
 
                 <StackPanel Spacing="12">
                     <StackPanel Spacing="3">
-                        <TextBlock FontSize="21" FontWeight="SemiBold" Text="本地工具" />
+                        <TextBlock FontSize="21" FontWeight="SemiBold" Text="文件处理" />
                         <TextBlock Foreground="{StaticResource MutedTextBrush}"
                                    Text="在当前电脑上处理文件，不依赖 Notion。" />
                     </StackPanel>
@@ -79,7 +79,7 @@
 
                 <StackPanel Spacing="12" Margin="0,2,0,34">
                     <StackPanel Spacing="3">
-                        <TextBlock FontSize="21" FontWeight="SemiBold" Text="Notion 工具" />
+                        <TextBlock FontSize="21" FontWeight="SemiBold" Text="数据同步" />
                         <TextBlock Foreground="{StaticResource MutedTextBrush}"
                                    Text="使用前需要在当前设备上完成 Notion 连接和数据库绑定。" />
                     </StackPanel>
@@ -133,9 +133,17 @@
                             </Grid>
                         </Button>
                     </Grid>
+                </StackPanel>
+
+                <StackPanel Spacing="12" Margin="0,2,0,34">
+                    <StackPanel Spacing="3">
+                        <TextBlock FontSize="21" FontWeight="SemiBold" Text="自动化任务" />
+                        <TextBlock Foreground="{StaticResource MutedTextBrush}"
+                                   Text="管理支持后台定时运行的任务。" />
+                    </StackPanel>
                     <Button Style="{StaticResource SettingsEntryButtonStyle}"
                             MinHeight="116" Tag="daily-report" Click="ModuleCard_Click"
-                            AutomationProperties.Name="打开日报自动推送">
+                            AutomationProperties.Name="打开日报推送自动化任务">
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="52" />
@@ -147,9 +155,9 @@
                                           FontSize="24" Foreground="{StaticResource BrandGreenBrush}" Glyph="&#xE724;" />
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
-                                <TextBlock FontSize="17" FontWeight="SemiBold" Text="日报自动推送" />
+                                <TextBlock FontSize="17" FontWeight="SemiBold" Text="日报推送" />
                                 <TextBlock Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap"
-                                           Text="从 Notion 组合固定日报，每天 17:30 自动发送到钉钉群。" />
+                                           Text="从 Notion 组合日报，按计划自动发送到钉钉群。" />
                                 <TextBlock x:Name="DailyReportStatusText" FontWeight="SemiBold" Text="正在读取配置" />
                             </StackPanel>
                             <FontIcon Grid.Column="2" VerticalAlignment="Center"

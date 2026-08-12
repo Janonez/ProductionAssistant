@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Navigation;
 using ProductionAssistant.Models;
 using ProductionAssistant.Services;
 
@@ -49,18 +48,6 @@ public sealed partial class DailyWeldSimulationPage : Page
             new Microsoft.UI.Xaml.Input.TappedEventHandler(PageRoot_Tapped),
             true);
         Loaded += DailyWeldSimulationPage_Loaded;
-    }
-
-    protected override void OnNavigatedTo(NavigationEventArgs e)
-    {
-        base.OnNavigatedTo(e);
-        var configuration = e.Parameter as string == "daily-weld-config";
-        PageTitleText.Text = configuration ? "每日焊接 · 配置" : "每日焊接数据模拟";
-        PageDescriptionText.Text = configuration
-            ? "配置模拟结果导入使用的 Notion 数据库。"
-            : "按真实月份生成每日焊接数量，生成结果严格保持月度计划总量。";
-        ConfigurationContent.Visibility = configuration ? Visibility.Visible : Visibility.Collapsed;
-        UseContent.Visibility = configuration ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void DailyWeldSimulationPage_Loaded(object sender, RoutedEventArgs e)

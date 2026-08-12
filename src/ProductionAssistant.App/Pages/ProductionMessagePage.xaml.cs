@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Navigation;
 using ProductionAssistant.Models;
 using ProductionAssistant.Services;
 
@@ -51,15 +50,6 @@ public sealed partial class ProductionMessagePage : Page
         NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         DefaultDatePicker.Date = DateTimeOffset.Now;
         Loaded += ProductionMessagePage_Loaded;
-    }
-
-    protected override void OnNavigatedTo(NavigationEventArgs e)
-    {
-        base.OnNavigatedTo(e);
-        var configuration = e.Parameter as string == "production-message-config";
-        PageTitleText.Text = configuration ? "生产消息 · 数据库配置" : "生产消息 Notion 入库";
-        ConfigurationContent.Visibility = configuration ? Visibility.Visible : Visibility.Collapsed;
-        UseContent.Visibility = configuration ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void ProductionMessagePage_Loaded(object sender, RoutedEventArgs e) =>

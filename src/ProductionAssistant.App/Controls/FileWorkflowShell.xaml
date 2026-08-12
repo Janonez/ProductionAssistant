@@ -1,0 +1,60 @@
+<UserControl
+    x:Class="ProductionAssistant.Controls.FileWorkflowShell"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="32,24,32,32" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="TitleText" Style="{StaticResource TitleTextBlockStyle}"
+                       FontSize="28" FontWeight="Bold" />
+            <TextBlock x:Name="DescriptionText" Foreground="{StaticResource MutedTextBrush}"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="16">
+            <StackPanel Spacing="10">
+                <TextBlock x:Name="InputLabelText" FontSize="16" FontWeight="SemiBold" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="InputPathBox" TextWrapping="Wrap"
+                             TextChanged="InputPathBox_TextChanged" />
+                    <Button Grid.Column="1" x:Name="BrowseButton" Click="BrowseButton_Click" />
+                </Grid>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                              VerticalScrollMode="Disabled">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="InspectButton" Height="40" MinWidth="92"
+                                Style="{StaticResource AccentButtonStyle}" Click="InspectButton_Click"
+                                Content="检查" />
+                        <Button x:Name="RepairButton" Height="40" MinWidth="92"
+                                Style="{StaticResource AccentButtonStyle}" Click="RepairButton_Click"
+                                Content="修复" />
+                        <Button x:Name="ExecuteButton" Height="40" MinWidth="110"
+                                Style="{StaticResource AccentButtonStyle}" Click="ExecuteButton_Click" />
+                        <Button x:Name="OpenOutputButton" Height="40" MinWidth="130"
+                                Style="{StaticResource AccentButtonStyle}" Click="OpenOutputButton_Click"
+                                Content="打开输出位置" />
+                    </StackPanel>
+                </ScrollViewer>
+                <ProgressBar x:Name="OperationProgress" Height="6" Visibility="Collapsed" />
+                <TextBlock x:Name="ProgressText" Foreground="{StaticResource MutedTextBrush}"
+                           Visibility="Collapsed" />
+                <InfoBar x:Name="OperationInfoBar" IsOpen="True" IsClosable="False"
+                         Severity="Informational" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <ContentPresenter x:Name="DetailsPresenter" />
+        </ScrollViewer>
+    </Grid>
+</UserControl>

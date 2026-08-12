@@ -47,38 +47,27 @@
                         <SymbolIcon Symbol="Home" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="PlanPdfModuleNavigationItem"
-                                    Content="挂网计划 PDF 导出" SelectsOnInvoked="False">
+                <NavigationViewItemHeader Content="文件处理" />
+                <NavigationViewItem x:Name="PlanPdfNavigationItem"
+                                    Content="挂网计划 PDF 导出" Tag="plan-pdf">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE749;" /></NavigationViewItem.Icon>
-                    <NavigationViewItem.MenuItems>
-                        <NavigationViewItem x:Name="PlanPdfNavigationItem" Content="使用页" Tag="plan-pdf" />
-                    </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="ProductionMeetingModuleNavigationItem"
-                                    Content="生产会资料拆分" SelectsOnInvoked="False">
+                <NavigationViewItem x:Name="ProductionMeetingNavigationItem"
+                                    Content="生产会资料拆分" Tag="production-meeting">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;" /></NavigationViewItem.Icon>
-                    <NavigationViewItem.MenuItems>
-                        <NavigationViewItem x:Name="ProductionMeetingNavigationItem" Content="使用页" Tag="production-meeting" />
-                    </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="DailyWeldModuleNavigationItem"
-                                    Content="每日焊接数据模拟" SelectsOnInvoked="False">
+                <NavigationViewItemHeader Content="数据同步" />
+                <NavigationViewItem x:Name="DailyWeldNavigationItem"
+                                    Content="每日焊接数据模拟" Tag="daily-weld">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE9D2;" /></NavigationViewItem.Icon>
-                    <NavigationViewItem.MenuItems>
-                        <NavigationViewItem x:Name="DailyWeldNavigationItem" Content="使用页" Tag="daily-weld" />
-                        <NavigationViewItem x:Name="DailyWeldConfigNavigationItem" Content="配置页" Tag="daily-weld-config" />
-                    </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="ProductionMessageModuleNavigationItem"
-                                    Content="生产消息 Notion 入库" SelectsOnInvoked="False">
+                <NavigationViewItem x:Name="ProductionMessageNavigationItem"
+                                    Content="生产消息 Notion 入库" Tag="production-message">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A4;" /></NavigationViewItem.Icon>
-                    <NavigationViewItem.MenuItems>
-                        <NavigationViewItem x:Name="ProductionMessageNavigationItem" Content="使用页" Tag="production-message" />
-                        <NavigationViewItem x:Name="ProductionMessageConfigNavigationItem" Content="数据库配置" Tag="production-message-config" />
-                    </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
+                <NavigationViewItemHeader Content="自动化任务" />
                 <NavigationViewItem x:Name="DailyReportNavigationItem"
-                                    Content="日报自动推送" Tag="daily-report">
+                                    Content="日报推送" Tag="daily-report">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE724;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
