@@ -58,18 +58,16 @@ public sealed partial class MainWindow : Window
         var pageType = tag switch
         {
             "home" => typeof(HomePage),
-            "daily-weld" or "daily-weld-config" => typeof(DailyWeldSimulationPage),
+            "daily-weld" => typeof(DailyWeldSimulationPage),
+            "production-message" => typeof(ProductionMessagePage),
             "plan-pdf" => typeof(PlanPdfExportPage),
             "production-meeting" => typeof(ProductionMeetingExportPage),
-            "production-message" or "production-message-config" => typeof(ProductionMessagePage),
             "daily-report" => typeof(DailyReportPage),
             "settings" => typeof(SettingsPage),
             _ => typeof(HomePage)
         };
 
         var navigationItem = FindNavigationItem(tag);
-        var module = FindParent(navigationItem);
-        if (module is not null) module.IsExpanded = true;
         AppNavigation.SelectedItem = tag == "settings" ? AppNavigation.SettingsItem : navigationItem;
 
         if (_currentTag != tag)
@@ -81,10 +79,5 @@ public sealed partial class MainWindow : Window
 
     private NavigationViewItem? FindNavigationItem(string tag) =>
         AppNavigation.MenuItems.OfType<NavigationViewItem>()
-            .SelectMany(item => item.MenuItems.OfType<NavigationViewItem>().Prepend(item))
             .FirstOrDefault(item => item.Tag as string == tag);
-
-    private NavigationViewItem? FindParent(NavigationViewItem? child) =>
-        child is null ? null : AppNavigation.MenuItems.OfType<NavigationViewItem>()
-            .FirstOrDefault(item => item.MenuItems.Contains(child));
 }

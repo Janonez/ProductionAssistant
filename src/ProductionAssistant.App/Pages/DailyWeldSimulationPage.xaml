@@ -43,29 +43,14 @@
                        Text="按真实月份生成每日焊接数量，生成结果严格保持月度计划总量。" />
         </StackPanel>
 
-        <Border x:Name="ConfigurationContent" Grid.Row="1" Visibility="Collapsed"
-                Style="{StaticResource CardStyle}" Padding="18" VerticalAlignment="Top">
-            <StackPanel Spacing="12">
-                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Notion 数据库绑定" />
-                <TextBlock Style="{StaticResource DescriptionStyle}" TextWrapping="Wrap"
-                           Text="选择每日焊接数据使用的 Notion 数据源，并检测日期与数量字段。" />
-                <InfoBar x:Name="NotionBindingInfoBar" MinWidth="0"
-                         HorizontalAlignment="Stretch" IsOpen="True" IsClosable="False"
-                         Severity="Informational" Title="数据库" Message="未连接">
-                    <InfoBar.ActionButton>
-                        <Button x:Name="BindNotionButton" Click="BindNotionButton_Click" Content="绑定" />
-                    </InfoBar.ActionButton>
-                </InfoBar>
-            </StackPanel>
-        </Border>
-
-        <ScrollViewer x:Name="UseContent" Grid.Row="1"
+        <ScrollViewer Grid.Row="1"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollMode="Disabled"
                       VerticalScrollMode="Auto"
                       HorizontalContentAlignment="Stretch">
-        <Grid ColumnSpacing="20">
+        <StackPanel Spacing="18">
+        <Grid x:Name="UseContent" MinHeight="600" ColumnSpacing="20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="320" />
@@ -354,6 +339,22 @@
                 </Border>
             </Grid>
         </Grid>
+        <Border x:Name="ConfigurationContent"
+                Style="{StaticResource CardStyle}" Padding="18" VerticalAlignment="Top">
+            <StackPanel Spacing="12">
+                <TextBlock Style="{StaticResource SectionTitleStyle}" Text="Notion 数据库绑定" />
+                <TextBlock Style="{StaticResource DescriptionStyle}" TextWrapping="Wrap"
+                           Text="选择每日焊接数据使用的 Notion 数据源，并检测日期与数量字段。" />
+                <InfoBar x:Name="NotionBindingInfoBar" MinWidth="0"
+                         HorizontalAlignment="Stretch" IsOpen="True" IsClosable="False"
+                         Severity="Informational" Title="数据库" Message="未连接">
+                    <InfoBar.ActionButton>
+                        <Button x:Name="BindNotionButton" Click="BindNotionButton_Click" Content="绑定" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+            </StackPanel>
+        </Border>
+        </StackPanel>
         </ScrollViewer>
     </Grid>
 </Page>
