@@ -6,7 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $editor = Join-Path $root 'src\ProductionAssistant.App\Assets\ReportEditor'
-$publish = Join-Path $root 'publish\Debug'
+$debugPublish = Join-Path $root 'publish\Debug'
+$releasePublish = Join-Path $root 'publish\Release'
 
 Push-Location $root
 try {
@@ -33,7 +34,9 @@ try {
     dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj `
         -c Release -p:Platform=x64 --no-build
     dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj `
-        -c Debug -p:Platform=x64 --self-contained true --no-restore -o $publish
+        -c Debug -p:Platform=x64 --self-contained true --no-restore -o $debugPublish
+    dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj `
+        -c Release -p:Platform=x64 --self-contained true --no-restore -o $releasePublish
 }
 finally {
     Pop-Location

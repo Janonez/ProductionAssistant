@@ -23,7 +23,7 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 .\scripts\verify.ps1
 ```
 
-脚本依次验证前端 bundle、Release build、xUnit 测试和 Debug self-contained publish。人工验收入口为 `publish\Debug\ProductionAssistant.exe`。
+脚本依次验证前端 bundle、Release build 和 xUnit 测试，并生成两个 Windows x64 自包含目录：`publish\Debug` 是测试版，`publish\Release` 是正式版。桌面人工验收先运行 `publish\Debug\ProductionAssistant.exe`。
 
 ## 项目结构
 
@@ -48,7 +48,7 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 
 ## 发布
 
-`publish/` 不进入 Git。推送 `v*` 标签后，GitHub Actions 验证项目、生成 Windows x64 ZIP 并附加到 GitHub Release。
+`publish/` 不进入 Git。源码通过短分支和 PR 同步到 GitHub；本机只保留 `publish\Debug` 测试版和 `publish\Release` 正式版，不生成或提交 ZIP、artifacts 及其他发布产物。
 
 ## 安全与许可
 
