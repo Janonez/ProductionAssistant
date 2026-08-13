@@ -4,7 +4,7 @@
     <Grid Background="{StaticResource PageBackgroundBrush}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       HorizontalContentAlignment="Stretch">
-            <StackPanel MaxWidth="1180" Margin="36,26,36,40" Spacing="16" HorizontalAlignment="Stretch">
+            <StackPanel Margin="36,26,36,40" Spacing="16" HorizontalAlignment="Stretch">
                 <Grid>
                     <StackPanel>
                         <TextBlock FontSize="30" FontWeight="SemiBold" Text="日报自动推送" />
@@ -19,7 +19,9 @@
 
                 <StackPanel x:Name="JobListPanel" Spacing="12">
                     <TextBlock FontSize="18" FontWeight="SemiBold" Text="任务列表" />
-                    <ListView x:Name="JobList" IsItemClickEnabled="True" SelectionMode="None"
+                    <ListView x:Name="JobList" Margin="-6,0" Padding="0"
+                              HorizontalContentAlignment="Stretch"
+                              IsItemClickEnabled="True" SelectionMode="None"
                               ItemClick="JobList_ItemClick">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
