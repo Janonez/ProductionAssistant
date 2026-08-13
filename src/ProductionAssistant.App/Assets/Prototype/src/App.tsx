@@ -5,6 +5,7 @@ import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Database, FileTe
 import { invoke } from './bridge'
 import type { BindingState, BindingTarget, Draft, ImportResult, Overview, Route } from './types'
 import { formatDate, monthGrid, parseDate, yearGrid } from './calendar'
+import { DailyReportPage } from './DailyReportPage'
 
 const modules = [
   { title: '挂网计划 PDF', text: '审查计划并导出候选文件', icon: FileText, native: 'plan-pdf' },
@@ -15,7 +16,8 @@ const modules = [
 ]
 
 export function App() {
-  const route = (new URLSearchParams(window.location.search).get('route') === 'production-message' ? 'production-message' : 'home') as Route
+  const requested = new URLSearchParams(window.location.search).get('route')
+  const route = (requested === 'production-message' || requested === 'daily-report' ? requested : 'home') as Route
   const [overview, setOverview] = useState<Overview>()
   const reduced = useReducedMotion()
   useEffect(() => { invoke<Overview>('app.getOverview').then(setOverview).catch(() => undefined) }, [])
@@ -23,7 +25,7 @@ export function App() {
   return <div className="app-shell"><main>
       <AnimatePresence mode="wait">
         <motion.div key={route} initial={reduced ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduced ? undefined : { opacity: 0, y: -6 }} transition={{ duration: .2 }}>
-          {route === 'home' ? <HomePage overview={overview} native={goNative} /> : <ProductionMessagePage />}
+          {route === 'home' ? <HomePage overview={overview} native={goNative} /> : route === 'daily-report' ? <DailyReportPage /> : <ProductionMessagePage />}
         </motion.div>
       </AnimatePresence>
     </main></div>

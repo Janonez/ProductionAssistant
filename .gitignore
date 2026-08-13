@@ -4,6 +4,7 @@
 **/node_modules/
 /.pnp
 /.nuget/
+/.npm-cache/
 .pnp.*
 .yarn/*
 !.yarn/patches

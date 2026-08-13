@@ -11,7 +11,21 @@ public static class PrototypeBridgeProtocol
         "production.write",
         "production.getBindings",
         "production.saveBindings",
-        "production.cancel"
+        "production.cancel",
+        "daily.list",
+        "daily.create",
+        "daily.get",
+        "daily.saveBasics",
+        "daily.saveTemplate",
+        "daily.getProperties",
+        "daily.addField",
+        "daily.saveCredentials",
+        "daily.checkConnection",
+        "daily.preview",
+        "daily.test",
+        "daily.setEnabled",
+        "daily.delete",
+        "daily.runs"
     };
 
     public static bool IsAllowed(string? operation) =>
