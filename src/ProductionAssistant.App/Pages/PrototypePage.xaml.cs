@@ -19,7 +19,12 @@ public sealed partial class PrototypePage : Page
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        _route = e.Parameter as string == "production-message" ? "production-message" : "home";
+        _route = (e.Parameter as string) switch
+        {
+            "production-message" => "production-message",
+            "daily-report" => "daily-report",
+            _ => "home"
+        };
     }
 
     private async void PrototypePage_Loaded(object sender, RoutedEventArgs e)

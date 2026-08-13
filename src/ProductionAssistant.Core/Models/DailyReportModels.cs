@@ -36,6 +36,7 @@ public sealed class DailyReportJob
     public DateTimeOffset? DingTalkCheckedAt { get; set; }
     public bool? DingTalkConnected { get; set; }
     public string DingTalkStatus { get; set; } = string.Empty;
+    public bool? ConfigurationValidated { get; set; }
 }
 
 public sealed class DailyReportJobCatalog

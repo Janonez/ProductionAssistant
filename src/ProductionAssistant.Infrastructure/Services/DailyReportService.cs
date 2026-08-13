@@ -125,8 +125,7 @@ public sealed partial class DailyReportService
         var body = JsonSerializer.Serialize(new
         {
             msgtype = "text",
-            text = new { content = text },
-            at = new { isAtAll = true }
+            text = new { content = text }
         });
 
         try

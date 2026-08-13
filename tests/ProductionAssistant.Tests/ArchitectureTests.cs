@@ -33,6 +33,8 @@ public sealed class ArchitectureTests
     {
         Assert.True(PrototypeBridgeProtocol.IsAllowed("production.parse"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("app.navigateNative"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.list"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.test"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed("filesystem.read"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed(string.Empty));
         Assert.Equal("输入无效", PrototypeBridgeProtocol.SafeError(new InvalidOperationException("输入无效")));

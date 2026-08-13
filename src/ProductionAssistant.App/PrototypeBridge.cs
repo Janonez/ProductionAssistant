@@ -7,7 +7,7 @@ using ProductionAssistant.Pages;
 
 namespace ProductionAssistant;
 
-internal sealed class PrototypeBridge
+internal sealed partial class PrototypeBridge
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -78,6 +78,20 @@ internal sealed class PrototypeBridge
             "production.write" => await ImportAsync(payload, checkOnly: false, cancellationToken),
             "production.getBindings" => GetBindings(),
             "production.saveBindings" => await SaveBindingsAsync(payload, cancellationToken),
+            "daily.list" => await ListDailyJobsAsync(),
+            "daily.create" => CreateDailyJob(),
+            "daily.get" => await GetDailyJobAsync(payload),
+            "daily.saveBasics" => await SaveDailyBasicsAsync(payload),
+            "daily.saveTemplate" => await SaveDailyTemplateAsync(payload),
+            "daily.getProperties" => await GetDailyPropertiesAsync(payload, cancellationToken),
+            "daily.addField" => await AddDailyFieldAsync(payload, cancellationToken),
+            "daily.saveCredentials" => await SaveDailyCredentialsAsync(payload),
+            "daily.checkConnection" => await CheckDailyConnectionAsync(payload, cancellationToken),
+            "daily.preview" => await PreviewDailyReportAsync(payload, cancellationToken),
+            "daily.test" => await TestDailyReportAsync(payload, cancellationToken),
+            "daily.setEnabled" => await SetDailyEnabledAsync(payload),
+            "daily.delete" => await DeleteDailyJobAsync(payload),
+            "daily.runs" => DailyRuns(payload),
             _ => throw new InvalidOperationException("不允许的界面请求。")
         };
 

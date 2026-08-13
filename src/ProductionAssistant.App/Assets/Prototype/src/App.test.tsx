@@ -79,3 +79,31 @@ describe('production message workflow', () => {
     expect(container.querySelector('.result-text.success')?.textContent).toContain('可以正常写入')
   })
 })
+
+describe('daily report workflow', () => {
+  let container: HTMLDivElement
+  beforeEach(async () => {
+    history.replaceState({}, '', '?route=daily-report')
+    container = document.createElement('div')
+    document.body.append(container)
+    invoke.mockReset().mockImplementation((operation: string) => {
+      if (operation === 'app.getOverview') return Promise.resolve({})
+      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, status: 'pending-test', schedulerMessage: '', dingTalkStatus: '连接正常', lastRun: '暂无运行记录', missingStep: 'template', missingMessage: '请先完成测试发送。' }] })
+      if (operation === 'daily.setEnabled') return Promise.resolve({ enabled: false, missingStep: 'template', message: '请先完成测试发送。' })
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', credentialMask: '••••••••（已保存）', webhookSaved: true, secretSaved: true, dingTalkStatus: '连接正常', schedulerInstalled: false, schedulerMessage: '', pagePaths: [], sources: [], fields: [], runs: [] })
+      return Promise.resolve({})
+    })
+    const { App } = await import('./App')
+    await act(async () => { createRoot(container).render(<App />) })
+  })
+  afterEach(() => container.remove())
+
+  it('keeps enable switch honest and opens the missing configuration step', async () => {
+    expect(container.textContent).toContain('待测试')
+    const toggle = container.querySelector('.switch input') as HTMLInputElement
+    await act(async () => { toggle.click() })
+    expect(invoke).toHaveBeenCalledWith('daily.setEnabled', { id: 'job-1', enabled: true }, 60000)
+    expect(container.textContent).toContain('配置尚未完成')
+    expect(container.textContent).toContain('启停与删除请返回任务列表操作')
+  })
+})

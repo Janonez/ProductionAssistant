@@ -5,5 +5,6 @@ import './styles.css'
 import './layout.css'
 import './calendar.css'
 import './workflow.css'
+import './daily-report.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)
