@@ -45,6 +45,51 @@ Assert(reportState.WasSent("2026-08-11", 2, "17:30"),
     "相同日期、模板和发送时间应阻止重复推送。");
 Assert(!reportState.WasSent("2026-08-11", 2, "17:35"),
     "修改发送时间后应允许当天重新推送。");
+var sourceOptions = new NotionDataSourceOption[]
+{
+    new("daily-a", "每日产量", "生产数据 / 塔筒 / 每日产量"),
+    new("daily-b", "每日产量", "生产数据 / 下料 / 每日产量"),
+    new("monthly", "每月累计", "生产数据 / 塔筒 / 每月累计"),
+    new("yearly", "统计库", "生产数据 / 塔筒 / 统计库"),
+    new("unknown", "临时统计", "生产数据 / 塔筒 / 临时统计")
+};
+var sourceTargets = new[]
+{
+    new NotionTargetSettings { Id = "yearly", ModuleKey = ProductionMessageKinds.TowerYearlyModuleKey }
+};
+var pagePaths = DailyReportPresentation.PagePaths(sourceOptions);
+Assert(pagePaths.Count == 2 && pagePaths.Contains("生产数据 / 塔筒") && pagePaths.Contains("生产数据 / 下料") &&
+       pagePaths.SequenceEqual(pagePaths.OrderBy(path => path, StringComparer.CurrentCultureIgnoreCase)),
+    "Notion 数据页没有保留完整父页面路径或稳定排序。");
+var towerSources = DailyReportPresentation.SourcesForPage(sourceOptions, "生产数据 / 塔筒");
+Assert(towerSources.Count == 4 && towerSources.Select(source => source.Name)
+           .SequenceEqual(towerSources.Select(source => source.Name).OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)),
+    "Notion 原始数据库没有按名称稳定排序。");
+Assert(DailyReportPresentation.SourcesForPage(sourceOptions, "生产数据 / 下料").Single().Id == "daily-b",
+    "不同完整页面路径下的同名数据库无法区分。");
+Assert(DailyReportPresentation.PeriodFor(sourceOptions.Single(source => source.Id == "yearly"), sourceTargets) == "year" &&
+       DailyReportPresentation.PeriodFor(sourceOptions.Single(source => source.Id == "unknown"), sourceTargets) == "day",
+    "后台取数周期没有保持 ModuleKey 优先和旧版日库回退规则。");
+var credentialJob = new DailyReportJob();
+var credentials = DailyReportPresentation.CredentialSummary(credentialJob);
+Assert(credentials.WebhookText.Contains("未配置") && credentials.SecretText.Contains("未配置"),
+    "未配置的推送凭据状态不正确。");
+credentialJob.EncryptedWebhook = "encrypted";
+credentials = DailyReportPresentation.CredentialSummary(credentialJob);
+Assert(credentials.WebhookText.Contains("已保存") && credentials.SecretText.Contains("未配置"),
+    "部分配置的推送凭据状态不正确。");
+credentialJob.EncryptedSecret = "encrypted";
+credentialJob.DingTalkConnected = true;
+credentials = DailyReportPresentation.CredentialSummary(credentialJob);
+Assert(credentials.WebhookText.Contains("已保存") && credentials.SecretText.Contains("已保存") &&
+       credentials.ConnectionText.StartsWith("连接正常"),
+    "完整且连接正常的推送配置状态不正确。");
+credentialJob.DingTalkConnected = false;
+credentialJob.DingTalkStatus = "测试失败";
+Assert(DailyReportPresentation.CredentialSummary(credentialJob).ConnectionText.Contains("测试失败"),
+    "连接失败原因没有进入推送配置摘要。");
+Assert(DailyReportPresentation.RecentRuns(Enumerable.Range(0, 8).Select(_ => new DailyReportRunRecord())).Count == 5,
+    "最近运行记录没有限制为 5 条。");
 var reportTestFolder = Path.Combine(Path.GetTempPath(), "ProductionAssistant.Tests", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(reportTestFolder);
 Environment.SetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR", reportTestFolder);
@@ -84,9 +129,17 @@ try
     var retainedRecords = DailyReportSettingsStore.LoadRunRecords(migratedJob.Id);
     Assert(retainedRecords.Count == 100 && retainedRecords[0].StartedAt > retainedRecords[^1].StartedAt,
         "运行记录没有按任务保留最近 100 条。");
-    Assert(DailyReportTaskScheduler.TaskName(migratedJob.Id).EndsWith(migratedJob.Id, StringComparison.Ordinal),
-        "Windows 任务名称没有使用稳定任务 ID。");
-    Assert(DailyReportSettingsStore.DeleteJob(migratedJob.Id) &&
+Assert(DailyReportTaskScheduler.TaskName(migratedJob.Id).EndsWith(migratedJob.Id, StringComparison.Ordinal),
+    "Windows 任务名称没有使用稳定任务 ID。");
+var taskXml = """
+    <Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+      <Actions><Exec><Command>D:\Apps\ProductionAssistant.exe</Command></Exec></Actions>
+    </Task>
+    """;
+Assert(DailyReportTaskScheduler.ExecutableFromTaskXml(taskXml) == @"D:\Apps\ProductionAssistant.exe" &&
+       DailyReportTaskScheduler.ExecutableFromTaskXml("invalid") == string.Empty,
+    "无法从任务计划 XML 保留已安装的程序路径。");
+Assert(DailyReportSettingsStore.DeleteJob(migratedJob.Id) &&
            DailyReportSettingsStore.LoadRunRecords(migratedJob.Id).Count == 0,
         "删除日报任务时没有同步清理结构化运行记录。");
 }

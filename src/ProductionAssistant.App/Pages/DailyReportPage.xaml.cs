@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.Web.WebView2.Core;
 using ProductionAssistant.Models;
@@ -14,6 +15,8 @@ public sealed partial class DailyReportPage : Page
     private readonly DailyReportService _reports = AppServices.DailyReports;
     private DailyReportJobCatalog _catalog = new();
     private DailyReportJob? _job;
+    private NotionSettings _notionSettings = new();
+    private IReadOnlyList<NotionDataSourceOption> _dataSources = [];
     private IReadOnlyList<NotionPropertyOption> _properties = [];
     private string _templateText = string.Empty;
     private string _templateDocument = string.Empty;
@@ -98,12 +101,14 @@ public sealed partial class DailyReportPage : Page
         _testedTemplate = string.Empty;
         JobNameBox.Text = _job.Name;
         SendTimePicker.Time = TimeSpan.TryParse(_job.SendTime, out var time) ? time : new(17, 30, 0);
-        DataSourceBox.ItemsSource = NotionSettingsStore.Load().CachedDataSources;
-        RefreshBindingSummary();
+        _notionSettings = NotionSettingsStore.Load();
+        _dataSources = _notionSettings.CachedDataSources;
+        ResetSourceChoices();
         RefreshDingTalkStatus();
         RefreshOverview();
         RefreshRunRecords();
         await RefreshTaskStatusAsync();
+        ApplyScheduleButton.Visibility = Visibility.Collapsed;
         InitializeEditorContent();
         ShowEditMode();
         _loadingJob = false;
@@ -154,6 +159,7 @@ public sealed partial class DailyReportPage : Page
             if (!removed.Succeeded) { SetStatus(OverviewStatusInfoBar, "停用失败", removed.Message, InfoBarSeverity.Error); return; }
             _job.IsEnabled = false;
             DailyReportSettingsStore.SaveJob(_job);
+            ApplyScheduleButton.Visibility = Visibility.Collapsed;
             RefreshOverview();
             await RefreshTaskStatusAsync();
             return;
@@ -174,6 +180,7 @@ public sealed partial class DailyReportPage : Page
         if (!installed.Succeeded) { SetStatus(OverviewStatusInfoBar, "启用失败", installed.Message, InfoBarSeverity.Error); return; }
         _job.IsEnabled = true;
         DailyReportSettingsStore.SaveJob(_job);
+        ApplyScheduleButton.Visibility = Visibility.Collapsed;
         RefreshOverview();
         await RefreshTaskStatusAsync();
         SetStatus(OverviewStatusInfoBar, "任务已启用", installed.Message, InfoBarSeverity.Success);
@@ -219,29 +226,56 @@ public sealed partial class DailyReportPage : Page
         }
     }
 
+    private void ResetSourceChoices()
+    {
+        DataPageBox.SelectedItem = null;
+        DataPageBox.ItemsSource = DailyReportPresentation.PagePaths(_dataSources);
+        ResetDataSourceChoice();
+    }
+
+    private void DataPageBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        ResetDataSourceChoice();
+        if (DataPageBox.SelectedItem is string pagePath)
+            DataSourceBox.ItemsSource = DailyReportPresentation.SourcesForPage(_dataSources, pagePath);
+    }
+
+    private void ResetDataSourceChoice()
+    {
+        DataSourceBox.SelectedItem = null;
+        DataSourceBox.ItemsSource = null;
+        ResetFieldChoice();
+    }
+
+    private void ResetFieldChoice()
+    {
+        _properties = [];
+        ValuePropertyBox.SelectedItem = null;
+        ValuePropertyBox.ItemsSource = null;
+        UpdateInsertFieldState();
+    }
+
     private async void DataSourceBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        ResetFieldChoice();
         if (DataSourceBox.SelectedItem is not NotionDataSourceOption source) return;
-        var notion = NotionSettingsStore.Load();
-        if (string.IsNullOrWhiteSpace(notion.Token))
+        if (string.IsNullOrWhiteSpace(_notionSettings.Token))
         {
             SetStatus(NotionStatusInfoBar, "需要配置 Notion", "请先到设置页保存 Notion 令牌并刷新数据源。", InfoBarSeverity.Warning);
             return;
         }
         SetBusy(true);
-        var schema = await _notion.GetSchemaAsync(notion.Token, source.Id);
+        var schema = await _notion.GetSchemaAsync(_notionSettings.Token, source.Id);
         SetBusy(false);
+        if ((DataSourceBox.SelectedItem as NotionDataSourceOption)?.Id != source.Id) return;
         if (!schema.Succeeded) { SetStatus(NotionStatusInfoBar, "读取字段失败", schema.Message, InfoBarSeverity.Error); return; }
         _properties = schema.Properties;
         ValuePropertyBox.ItemsSource = _properties.Where(IsSupportedValue).ToArray();
-        RefreshSourceDetection(source);
     }
 
     private void ValuePropertyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ValuePropertyBox.SelectedItem is not NotionPropertyOption property) return;
-        FormatBox.PlaceholderText = property.Type == "date" ? "例如 yyyy-MM-dd 或 MM月dd日" :
-            property.Type is "number" or "formula" or "rollup" ? "例如 0、0.0 或 0.##" : "该字段无需格式";
+        UpdateInsertFieldState();
     }
 
     private void InsertFieldButton_Click(object sender, RoutedEventArgs e)
@@ -250,7 +284,7 @@ public sealed partial class DailyReportPage : Page
             ValuePropertyBox.SelectedItem is not NotionPropertyOption property)
         { SetStatus(NotionStatusInfoBar, "字段未选完整", "请选择数据库和要插入的数据字段。", InfoBarSeverity.Warning); return; }
         var notion = NotionSettingsStore.Load();
-        var period = ResolvePeriod(source, notion);
+        var period = DailyReportPresentation.PeriodFor(source, notion.Targets);
         var matchProperty = ResolveDateProperty(source, notion);
         if (matchProperty is null)
         { SetStatus(NotionStatusInfoBar, "未找到日期字段", $"数据库“{source.Name}”中没有可用于查询的日期字段。", InfoBarSeverity.Warning); return; }
@@ -262,13 +296,12 @@ public sealed partial class DailyReportPage : Page
         binding.MatchPropertyName = matchProperty.Name;
         binding.MatchPropertyType = matchProperty.Type;
         var token = DailyReportSettingsStore.AddOrUpdateField(_job,
-            new(source.Id, source.Name, property.Id, property.Name, property.Type, FormatBox.Text.Trim()));
+            new(source.Id, source.Name, property.Id, property.Name, property.Type, string.Empty));
         PostEditorMessage(new { type = "insertField", field = new
         {
             placeholder = token, label = $"{CapsulePeriodLabel(period)} · {property.Name}",
             tooltip = $"{PeriodLabel(period)} · {source.Name} · {property.Name}"
         } });
-        RefreshBindingSummary();
     }
 
     private void InsertTodayButton_Click(object sender, RoutedEventArgs e) => PostEditorMessage(new { type = "insertToday" });
@@ -280,18 +313,27 @@ public sealed partial class DailyReportPage : Page
         SetStatus(ContentStatusInfoBar, "草稿已保存", "自动任务仍使用已发布版本。", InfoBarSeverity.Success);
     }
 
-    private async void PreviewModeButton_Click(object sender, RoutedEventArgs e)
+    private async void PreviewModeSwitch_Toggled(object sender, RoutedEventArgs e)
     {
+        if (!PreviewModeSwitch.IsOn)
+        {
+            ShowEditMode();
+            return;
+        }
         if (await GeneratePreviewAsync())
         {
             EditorBorder.Visibility = Visibility.Collapsed;
             PreviewBox.Visibility = Visibility.Visible;
         }
+        else
+        {
+            PreviewModeSwitch.IsOn = false;
+        }
     }
 
-    private void EditModeButton_Click(object sender, RoutedEventArgs e) => ShowEditMode();
     private void ShowEditMode()
     {
+        PreviewModeSwitch.IsOn = false;
         EditorBorder.Visibility = Visibility.Visible;
         PreviewBox.Visibility = Visibility.Collapsed;
     }
@@ -369,27 +411,16 @@ public sealed partial class DailyReportPage : Page
             result.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error);
     }
 
-    private async void InstallTaskButton_Click(object sender, RoutedEventArgs e)
+    private async void ApplyScheduleButton_Click(object sender, RoutedEventArgs e)
     {
         if (_job is null) return;
         SaveSchedule();
         var result = await DailyReportTaskScheduler.InstallAsync(_job.Id, SendTimePicker.Time);
-        SetStatus(ScheduleStatusInfoBar, result.Succeeded ? "任务计划已更新" : "任务计划更新失败", result.Message,
-            result.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error);
-        await RefreshTaskStatusAsync();
-    }
-
-    private async void RemoveTaskButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_job is null) return;
-        var result = await DailyReportTaskScheduler.RemoveAsync(_job.Id);
         if (result.Succeeded)
         {
-            _job.IsEnabled = false;
-            DailyReportSettingsStore.SaveJob(_job);
-            RefreshOverview();
+            ApplyScheduleButton.Visibility = Visibility.Collapsed;
         }
-        SetStatus(ScheduleStatusInfoBar, result.Succeeded ? "任务计划已停用" : "停用失败", result.Message,
+        SetStatus(ScheduleStatusInfoBar, result.Succeeded ? "任务计划已更新" : "任务计划更新失败", result.Message,
             result.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error);
         await RefreshTaskStatusAsync();
     }
@@ -398,7 +429,10 @@ public sealed partial class DailyReportPage : Page
     {
         if (_loadingJob || _job is null) return;
         SaveSchedule();
-        TaskStatusText.Text = "发送时间已修改，请更新任务计划使其生效";
+        ApplyScheduleButton.Visibility = _job.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
+        TaskStatusText.Text = _job.IsEnabled
+            ? "发送时间已修改，尚未应用到任务计划"
+            : "发送时间已保存，将在启用任务时应用";
     }
 
     private void SaveDraft()
@@ -428,25 +462,55 @@ public sealed partial class DailyReportPage : Page
     private void RefreshDingTalkStatus()
     {
         if (_job is null) return;
-        WebhookBox.PlaceholderText = DailyReportSettingsStore.MaskWebhook(_job);
-        SecretBox.PlaceholderText = DailyReportSettingsStore.MaskSecret(_job);
-        DingTalkConnectionText.Text = _job.DingTalkConnected switch
-        {
-            true => $"连接正常 · 检测于 {_job.DingTalkCheckedAt:yyyy-MM-dd HH:mm}",
-            false => $"连接失败 · {_job.DingTalkStatus}",
-            _ => "尚未检测连接"
-        };
+        var summary = DailyReportPresentation.CredentialSummary(_job);
+        WebhookStatusText.Text = summary.WebhookText;
+        SecretStatusText.Text = summary.SecretText;
+        DingTalkConnectionText.Text = summary.ConnectionText;
+        DingTalkConnectionText.ClearValue(TextBlock.ForegroundProperty);
+        if (_job.DingTalkConnected == true)
+            DingTalkConnectionText.Foreground = (Brush)Application.Current.Resources["BrandGreenBrush"];
     }
 
     private void RefreshRunRecords()
     {
         if (_job is null) return;
-        RunRecordList.ItemsSource = DailyReportSettingsStore.LoadRunRecords(_job.Id)
+        RunRecordList.ItemsSource = DailyReportPresentation.RecentRuns(DailyReportSettingsStore.LoadRunRecords(_job.Id))
             .Select(record => new RunRecordItem(record,
                 record.StartedAt.ToString("yyyy-MM-dd HH:mm"), record.Source == "test" ? "测试发送" : "自动运行",
                 record.Succeeded ? $"成功 · {record.Stage} · 尝试 {record.Attempts} 次" :
                     record.FinishedAt is null ? $"执行中 · {record.Stage}" : $"失败 · {record.Stage} · {record.Error}"))
             .ToArray();
+    }
+
+    private async void ShowAllRunsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_job is null) return;
+        var records = DailyReportSettingsStore.LoadRunRecords(_job.Id);
+        var panel = new StackPanel { Spacing = 12 };
+        if (records.Count == 0)
+            panel.Children.Add(new TextBlock { Text = "尚无运行记录" });
+        foreach (var record in records)
+        {
+            panel.Children.Add(new Expander
+            {
+                Header = $"{record.StartedAt:yyyy-MM-dd HH:mm} · {(record.Source == "test" ? "测试发送" : "自动运行")} · " +
+                         $"{(record.Succeeded ? "成功" : record.FinishedAt is null ? "执行中" : "失败")}",
+                Content = new TextBlock
+                {
+                    Text = $"业务日期：{record.BusinessDate}\n模板版本：{record.TemplateVersion}\n" +
+                           $"执行阶段：{record.Stage}\n尝试次数：{record.Attempts}\n响应：{record.Response}\n" +
+                           $"错误：{record.Error}\n内容摘要：{record.TextSummary}",
+                    TextWrapping = TextWrapping.Wrap
+                }
+            });
+        }
+        await new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = $"运行记录（{records.Count} 条）",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 560 },
+            CloseButtonText = "关闭"
+        }.ShowAsync();
     }
 
     private async void RunRecordList_ItemClick(object sender, ItemClickEventArgs e)
@@ -494,7 +558,13 @@ public sealed partial class DailyReportPage : Page
         using var message = JsonDocument.Parse(args.WebMessageAsJson);
         var root = message.RootElement;
         var type = root.TryGetProperty("type", out var element) ? element.GetString() : string.Empty;
-        if (type == "ready") { _editorReady = true; InsertTodayButton.IsEnabled = InsertFieldButton.IsEnabled = true; InitializeEditorContent(); }
+        if (type == "ready")
+        {
+            _editorReady = true;
+            InsertTodayButton.IsEnabled = true;
+            UpdateInsertFieldState();
+            InitializeEditorContent();
+        }
         else if (type is "update" or "state")
         {
             _templateText = root.GetProperty("text").GetString() ?? string.Empty;
@@ -534,28 +604,6 @@ public sealed partial class DailyReportPage : Page
         _editorSnapshot = null;
     }
 
-    private void RefreshBindingSummary() => BindingSummaryText.Text = _job is null || _job.Sources.Count == 0
-        ? "尚未绑定数据源"
-        : "已绑定：" + string.Join("、", _job.Sources.Select(source => $"{source.DataSourceName}（{PeriodLabel(source.PeriodKind)}）"));
-
-    private void RefreshSourceDetection(NotionDataSourceOption source)
-    {
-        var notion = NotionSettingsStore.Load();
-        var period = ResolvePeriod(source, notion);
-        var date = ResolveDateProperty(source, notion);
-        SourceDetectionText.Text = date is null ? $"已识别：{PeriodLabel(period)} · 未找到日期字段" : $"已识别：{PeriodLabel(period)} · 日期字段：{date.Name}";
-    }
-
-    private string ResolvePeriod(NotionDataSourceOption source, NotionSettings notion)
-    {
-        var key = notion.Targets.FirstOrDefault(target => target.Id == source.Id)?.ModuleKey;
-        if (key == ProductionMessageKinds.TowerMonthlyModuleKey) return "month";
-        if (key == ProductionMessageKinds.TowerYearlyModuleKey) return "year";
-        if (key == ProductionMessageKinds.TowerDailyModuleKey) return "day";
-        if (source.Name.Contains("每月") || source.Name.Contains("月累计")) return "month";
-        return source.Name.Contains("每年") || source.Name.Contains("年累计") ? "year" : "day";
-    }
-
     private NotionPropertyOption? ResolveDateProperty(NotionDataSourceOption source, NotionSettings notion)
     {
         var existing = _job?.Sources.FirstOrDefault(item => item.DataSourceId == source.Id);
@@ -571,6 +619,10 @@ public sealed partial class DailyReportPage : Page
     private static bool IsSupportedValue(NotionPropertyOption property) => property.Type is
         "number" or "title" or "rich_text" or "select" or "status" or "date" or "checkbox" or
         "url" or "email" or "phone_number" or "formula" or "rollup";
+
+    private void UpdateInsertFieldState() => InsertFieldButton.IsEnabled = _editorReady &&
+        DataSourceBox.SelectedItem is NotionDataSourceOption &&
+        ValuePropertyBox.SelectedItem is NotionPropertyOption;
 
     private void SetBusy(bool busy) { BusyRing.IsActive = busy; BusyRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed; }
     private void SetStatus(string title, string message, InfoBarSeverity severity)

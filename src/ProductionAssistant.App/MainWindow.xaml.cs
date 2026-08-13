@@ -27,8 +27,8 @@ public sealed partial class MainWindow : Window
             AppWindow.SetIcon(iconPath);
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
-            presenter.PreferredMinimumWidth = 960;
-            presenter.PreferredMinimumHeight = 640;
+            presenter.PreferredMinimumWidth = 1100;
+            presenter.PreferredMinimumHeight = 700;
         }
         AppNavigation.SelectedItem = HomeNavigationItem;
         NavigateTo("home");
@@ -57,9 +57,9 @@ public sealed partial class MainWindow : Window
     {
         var pageType = tag switch
         {
-            "home" => typeof(HomePage),
+            "home" => typeof(PrototypePage),
             "daily-weld" => typeof(DailyWeldSimulationPage),
-            "production-message" => typeof(ProductionMessagePage),
+            "production-message" => typeof(PrototypePage),
             "plan-pdf" => typeof(PlanPdfExportPage),
             "production-meeting" => typeof(ProductionMeetingExportPage),
             "daily-report" => typeof(DailyReportPage),
