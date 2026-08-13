@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Xml.Linq;
 
 namespace ProductionAssistant.Services;
 
@@ -9,7 +10,9 @@ public static class DailyReportTaskScheduler
 
     public static async Task<(bool Succeeded, string Message)> InstallAsync(string jobId, TimeSpan sendTime)
     {
-        var executable = Environment.ProcessPath;
+        var existing = await RunSchtasksAsync(["/Query", "/TN", TaskName(jobId), "/XML"], string.Empty);
+        var installedExecutable = existing.Succeeded ? ExecutableFromTaskXml(existing.Message) : string.Empty;
+        var executable = File.Exists(installedExecutable) ? installedExecutable : Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
             return (false, "无法确定生产助手程序路径。");
         var command = $"\"{executable}\" --send-daily-report --job-id {jobId}";
@@ -29,12 +32,22 @@ public static class DailyReportTaskScheduler
     {
         var result = await RunSchtasksAsync(["/Query", "/TN", TaskName(jobId), "/XML"], string.Empty);
         if (!result.Succeeded) return (false, "未安装");
-        var executable = Environment.ProcessPath;
-        return !string.IsNullOrWhiteSpace(executable) && !result.Message.Contains(executable, StringComparison.OrdinalIgnoreCase)
-            ? (true, "已安装，但程序路径已变化，请更新任务")
+        var executable = ExecutableFromTaskXml(result.Message);
+        return string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)
+            ? (true, "已安装，但原程序路径已失效，请更新任务")
             : !result.Message.Contains($"T{configuredTime}:00", StringComparison.Ordinal)
                 ? (true, "已安装，但发送时间已变化，请更新任务")
                 : (true, $"已安装 · 每天 {configuredTime}");
+    }
+
+    public static string ExecutableFromTaskXml(string xml)
+    {
+        try
+        {
+            return XDocument.Parse(xml).Descendants()
+                .FirstOrDefault(element => element.Name.LocalName == "Command")?.Value.Trim() ?? string.Empty;
+        }
+        catch { return string.Empty; }
     }
 
     private static async Task<(bool Succeeded, string Message)> RunSchtasksAsync(IReadOnlyList<string> arguments, string successMessage)

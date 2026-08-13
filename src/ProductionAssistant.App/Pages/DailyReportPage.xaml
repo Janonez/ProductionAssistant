@@ -133,93 +133,135 @@
                     <Border Style="{StaticResource CardStyle}" Padding="18">
                         <StackPanel Spacing="10">
                             <TextBlock FontSize="18" FontWeight="SemiBold" Text="任务概览" />
-                            <TextBox x:Name="JobNameBox" Header="任务名称" TextChanged="JobNameBox_TextChanged" />
+                            <Grid ColumnSpacing="24">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="260" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="JobNameBox" Header="任务名称" TextChanged="JobNameBox_TextChanged" />
+                                <TimePicker Grid.Column="1" x:Name="SendTimePicker" Header="每天发送时间" MinuteIncrement="5"
+                                            ClockIdentifier="24HourClock" TimeChanged="SendTimePicker_TimeChanged" />
+                            </Grid>
                             <TextBlock x:Name="JobOverviewText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="TaskStatusText" TextWrapping="Wrap" />
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <Button x:Name="EnableJobButton" Style="{StaticResource AccentButtonStyle}"
                                         Content="启用任务" Click="EnableJobButton_Click" />
-                                <Button x:Name="DeleteJobButton" Content="删除任务" Click="DeleteJobButton_Click" />
-                            </StackPanel>
-                            <InfoBar x:Name="OverviewStatusInfoBar" IsOpen="False" IsClosable="True" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource CardStyle}" Padding="18">
-                        <StackPanel Spacing="10">
-                            <Grid>
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="消息内容" />
-                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                                    <Button x:Name="EditModeButton" Content="编辑" Click="EditModeButton_Click" />
-                                    <Button x:Name="PreviewModeButton" Content="实际预览" Click="PreviewModeButton_Click" />
-                                </StackPanel>
-                            </Grid>
-                            <Grid>
-                                <Border x:Name="EditorBorder" MinHeight="250" BorderBrush="{ThemeResource TextControlBorderBrush}"
-                                        BorderThickness="1" CornerRadius="4" Background="{ThemeResource TextControlBackground}">
-                                    <WebView2 x:Name="TemplateEditor" MinHeight="248" />
-                                </Border>
-                                <TextBox x:Name="PreviewBox" MinHeight="250" AcceptsReturn="True" IsReadOnly="True"
-                                         TextWrapping="Wrap" VerticalContentAlignment="Top" Visibility="Collapsed" />
-                            </Grid>
-                            <CalendarDatePicker x:Name="PreviewDatePicker" Header="预览业务日期" Width="180" HorizontalAlignment="Left" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button x:Name="InsertTodayButton" Content="插入业务日期" IsEnabled="False" Click="InsertTodayButton_Click" />
-                                <Button Content="保存草稿" Click="SaveDraftButton_Click" />
                                 <Button Content="测试发送" Click="TestSendButton_Click" />
-                                <Button Content="发布当前版本" Style="{StaticResource AccentButtonStyle}" Click="ActivateTemplateButton_Click" />
+                                <Button x:Name="ApplyScheduleButton" Content="应用定时设置" Visibility="Collapsed"
+                                        Click="ApplyScheduleButton_Click" />
+                                <Button x:Name="DeleteJobButton" Content="删除任务" Click="DeleteJobButton_Click" />
                                 <ProgressRing x:Name="BusyRing" Width="22" Height="22" IsActive="False" Visibility="Collapsed" />
                             </StackPanel>
-                            <InfoBar x:Name="ContentStatusInfoBar" IsOpen="False" IsClosable="True" />
-                        </StackPanel>
-                    </Border>
-
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource CardStyle}" Padding="18">
-                            <StackPanel Spacing="10">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="插入 Notion 字段" />
-                                <ComboBox x:Name="DataSourceBox" Header="数据库" DisplayMemberPath="Name" SelectionChanged="DataSourceBox_SelectionChanged" />
-                                <TextBlock x:Name="SourceDetectionText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
-                                <ComboBox x:Name="ValuePropertyBox" Header="数据字段" DisplayMemberPath="Name" SelectionChanged="ValuePropertyBox_SelectionChanged" />
-                                <TextBox x:Name="FormatBox" Header="显示格式（可选）" PlaceholderText="数字如 0.0；日期如 MM月dd日" />
-                                <Button x:Name="InsertFieldButton" Content="插入到模板光标处" IsEnabled="False" Click="InsertFieldButton_Click" />
-                                <TextBlock x:Name="BindingSummaryText" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
-                                <InfoBar x:Name="NotionStatusInfoBar" IsOpen="False" IsClosable="True" />
-                            </StackPanel>
-                        </Border>
-                        <Border Grid.Column="1" Style="{StaticResource CardStyle}" Padding="18">
-                            <StackPanel Spacing="10">
-                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="推送配置" />
-                                <PasswordBox x:Name="WebhookBox" Header="Webhook" />
-                                <PasswordBox x:Name="SecretBox" Header="加签 Secret" />
-                                <TextBlock x:Name="DingTalkConnectionText" TextWrapping="Wrap" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Button Content="保存配置" Click="SaveDingTalkButton_Click" />
-                                    <Button Content="检测连接" Click="CheckDingTalkButton_Click" />
-                                </StackPanel>
-                                <InfoBar x:Name="DingTalkStatusInfoBar" IsOpen="False" IsClosable="True" />
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-
-                    <Border Style="{StaticResource CardStyle}" Padding="18">
-                        <StackPanel Spacing="10">
-                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="定时设置" />
-                            <TimePicker x:Name="SendTimePicker" Header="每天发送时间" MinuteIncrement="5"
-                                        ClockIdentifier="24HourClock" TimeChanged="SendTimePicker_TimeChanged" />
-                            <TextBlock x:Name="TaskStatusText" TextWrapping="Wrap" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Content="安装 / 更新任务" Click="InstallTaskButton_Click" />
-                                <Button Content="停用任务" Click="RemoveTaskButton_Click" />
-                            </StackPanel>
+                            <InfoBar x:Name="OverviewStatusInfoBar" IsOpen="False" IsClosable="True" />
                             <InfoBar x:Name="ScheduleStatusInfoBar" IsOpen="False" IsClosable="True" />
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource CardStyle}" Padding="18">
                         <StackPanel Spacing="10">
-                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="运行记录" />
-                            <TextBlock Foreground="{StaticResource MutedTextBrush}" Text="自动运行和测试发送均记录；每个任务保留最近 100 条。" />
+                            <Grid x:Name="ContentWorkspace" ColumnSpacing="16" RowSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="7*" />
+                                    <ColumnDefinition Width="3*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid Grid.Row="0" Grid.Column="0">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" Text="消息模板" />
+                                    <ToggleSwitch x:Name="PreviewModeSwitch" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  OffContent="编辑" OnContent="实时预览"
+                                                  Toggled="PreviewModeSwitch_Toggled" />
+                                </Grid>
+                                <TextBlock Grid.Row="0" Grid.Column="1" FontSize="18" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" Text="插入数据源" />
+                                <StackPanel x:Name="EditorPanel" Grid.Row="1" Grid.Column="0" Spacing="10">
+                                    <Grid>
+                                        <Border x:Name="EditorBorder" MinHeight="360" BorderBrush="{ThemeResource TextControlBorderBrush}"
+                                                BorderThickness="1" CornerRadius="4" Background="{ThemeResource TextControlBackground}">
+                                            <WebView2 x:Name="TemplateEditor" MinHeight="358" />
+                                        </Border>
+                                        <TextBox x:Name="PreviewBox" MinHeight="360" AcceptsReturn="True" IsReadOnly="True"
+                                                 TextWrapping="Wrap" VerticalContentAlignment="Top" Visibility="Collapsed" />
+                                    </Grid>
+                                    <CalendarDatePicker x:Name="PreviewDatePicker" Header="预览业务日期" Width="180" HorizontalAlignment="Left" />
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button Content="保存模板" Style="{StaticResource AccentButtonStyle}" Click="SaveDraftButton_Click" />
+                                        <Button Content="发布为任务版本" Click="ActivateTemplateButton_Click" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <Border x:Name="FieldPanel" Grid.Row="1" Grid.Column="1" BorderThickness="0" Padding="0">
+                                    <Grid RowSpacing="10">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <ComboBox Grid.Row="0" x:Name="DataPageBox" Header="1. 数据页" PlaceholderText="请选择完整页面路径"
+                                                  HorizontalAlignment="Stretch" SelectionChanged="DataPageBox_SelectionChanged" />
+                                        <ComboBox Grid.Row="1" x:Name="DataSourceBox" Header="2. 数据库" PlaceholderText="请选择原始数据库"
+                                                  HorizontalAlignment="Stretch" DisplayMemberPath="Name"
+                                                  SelectionChanged="DataSourceBox_SelectionChanged" />
+                                        <ComboBox Grid.Row="2" x:Name="ValuePropertyBox" Header="3. 数据字段" PlaceholderText="请选择数据字段"
+                                                  HorizontalAlignment="Stretch" DisplayMemberPath="Name"
+                                                  SelectionChanged="ValuePropertyBox_SelectionChanged" />
+                                        <Button Grid.Row="3" x:Name="InsertFieldButton" Content="插入到模板光标处" IsEnabled="False" Click="InsertFieldButton_Click" />
+                                        <InfoBar Grid.Row="4" x:Name="NotionStatusInfoBar" IsOpen="False" IsClosable="True" />
+                                        <Button Grid.Row="6" x:Name="InsertTodayButton" Content="插入业务日期胶囊" IsEnabled="False" Click="InsertTodayButton_Click" />
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                            <InfoBar x:Name="ContentStatusInfoBar" IsOpen="False" IsClosable="True" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Padding="18">
+                        <StackPanel Spacing="10">
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="推送配置" />
+                            <TextBlock x:Name="DingTalkConnectionText" TextWrapping="Wrap" />
+                            <StackPanel x:Name="DingTalkEditPanel" Spacing="0">
+                                <Grid Height="64" Padding="16,0" ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="2*" /><ColumnDefinition Width="3*" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock FontWeight="SemiBold" Text="Webhook" />
+                                        <TextBlock x:Name="WebhookStatusText" Foreground="{StaticResource MutedTextBrush}" />
+                                    </StackPanel>
+                                    <PasswordBox Grid.Column="1" x:Name="WebhookBox" VerticalAlignment="Center"
+                                                 PasswordRevealMode="Peek" PlaceholderText="留空则保持已保存的值" />
+                                </Grid>
+                                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                <Grid Height="64" Padding="16,0" ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="2*" /><ColumnDefinition Width="3*" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock FontWeight="SemiBold" Text="加签 Secret" />
+                                        <TextBlock x:Name="SecretStatusText" Foreground="{StaticResource MutedTextBrush}" />
+                                    </StackPanel>
+                                    <PasswordBox Grid.Column="1" x:Name="SecretBox" VerticalAlignment="Center"
+                                                 PasswordRevealMode="Peek" PlaceholderText="留空则保持已保存的值" />
+                                </Grid>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button x:Name="SaveDingTalkButton" Content="保存配置" Click="SaveDingTalkButton_Click" />
+                                <Button Content="检测连接" Click="CheckDingTalkButton_Click" />
+                            </StackPanel>
+                            <InfoBar x:Name="DingTalkStatusInfoBar" IsOpen="False" IsClosable="True" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardStyle}" Padding="18">
+                        <StackPanel Spacing="10">
+                            <Grid>
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="最近运行记录" />
+                                <Button x:Name="ShowAllRunsButton" HorizontalAlignment="Right" Content="查看全部"
+                                        Click="ShowAllRunsButton_Click" />
+                            </Grid>
+                            <TextBlock Foreground="{StaticResource MutedTextBrush}" Text="显示最近 5 条；每个任务仍保留最近 100 条。" />
                             <ListView x:Name="RunRecordList" SelectionMode="None" IsItemClickEnabled="True"
                                       ItemClick="RunRecordList_ItemClick">
                                 <ListView.ItemTemplate>

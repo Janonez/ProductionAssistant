@@ -5,10 +5,10 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>ProductionAssistant</RootNamespace>
     <AssemblyName>ProductionAssistant</AssemblyName>
-    <Version>1.4.3</Version>
-    <AssemblyVersion>1.4.3.0</AssemblyVersion>
-    <FileVersion>1.4.3.0</FileVersion>
-    <InformationalVersion>1.4.3</InformationalVersion>
+    <Version>1.4.5</Version>
+    <AssemblyVersion>1.4.5.0</AssemblyVersion>
+    <FileVersion>1.4.5.0</FileVersion>
+    <InformationalVersion>1.4.5</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\production-assistant-logo.ico</ApplicationIcon>
@@ -33,7 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Remove="Assets\ReportEditor\editor-source.js;Assets\ReportEditor\package.json;Assets\ReportEditor\package-lock.json;Assets\ReportEditor\node_modules\**" />
+    <Content Remove="Assets\ReportEditor\editor-source.js;Assets\ReportEditor\package.json;Assets\ReportEditor\package-lock.json;Assets\ReportEditor\node_modules\**;Assets\Prototype\src\**;Assets\Prototype\node_modules\**;Assets\Prototype\package.json;Assets\Prototype\package-lock.json;Assets\Prototype\tsconfig*.json;Assets\Prototype\vite.config.ts;Assets\Prototype\vitest.config.ts" />
     <Content Include="Assets\production-assistant-logo.png"
              CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\production-assistant-logo.ico"
@@ -41,6 +41,9 @@
     <Content Include="Assets\ReportEditor\editor.html"
              CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\ReportEditor\editor.js"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Prototype\dist\**"
+             Link="Assets\Prototype\%(RecursiveDir)%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

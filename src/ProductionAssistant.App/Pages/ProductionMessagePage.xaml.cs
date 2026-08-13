@@ -467,7 +467,7 @@ public sealed partial class ProductionMessagePage : Page
         };
     }
 
-    private static Dictionary<string, string> AutoMap(
+    internal static Dictionary<string, string> AutoMap(
         IReadOnlyList<NotionPropertyOption> properties,
         ProductionMessageKind kind)
     {
@@ -492,7 +492,7 @@ public sealed partial class ProductionMessagePage : Page
         return mapping;
     }
 
-    private static bool SameDataSourceId(string left, string right)
+    internal static bool SameDataSourceId(string left, string right)
     {
         if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
             return false;
