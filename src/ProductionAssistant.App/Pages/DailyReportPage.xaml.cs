@@ -399,8 +399,8 @@ public sealed partial class DailyReportPage : Page
         DailyReportSettingsStore.SaveJob(_job, WebhookBox.Password, SecretBox.Password);
         WebhookBox.Password = SecretBox.Password = string.Empty;
         SetBusy(true);
-        var result = await _reports.SendAsync(DailyReportSettingsStore.ReadWebhook(_job),
-            DailyReportSettingsStore.ReadSecret(_job), "【生产助手】日报机器人连接检测成功。");
+        var result = await _reports.CheckConnectionAsync(
+            DailyReportSettingsStore.ReadWebhook(_job));
         SetBusy(false);
         _job.DingTalkConnected = result.Succeeded;
         _job.DingTalkStatus = result.Message;

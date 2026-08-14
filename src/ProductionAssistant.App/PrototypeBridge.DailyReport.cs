@@ -139,8 +139,8 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> CheckDailyConnectionAsync(JsonElement payload, CancellationToken cancellationToken)
     {
         var job = FindDailyJob(payload);
-        var result = await DailyReports.SendAsync(DailyReportSettingsStore.ReadWebhook(job),
-            DailyReportSettingsStore.ReadSecret(job), "日报推送机器人连接检测", cancellationToken);
+        var result = await DailyReports.CheckConnectionAsync(
+            DailyReportSettingsStore.ReadWebhook(job), cancellationToken);
         job.DingTalkConnected = result.Succeeded;
         job.DingTalkStatus = result.Message;
         job.DingTalkCheckedAt = DateTimeOffset.Now;

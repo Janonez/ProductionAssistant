@@ -1,0 +1,66 @@
+/* Shared readability baseline for the three React routes. */
+:root {
+  --font-body: 16px;
+  --font-supporting: 13px;
+  --font-label: 14px;
+  --control-height: 44px;
+  font-size: var(--font-body);
+}
+
+body { min-width: 0; line-height: 1.5; }
+button, input, select, textarea { font-size: 15px; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 3px solid #4a806545;
+  outline-offset: 2px;
+}
+
+.brand strong { font-size: 16px; }
+.brand span, .nav-label, .eyebrow, .hero-chip, .readiness { font-size: var(--font-supporting); }
+nav button, .native-link { min-height: var(--control-height); font-size: 15px; }
+.page header p, .surface-title p, .section-heading p, .hero p { font-size: 15px; line-height: 1.55; }
+.module-grid strong { font-size: 16px; }
+.module-grid small { font-size: 14px; line-height: 1.45; padding-right: 22px; }
+.surface-title h2 { font-size: 20px; }
+.surface-title p { font-size: 14px; }
+.actions label, .draft-controls label, .dialog label,
+.daily-step label, .field-picker label, .preview-actions label { font-size: var(--font-label); }
+.actions input, .draft-controls input, .draft-controls select, .dialog input, .dialog select,
+.daily-step input, .daily-step select, .picker-trigger, .date-trigger,
+.secondary, .ghost, .danger, .primary { min-height: var(--control-height); font-size: 15px; }
+.notice strong { font-size: 15px; }
+.notice span, .dialog > p { font-size: 14px; line-height: 1.5; }
+.draft-head > div > span, .field-grid span, .status, .warning-text,
+.binding-status span, .binding-status small, .result-text, .binding-flow p { font-size: var(--font-supporting); }
+.binding-status strong, .binding-flow h3, .field-grid strong { font-size: 15px; }
+.dialog { line-height: 1.5; }
+.page > header, .actions { flex-wrap: wrap; gap: 14px; }
+.page, .surface, .module-grid button, .daily-job-card { overflow-wrap: anywhere; }
+
+.date-trigger { height: auto; }
+.calendar-head .calendar-title { font-size: 15px; }
+.weekdays span, .calendar-grid button, .calendar-footer button { font-size: 13px; }
+.month-grid button { font-size: 14px; }
+
+.job-copy h2 { font-size: 18px; }
+.job-copy p, .job-copy small { font-size: 14px; line-height: 1.45; }
+.job-status { font-size: 13px; padding: 6px 10px; }
+.job-context-menu button, .back-link { font-size: 14px; }
+.empty-state { font-size: 15px; }
+.empty-state h2 { font-size: 21px; }
+.choice-popover button, .picker-empty, .time-column button, .time-popover .time-done { font-size: 14px; }
+.time-column > strong { font-size: 13px; }
+.save-state, .connection-ok, .muted { font-size: var(--font-supporting); line-height: 1.45; }
+.field-picker h3 { font-size: 16px; }
+.field-token { font-size: 14px; }
+.field-icon { font-size: 10px; }
+.report-editor, .report-editor .ProseMirror { font-size: 16px; }
+.report-preview h3 { font-size: 18px; }
+.report-preview p, .run-list details > div { font-size: var(--font-supporting); line-height: 1.55; }
+.report-preview pre { font-size: 15px; }
+.run-list summary { font-size: 14px; }
+
+@media (max-width: 1050px) {
+  .page { padding-bottom: 64px; }
+  .page > header, .daily-detail > header { gap: 18px; align-items: flex-start; }
+  .preview-actions { flex-wrap: wrap; }
+}

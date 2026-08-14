@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   ArrowLeft,
   Bot,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   Database,
   FileText,
   LoaderCircle,
-  MoreHorizontal,
   Plus,
   Send,
   Trash2,
@@ -25,6 +24,9 @@ import { ReportTemplateEditor } from "./ReportTemplateEditor";
 import { ChoicePicker, ReportDatePicker, TimePicker } from "./FormPickers";
 
 type NoticeValue = { tone: string; title: string; message: string };
+type DailyStep = 0 | 1 | 2 | 3 | 4;
+type StepTransition = { from: DailyStep; target: DailyStep; direction: 1 | -1; phase: "node" | "rail" | "arrive" };
+type NoticeScope = "page" | "basics" | "credentials" | "template" | "preview" | "test";
 const errorNotice = (error: unknown): NoticeValue => ({
   tone: "error",
   title: "操作失败",
@@ -37,7 +39,7 @@ export function DailyReportPage() {
   const [focusStep, setFocusStep] = useState("");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState<NoticeValue>();
-  const [menu, setMenu] = useState("");
+  const [menu, setMenu] = useState<{ job: DailyJobSummary; x: number; y: number }>();
   const [deleteTarget, setDeleteTarget] = useState<DailyJobSummary>();
   const refresh = () =>
     invoke<{ jobs: DailyJobSummary[] }>("daily.list").then((value) =>
@@ -46,6 +48,19 @@ export function DailyReportPage() {
   useEffect(() => {
     refresh().catch((error) => setNotice(errorNotice(error)));
   }, []);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(undefined);
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && close();
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("blur", close);
+    };
+  }, [menu]);
 
   async function create() {
     setBusy("create");
@@ -117,7 +132,7 @@ export function DailyReportPage() {
           <h1>日报推送</h1>
           <p>配置日报内容，验证钉钉发送，再从任务列表启用定时计划。</p>
         </div>
-        <button className="primary" disabled={!!busy} onClick={create}>
+        <button className="primary" disabled={busy === "create"} onClick={create}>
           {busy === "create" ? <LoaderCircle className="spin" /> : <Plus />}
           新建日报任务
         </button>
@@ -129,6 +144,14 @@ export function DailyReportPage() {
             className="daily-job-card"
             key={job.id}
             onClick={() => setJobId(job.id)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenu({
+                job,
+                x: Math.min(event.clientX, window.innerWidth - 176),
+                y: Math.min(event.clientY, window.innerHeight - 58),
+              });
+            }}
           >
             <div className="job-icon">
               <FileText />
@@ -162,17 +185,6 @@ export function DailyReportPage() {
                 />
                 <span />
               </label>
-              <div className="job-menu">
-                <button className="icon-button" aria-label="更多操作" onClick={() => setMenu(menu === job.id ? "" : job.id)}><MoreHorizontal /></button>
-                {menu === job.id && <div className="job-menu-popover"><button className="danger-quiet" disabled={job.isEnabled || busy === job.id} onClick={() => { setMenu(""); setDeleteTarget(job) }}><Trash2 />删除任务</button></div>}
-              </div>
-              <button
-                className="icon-button"
-                aria-label="打开配置"
-                onClick={() => setJobId(job.id)}
-              >
-                <ChevronRight />
-              </button>
             </div>
           </article>
         ))}
@@ -183,7 +195,28 @@ export function DailyReportPage() {
             <p>新建任务后，按顺序完成机器人、模板和测试配置。</p>
           </div>
         )}
-    </section>
+      </section>
+      {menu && (
+        <div
+          className="job-context-menu"
+          role="menu"
+          style={{ left: menu.x, top: menu.y }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            className="danger-quiet"
+            role="menuitem"
+            disabled={menu.job.isEnabled || busy === menu.job.id}
+            onClick={() => {
+              setDeleteTarget(menu.job);
+              setMenu(undefined);
+            }}
+          >
+            <Trash2 />
+            {menu.job.isEnabled ? "停用后可删除" : "删除任务"}
+          </button>
+        </div>
+      )}
     <Dialog.Root open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(undefined)}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog"><Dialog.Title>删除日报任务？</Dialog.Title><Dialog.Description>将删除“{deleteTarget?.name}”及其运行记录，此操作无法撤销。</Dialog.Description><div className="dialog-actions"><button className="secondary" onClick={() => setDeleteTarget(undefined)}>取消</button><button className="danger" disabled={!!busy} onClick={() => deleteTarget && remove(deleteTarget)}>确认删除</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
     </div>
   );
@@ -207,6 +240,7 @@ function DailyJobEditor({
   const [document, setDocument] = useState("");
   const [saveState, setSaveState] = useState("");
   const [notice, setNotice] = useState<NoticeValue | undefined>(initialNotice);
+  const [noticeScope, setNoticeScope] = useState<NoticeScope>("page");
   const [webhook, setWebhook] = useState("");
   const [secret, setSecret] = useState("");
   const [pagePath, setPagePath] = useState("");
@@ -215,6 +249,7 @@ function DailyJobEditor({
   const [properties, setProperties] = useState<
     Array<{ id: string; name: string; type: string }>
   >([]);
+  const [propertiesError, setPropertiesError] = useState("");
   const [insert, setInsert] = useState<{
     value: DailyField | "today";
     key: number;
@@ -225,12 +260,15 @@ function DailyJobEditor({
   );
   const [busy, setBusy] = useState("");
   const [allRuns, setAllRuns] = useState<DailyRun[]>();
+  const [currentStep, setCurrentStep] = useState<DailyStep>(0);
+  const [previousStep, setPreviousStep] = useState<DailyStep>(0);
+  const [direction, setDirection] = useState(1);
+  const [stepTransition, setStepTransition] = useState<StepTransition>();
+  const reduceMotion = useReducedMotion();
   const loaded = useRef(false);
-  const sectionRefs = {
-    basics: useRef<HTMLElement>(null),
-    credentials: useRef<HTMLElement>(null),
-    template: useRef<HTMLElement>(null),
-  };
+  const initialized = useRef(false);
+  const templateSaveTimer = useRef<number | undefined>(undefined);
+  const stepTransitionTimer = useRef<number | undefined>(undefined);
   async function load() {
     const value = await invoke<DailyJobDetail>("daily.get", { id });
     setJob(value);
@@ -240,48 +278,41 @@ function DailyJobEditor({
     setDocument(value.draftTemplateDocument);
     setWebhook(value.webhookSaved ? value.credentialMask : "");
     setSecret(value.secretSaved ? value.credentialMask : "");
+    if (!initialized.current) {
+      const requested = ({ basics: 0, credentials: 1, template: 2 } as const)[focusStep as "basics" | "credentials" | "template"];
+      const firstIncomplete: DailyStep = !value.name.trim() || !value.sendTime
+        ? 0
+        : !value.dingTalkConnected
+          ? 1
+          : !value.draftTemplate.trim()
+            ? 2
+            : value.validated
+              ? 4
+              : 2;
+      setCurrentStep(requested ?? firstIncomplete);
+      initialized.current = true;
+    }
     loaded.current = true;
   }
   useEffect(() => {
     load().catch((error) => setNotice(errorNotice(error)));
   }, [id]);
-  useEffect(() => {
-    if (job && focusStep)
-      setTimeout(
-        () =>
-          sectionRefs[
-            focusStep as keyof typeof sectionRefs
-          ]?.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-        50,
-      );
-  }, [job, focusStep]);
+  useEffect(() => () => {
+    if (stepTransitionTimer.current) window.clearTimeout(stepTransitionTimer.current);
+  }, []);
   useEffect(() => {
     if (!loaded.current || !job) return;
-    setSaveState("保存中…");
-    const timer = window.setTimeout(
-      () =>
-        invoke("daily.saveBasics", { id, name, sendTime })
-          .then(() => setSaveState("已自动保存"))
-          .catch((error) => {
-            setSaveState("保存失败");
-            setNotice(errorNotice(error));
-          }),
-      500,
-    );
-    return () => window.clearTimeout(timer);
-  }, [name, sendTime]);
-  useEffect(() => {
-    if (!loaded.current || !job) return;
+    if (template === job.draftTemplate && document === job.draftTemplateDocument) return;
     setPreview("");
     setSaveState("保存中…");
-    const timer = window.setTimeout(
+    templateSaveTimer.current = window.setTimeout(
       () =>
         invoke("daily.saveTemplate", { id, text: template, document })
           .then(() => {
             setSaveState("已自动保存");
             setJob((current) =>
               current
-                ? { ...current, validated: false, isEnabled: false }
+                ? { ...current, draftTemplate: template, draftTemplateDocument: document, validated: false, isEnabled: false }
                 : current,
             );
           })
@@ -291,7 +322,10 @@ function DailyJobEditor({
           }),
       650,
     );
-    return () => window.clearTimeout(timer);
+    return () => {
+      if (templateSaveTimer.current) window.clearTimeout(templateSaveTimer.current);
+      templateSaveTimer.current = undefined;
+    };
   }, [template, document]);
 
   const sources = useMemo(
@@ -303,6 +337,7 @@ function DailyJobEditor({
     setSourceId(value);
     setPropertyId("");
     setProperties([]);
+    setPropertiesError("");
     if (!value) return;
     setBusy("properties");
     try {
@@ -344,47 +379,72 @@ function DailyJobEditor({
       setInsert({ value: result.field, key: Date.now() });
       setPreview("");
     } catch (error) {
-      setNotice(errorNotice(error));
+      setPropertiesError(error instanceof Error ? error.message : String(error));
+      setNoticeScope("template");
     } finally {
       setBusy("");
     }
   }
-  async function saveCredentials() {
+  const advanceTo = (step: DailyStep) => {
+    if (stepTransition) return;
+    const nextDirection = step >= currentStep ? 1 : -1;
+    setPreviousStep(currentStep);
+    setDirection(nextDirection);
+    if (reduceMotion) {
+      setCurrentStep(step);
+      return;
+    }
+    const transition: StepTransition = { from: currentStep, target: step, direction: nextDirection, phase: "node" };
+    setStepTransition(transition);
+    stepTransitionTimer.current = window.setTimeout(() => {
+      setStepTransition({ ...transition, phase: "rail" });
+      stepTransitionTimer.current = window.setTimeout(() => {
+        setCurrentStep(step);
+        setStepTransition({ ...transition, phase: "arrive" });
+        stepTransitionTimer.current = window.setTimeout(() => {
+          setStepTransition(undefined);
+          stepTransitionTimer.current = undefined;
+        }, 320);
+      }, 440);
+    }, nextDirection > 0 ? 320 : 240);
+  };
+  async function saveBasicsAndContinue() {
+    if (!name.trim() || !sendTime) return;
+    setBusy("basics");
+    setNotice(undefined);
+    try {
+      await invoke("daily.saveBasics", { id, name, sendTime });
+      setSaveState("已保存");
+      setJob((current) => current ? { ...current, name, sendTime, validated: false, isEnabled: false } : current);
+      advanceTo(1);
+    } catch (error) {
+      setNotice(errorNotice(error));
+      setNoticeScope("basics");
+    } finally {
+      setBusy("");
+    }
+  }
+  async function saveAndTestCredentials() {
     setBusy("credentials");
+    setNotice(undefined);
     try {
       await invoke("daily.saveCredentials", {
         id,
         webhook: webhook === job?.credentialMask ? "" : webhook,
         secret: secret === job?.credentialMask ? "" : secret,
       });
-      await load();
-      setNotice({
-        tone: "success",
-        title: "推送配置已保存",
-        message: "未修改的凭据保持原值；发送配置已标记为待测试。",
-      });
-    } catch (error) {
-      setNotice(errorNotice(error));
-    } finally {
-      setBusy("");
-    }
-  }
-  async function checkConnection() {
-    setBusy("connection");
-    try {
       const result = await invoke<{ succeeded: boolean; message: string }>(
         "daily.checkConnection",
         { id },
         60000,
       );
-      setNotice({
-        tone: result.succeeded ? "success" : "error",
-        title: result.succeeded ? "机器人连接正常" : "机器人连接失败",
-        message: result.message,
-      });
+      if (!result.succeeded) throw new Error(result.message);
       await load();
+      setSaveState("已保存并通过连接测试");
+      advanceTo(2);
     } catch (error) {
       setNotice(errorNotice(error));
+      setNoticeScope("credentials");
     } finally {
       setBusy("");
     }
@@ -392,7 +452,10 @@ function DailyJobEditor({
   async function generatePreview() {
     setBusy("preview");
     setPreview("");
+    setNotice(undefined);
     try {
+      if (templateSaveTimer.current) window.clearTimeout(templateSaveTimer.current);
+      templateSaveTimer.current = undefined;
       await invoke("daily.saveTemplate", { id, text: template, document });
       const result = await invoke<{
         succeeded: boolean;
@@ -401,13 +464,10 @@ function DailyJobEditor({
       }>("daily.preview", { id, businessDate: previewDate }, 120000);
       if (!result.succeeded) throw new Error(result.message);
       setPreview(result.text);
-      setNotice({
-        tone: "success",
-        title: "预览已生成",
-        message: result.message,
-      });
+      advanceTo(3);
     } catch (error) {
       setNotice(errorNotice(error));
+      setNoticeScope("preview");
     } finally {
       setBusy("");
     }
@@ -426,9 +486,12 @@ function DailyJobEditor({
         title: "测试发送成功",
         message: "当前配置已验证，可以返回任务列表手动启用。",
       });
+      setNoticeScope("test");
       await load();
+      advanceTo(4);
     } catch (error) {
       setNotice(errorNotice(error));
+      setNoticeScope("test");
     } finally {
       setBusy("");
     }
@@ -453,196 +516,121 @@ function DailyJobEditor({
   const dirtyCredential =
     (webhook !== "" && webhook !== job.credentialMask) ||
     (secret !== "" && secret !== job.credentialMask);
+  const steps = ["基本信息", "钉钉机器人", "编辑消息", "预览与测试"];
+  const progressStep = stepTransition?.phase === "rail" || stepTransition?.phase === "arrive"
+    ? stepTransition.target
+    : currentStep;
+  const filledSegments = Math.min(progressStep, 3);
+  const motionProps = reduceMotion
+    ? { initial: false as const }
+    : {
+        initial: { opacity: 0, x: direction * 28, filter: "blur(5px)" },
+        animate: { opacity: 1, x: 0, filter: "blur(0px)" },
+        exit: { opacity: 0, x: direction * -20, filter: "blur(4px)" },
+        transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as const },
+      };
   return (
     <div className="page daily-page daily-detail">
-      <header>
+      <header className="daily-detail-header">
         <div>
           <button className="back-link" onClick={back}>
             <ArrowLeft />
             返回任务列表
           </button>
-          <span className="eyebrow">日报任务配置</span>
           <h1>{name || "未命名任务"}</h1>
           <p>
-            按顺序完成基础信息、机器人、模板和测试；启停与删除请返回任务列表操作。
+            每天 {sendTime} 自动生成并推送；启停与删除请返回任务列表操作。
           </p>
         </div>
-        <span
-          className={`job-status ${job.isEnabled ? "enabled" : job.validated ? "ready" : "pending-test"}`}
-        >
-          {job.isEnabled ? "已启用" : job.validated ? "可启用" : "待测试"}
-        </span>
-      </header>
-      {notice && <Notice value={notice} />}
-      <section ref={sectionRefs.basics} className="surface daily-step">
-        <StepTitle
-          number="1"
-          title="基本信息"
-          text="名称自动保存；已启用任务修改发送时间后会立即更新计划。"
-        />
-        <div className="basic-grid">
-          <label>
-            任务名称
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <label>
-            每天发送时间
-            <TimePicker value={sendTime} onChange={setSendTime} />
-          </label>
-        </div>
-        <small className="save-state">{saveState}</small>
-      </section>
-      <section ref={sectionRefs.credentials} className="surface daily-step">
-        <StepTitle
-          number="2"
-          title="钉钉机器人"
-          text="保存负责更新本机加密配置；测试连接只排查机器人链路。"
-        />
-        <div className="credential-grid">
-          <label>
-            Webhook
-            <input
-              type="password"
-              value={webhook}
-              onFocus={() => webhook === job.credentialMask && setWebhook("")}
-              onBlur={() => job.webhookSaved && !webhook && setWebhook(job.credentialMask)}
-              onChange={(event) => setWebhook(event.target.value)}
-            />
-          </label>
-          <label>
-            加签 Secret
-            <input
-              type="password"
-              value={secret}
-              onFocus={() => secret === job.credentialMask && setSecret("")}
-              onBlur={() => job.secretSaved && !secret && setSecret(job.credentialMask)}
-              onChange={(event) => setSecret(event.target.value)}
-            />
-          </label>
-        </div>
-        <div className="inline-actions">
-          <button
-            className="primary"
-            disabled={!dirtyCredential || !!busy}
-            onClick={saveCredentials}
-          >
-            {busy === "credentials" && <LoaderCircle className="spin" />}
-            保存配置
-          </button>
-          <button
-            className="secondary"
-            disabled={!!busy || !job.webhookSaved || !job.secretSaved}
-            onClick={checkConnection}
-          >
-            {busy === "connection" && <LoaderCircle className="spin" />}测试连接
-          </button>
-          <span className={job.dingTalkConnected ? "connection-ok" : "muted"}>
-            {job.dingTalkConnected ? <CheckCircle2 /> : <Bot />}
-            {job.dingTalkStatus || "尚未检测连接"}
+        <div className="detail-header-state">
+          <span className={`job-status ${job.isEnabled ? "enabled" : job.validated ? "ready" : "configuring"}`}>
+            {job.isEnabled ? "已启用" : job.validated ? "可启用" : "配置中"}
           </span>
+          <small>{saveState || "尚无未保存更改"}</small>
         </div>
-      </section>
-      <section ref={sectionRefs.template} className="surface daily-step">
-        <StepTitle
-          number="3"
-          title="消息模板与数据源"
-          text="编辑自动保存；插入字段后按预览日期读取对应 Notion 记录。"
-        />
-        <div className="template-workspace">
-          <div>
-            <ReportTemplateEditor
-              text={template}
-              document={document}
-              fields={job.fields}
-              insert={insert}
-              onChange={(nextText, nextDocument) => {
-                setTemplate(nextText);
-                setDocument(nextDocument);
-              }}
-            />
+      </header>
+      {notice && noticeScope === "page" && <Notice value={notice} />}
+      <nav className="daily-progress" aria-label="日报配置进度">
+        <div className="progress-meta"><span>当前步骤</span><strong>{Math.min(currentStep + 1, 4)} / 4</strong></div>
+        <div className="progress-rail">
+          <div className="progress-segments" aria-hidden="true">
+            {[0, 1, 2].map(index => <span key={index}><i style={{ width: index < filledSegments ? "100%" : "0%" }} /></span>)}
           </div>
-          <aside className="field-picker">
-            <h3>
-              <Database />
-              插入数据源
-            </h3>
-            <label>
-              1. 数据页
-              <ChoicePicker value={pagePath} placeholder="请选择完整页面路径" options={job.pagePaths.map(path => ({ value: path, label: path }))} onChange={value => { setPagePath(value); chooseSource("") }} />
-            </label>
-            <label>
-              2. 数据库
-              <ChoicePicker value={sourceId} placeholder="请选择原始数据库" options={sources.map(source => ({ value: source.id, label: source.name }))} onChange={chooseSource} />
-            </label>
-            <label>
-              3. 数据字段
-              <ChoicePicker value={propertyId} placeholder="请选择数据字段" disabled={busy === "properties"} options={properties.map(property => ({ value: property.id, label: property.name }))} onChange={setPropertyId} />
-            </label>
-            <button
-              className="secondary"
-              disabled={!propertyId || !!busy}
-              onClick={addField}
-            >
-              插入到光标处
-            </button>
-            <button
-              className="ghost"
-            onClick={() => setInsert({ value: "today", key: Date.now() })}
-            >
-              插入业务日期
-            </button>
-          </aside>
+          <ol className={direction < 0 ? "backward" : "forward"}>
+          {steps.map((title, index) => {
+            const transitionFromNode = stepTransition ? Math.min(stepTransition.from, steps.length - 1) : -1;
+            const baseDone = index < currentStep || currentStep === 4;
+            const leavingForward = stepTransition?.direction === 1 && stepTransition.phase !== "arrive" && index === transitionFromNode;
+            const leavingBackward = stepTransition?.direction === -1 && stepTransition.phase !== "arrive" && index === transitionFromNode;
+            const done = !leavingBackward && (baseDone || leavingForward);
+            const stateClass = leavingBackward ? "idle" : done ? "done" : index === currentStep ? `active${busy ? " working" : ""}` : "idle";
+            const transitionClass = stepTransition?.phase === "node" && index === transitionFromNode
+              ? stepTransition.direction > 0 ? " just-completed" : " just-back-leave"
+              : stepTransition?.phase === "arrive" && index === stepTransition.target
+                ? stepTransition.direction > 0 ? " just-active" : " just-back-active"
+                : "";
+            return <li key={title} className={`${stateClass}${transitionClass}`} aria-current={index === currentStep ? "step" : undefined} aria-label={`${title}，${done ? "已完成" : index === currentStep ? "当前步骤" : "未开始"}`}>
+              <span>{done ? "✓" : index + 1}</span>
+              <strong>{title}</strong>
+            </li>;
+          })}
+          </ol>
         </div>
-        <div className="preview-actions">
-          <label>
-            预览业务日期
-            <ReportDatePicker value={previewDate} onChange={value => { setPreviewDate(value); setPreview("") }} />
-          </label>
-          <button
-            className="primary"
-            disabled={!!busy || !template.trim()}
-            onClick={generatePreview}
-          >
-            {busy === "preview" ? (
-              <LoaderCircle className="spin" />
-            ) : (
-              <FileText />
-            )}
-            生成预览
-          </button>
-        </div>
-        {preview && (
-          <div className="report-preview">
-            <div>
-              <h3>真实消息预览</h3>
-              <p>确认内容无误后，再发送一条真实钉钉测试消息。</p>
-            </div>
-            <pre>{preview}</pre>
-            <button className="primary" disabled={!!busy} onClick={testSend}>
-              {busy === "test" ? <LoaderCircle className="spin" /> : <Send />}
-              测试发送
-            </button>
-          </div>
-        )}
-      </section>
-      <section className="surface daily-step">
-        <StepTitle
-          number="4"
-          title="运行记录"
-          text="默认显示最近 5 条；测试发送和自动运行分别记录。"
-        />
-        <RunList runs={job.runs} />
-        <button
-          className="secondary"
-          disabled={busy === "runs"}
-          onClick={showAllRuns}
-        >
-          查看全部记录
-        </button>
-      </section>
+      </nav>
+      <div className="daily-stage">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.section aria-labelledby={`daily-step-${currentStep}`} key={currentStep} className="surface daily-focus-card" {...motionProps}>
+            {currentStep === 0 && <>
+              <StepTitle id="daily-step-0" number="01" title="先确认任务的基本信息" text="名称和发送时间将在保存后写入当前任务。" />
+              <div className="basic-grid focus-form">
+                <label>任务名称<input value={name} onChange={(event) => { setName(event.target.value); setSaveState("有未保存更改") }} /></label>
+                <label>每天发送时间<TimePicker value={sendTime} onChange={value => { setSendTime(value); setSaveState("有未保存更改") }} /></label>
+              </div>
+              {notice && noticeScope === "basics" && <Notice value={notice} />}
+              <div className="focus-actions"><button className="primary" disabled={!!busy || !name.trim() || !sendTime} onClick={saveBasicsAndContinue}>{busy === "basics" && <LoaderCircle className="spin" />}保存设置</button></div>
+            </>}
+            {currentStep === 1 && <>
+              <StepTitle id="daily-step-1" number="02" title="配置钉钉机器人" text="保存凭据后只检查钉钉网络连通，不发送消息；Webhook 和 Secret 将在第 4 步测试发送时验证。" />
+              <div className="credential-grid focus-form">
+                <label>Webhook<input type="password" value={webhook} onFocus={() => webhook === job.credentialMask && setWebhook("")} onBlur={() => job.webhookSaved && !webhook && setWebhook(job.credentialMask)} onChange={(event) => { setWebhook(event.target.value); setSaveState("有未保存更改") }} /></label>
+                <label>加签 Secret<input type="password" value={secret} onFocus={() => secret === job.credentialMask && setSecret("")} onBlur={() => job.secretSaved && !secret && setSecret(job.credentialMask)} onChange={(event) => { setSecret(event.target.value); setSaveState("有未保存更改") }} /></label>
+              </div>
+              {notice && noticeScope === "credentials" && <Notice value={notice} />}
+              <div className="focus-actions split"><button className="ghost" onClick={() => advanceTo(0)}>返回上一步</button><button className="primary" disabled={!!busy || (!dirtyCredential && (!job.webhookSaved || !job.secretSaved))} onClick={saveAndTestCredentials}>{busy === "credentials" && <LoaderCircle className="spin" />}保存并检查连通</button></div>
+            </>}
+            {currentStep === 2 && <>
+              <StepTitle id="daily-step-2" number="03" title="编辑消息" text="从不同业务数据页中选择数据库字段，可连续插入到同一条消息。" />
+              <div className="template-workspace progressive-template">
+                <div className="editor-column"><label>消息模板</label><ReportTemplateEditor text={template} document={document} fields={job.fields} insert={insert} onChange={(nextText, nextDocument) => { setTemplate(nextText); setDocument(nextDocument); setPreview(""); setJob(current => current ? { ...current, validated: false, isEnabled: false } : current) }} /></div>
+                <aside className="field-picker progressive-field-picker">
+                  <div className="field-picker-heading"><h3><Database />数据源字段</h3><span>可跨数据库连续添加</span></div>
+                  <label><span className="field-label-title"><b>1.</b> 数据页</span><ChoicePicker value={pagePath} placeholder="请选择数据页" options={job.pagePaths.map(path => ({ value: path, label: path }))} onChange={value => { setPagePath(value); chooseSource("") }} /></label>
+                  <label><span className="field-label-title"><b>2.</b> 数据库</span><ChoicePicker value={sourceId} placeholder="请选择数据库" options={sources.map(source => ({ value: source.id, label: source.name }))} onChange={chooseSource} /></label>
+                  <label><span className="field-label-title"><b>3.</b> 数据字段</span><ChoicePicker value={propertyId} placeholder={busy === "properties" ? "正在读取字段…" : "请选择数据字段"} disabled={busy === "properties"} options={properties.map(property => ({ value: property.id, label: `${property.name} · ${property.type}` }))} onChange={setPropertyId} /></label>
+                  {propertiesError && <div className="field-error" role="alert"><span>字段读取失败：{propertiesError}</span><button type="button" onClick={() => chooseSource(sourceId)}>重试</button></div>}
+                  <button className="insert-field-button" disabled={!propertyId || !!busy} onClick={addField}>{busy === "field" && <LoaderCircle className="spin" />}插入所选字段</button>
+                  <div className="system-variable"><span>系统变量</span><button type="button" onClick={() => setInsert({ value: "today", key: Date.now() })}>业务日期</button></div>
+                </aside>
+              </div>
+              {notice && noticeScope === "template" && <Notice value={notice} />}
+              {notice && noticeScope === "preview" && <Notice value={notice} />}
+              <div className="focus-actions split"><button className="ghost" onClick={() => advanceTo(1)}>返回上一步</button><div className="preview-action-group"><label>预览取数日期<ReportDatePicker value={previewDate} onChange={value => { setPreviewDate(value); setPreview(""); setJob(current => current ? { ...current, validated: false, isEnabled: false } : current) }} /></label><button className="primary" disabled={!!busy || !template.trim()} onClick={generatePreview}>{busy === "preview" ? <LoaderCircle className="spin" /> : <FileText />}生成消息预览</button></div></div>
+            </>}
+            {currentStep === 3 && <>
+              <StepTitle id="daily-step-3" number="04" title="预览并测试发送" text="确认最终消息后发送一条真实钉钉测试；成功后任务只会变为可启用。" />
+              <div className="report-preview has-preview"><div><h3>即将发送</h3><p>{previewDate} · 已连接机器人</p></div><pre>{preview}</pre></div>
+              {notice && noticeScope === "test" && <Notice value={notice} />}
+              <div className="focus-actions split"><button className="ghost" onClick={() => { setPreview(""); advanceTo(2) }}>返回修改内容</button><button className="primary" disabled={!!busy || !preview} onClick={testSend}>{busy === "test" ? <LoaderCircle className="spin" /> : <Send />}测试发送</button></div>
+            </>}
+            {currentStep === 4 && <div className="daily-complete">
+              <span className="complete-mark"><CheckCircle2 /></span><h2 id="daily-step-4">配置完成，可以启用</h2><p>测试发送已经通过，但任务尚未自动启用。请返回任务列表手动启用。</p>
+              <div className="complete-summary"><div><strong>基本信息</strong><span>{name} · 每天 {sendTime}</span></div><div><strong>钉钉机器人</strong><span>连接测试成功</span></div><div><strong>消息模板</strong><span>{job.fields.length} 个数据字段</span></div><div><strong>测试发送</strong><span>当前配置已验证</span></div></div>
+              <div className="complete-actions"><button className="secondary" onClick={() => advanceTo(2)}>修改消息内容</button><button className="primary" onClick={back}>返回任务列表</button></div>
+              <section className="complete-runs"><div className="run-section-heading"><div><h2>运行记录</h2><p>测试发送和自动运行分别记录，默认显示最近 5 条。</p></div><button className="secondary" disabled={busy === "runs"} onClick={showAllRuns}>查看全部记录</button></div><RunList runs={job.runs} /></section>
+            </div>}
+          </motion.section>
+        </AnimatePresence>
+      </div>
       <Dialog.Root
         open={!!allRuns}
         onOpenChange={(open) => !open && setAllRuns(undefined)}
@@ -669,10 +657,12 @@ function DailyJobEditor({
 }
 
 function StepTitle({
+  id,
   number,
   title,
   text,
 }: {
+  id: string;
   number: string;
   title: string;
   text: string;
@@ -682,7 +672,7 @@ function StepTitle({
       <div>
         <span className="step">{number}</span>
         <div>
-          <h2>{title}</h2>
+          <h2 id={id}>{title}</h2>
           <p>{text}</p>
         </div>
       </div>
