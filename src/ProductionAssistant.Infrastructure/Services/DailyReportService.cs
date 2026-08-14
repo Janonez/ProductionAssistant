@@ -153,6 +153,26 @@ public sealed partial class DailyReportService
         }
     }
 
+    public async Task<DailyReportSendResult> CheckConnectionAsync(
+        string webhook,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Uri.TryCreate(webhook, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            return new(false, "钉钉 Webhook 必须是有效的 HTTPS 地址。");
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Head, uri);
+            using var response = await _dingTalkClient.SendAsync(
+                request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            return new(true, "钉钉网络连通；Webhook 和 Secret 将在测试发送时验证。");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new(false, $"钉钉连接失败：{ex.Message}");
+        }
+    }
+
     private async Task<(bool Succeeded, string Message, JsonElement Page)> QuerySinglePageAsync(
         string token,
         DailyReportSourceBinding binding,

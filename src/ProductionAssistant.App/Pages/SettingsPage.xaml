@@ -329,7 +329,7 @@
                                 <TextBlock Style="{StaticResource OptionTitleStyle}"
                                            Text="生产助手" />
                                 <TextBlock Style="{StaticResource OptionDescriptionStyle}"
-                                           Text="版本 1.4.6" />
+                                           Text="版本 1.4.7" />
                             </StackPanel>
                         </Grid>
                     </Expander.Header>

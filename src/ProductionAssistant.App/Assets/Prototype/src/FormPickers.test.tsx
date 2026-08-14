@@ -1,10 +1,15 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChoicePicker, ReportDatePicker, TimePicker } from "./FormPickers";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
+const scrollIntoView = vi.fn();
+beforeEach(() => {
+  scrollIntoView.mockClear();
+  HTMLElement.prototype.scrollIntoView = scrollIntoView;
+});
 afterEach(() => container?.remove());
 
 function render(value: React.ReactNode) {
@@ -25,5 +30,17 @@ describe("daily report pickers", () => {
     act(() => (container.querySelector(".picker-trigger") as HTMLButtonElement).click());
     act(() => (container.querySelector('[role="option"]') as HTMLButtonElement).click());
     expect(changed).toHaveBeenCalledWith("db");
+  });
+
+  it.each(["00:00", "17:30", "23:59"])("centers the selected time whenever %s opens", (value) => {
+    render(<TimePicker value={value} onChange={() => undefined} />);
+    const trigger = container.querySelector(".time-trigger") as HTMLButtonElement;
+    act(() => trigger.click());
+    expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "center" });
+    expect([...container.querySelectorAll<HTMLButtonElement>(".time-column button.selected")].map(button => button.textContent)).toEqual(value.split(":"));
+    act(() => (container.querySelector(".time-done") as HTMLButtonElement).click());
+    act(() => trigger.click());
+    expect(scrollIntoView).toHaveBeenCalledTimes(4);
   });
 });
