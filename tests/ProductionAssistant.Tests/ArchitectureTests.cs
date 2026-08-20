@@ -35,10 +35,25 @@ public sealed class ArchitectureTests
         Assert.True(PrototypeBridgeProtocol.IsAllowed("app.navigateNative"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.list"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.test"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.sendToday"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed("filesystem.read"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed(string.Empty));
+        Assert.True(PrototypeBridgeProtocol.IsNavigationAllowed("production-message"));
+        Assert.True(PrototypeBridgeProtocol.IsNavigationAllowed("daily-report"));
+        Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("filesystem"));
         Assert.Equal("输入无效", PrototypeBridgeProtocol.SafeError(new InvalidOperationException("输入无效")));
         Assert.DoesNotContain("secret", PrototypeBridgeProtocol.SafeError(new Exception("secret")));
+    }
+
+    [Fact]
+    public void Prototype_ready_message_only_matches_the_current_navigation()
+    {
+        Assert.True(PrototypeBridgeProtocol.IsCurrentNavigation(
+            "daily-report", "current", "daily-report", "current"));
+        Assert.False(PrototypeBridgeProtocol.IsCurrentNavigation(
+            "home", "old", "daily-report", "current"));
+        Assert.False(PrototypeBridgeProtocol.IsCurrentNavigation(
+            "daily-report", string.Empty, "daily-report", string.Empty));
     }
 
     [Fact]
@@ -56,10 +71,49 @@ public sealed class ArchitectureTests
             ParserVersion = original.ParserVersion
         };
         roundtrip.SetFields(original.Fields);
+        roundtrip.SetDatabaseFieldMappings(new Dictionary<ProductionMessageKind, IReadOnlyDictionary<string, string>>
+        {
+            [ProductionMessageKind.MaterialCutting] = new Dictionary<string, string>
+            {
+                [ProductionMessageFields.Weight] = "重量"
+            }
+        });
         roundtrip.FieldsText = ProductionMessageParser.FormatFields(roundtrip.Kind, roundtrip.Fields, roundtrip.PlanMonth);
 
         Assert.True(ProductionMessageParser.ApplyEdits(roundtrip, new DateTime(2026, 8, 13), true, out _));
         Assert.True(ProductionMessageParser.TryCreateValue(roundtrip, out var value, out _));
-        Assert.NotEmpty(value.Fields);
+        Assert.Equal("5", ProductionMessageFields.DisplayValue(
+            ProductionMessageFields.Weight,
+            value.Fields[ProductionMessageFields.Weight]));
+        Assert.DoesNotContain(ProductionMessageFields.PieceCount, value.Fields.Keys);
+    }
+
+    [Fact]
+    public void Explicit_database_property_is_parsed_without_a_new_field_constant()
+    {
+        var date = new DateTime(2026, 8, 17);
+        var draft = ProductionMessageParser.Parse(
+            ProductionMessageParser.Split("2026-08-17 下料 5吨\n检验备注：已复核", date).Single(),
+            1,
+            date,
+            true);
+        var dynamicKey = ProductionMessageFields.DatabasePropertyKey("检验备注");
+        draft.SetDatabaseFieldMappings(new Dictionary<ProductionMessageKind, IReadOnlyDictionary<string, string>>
+        {
+            [ProductionMessageKind.MaterialCutting] = new Dictionary<string, string>
+            {
+                [ProductionMessageFields.Weight] = "重量",
+                [dynamicKey] = "检验备注"
+            }
+        });
+
+        ProductionMessageParser.ApplyMappedDatabaseFields(draft, draft.OriginalText);
+
+        Assert.True(ProductionMessageParser.ValidateDatabaseMapping(draft));
+        Assert.Equal("待检查", draft.StatusText);
+        Assert.Equal("已复核", draft.Fields[dynamicKey]);
+        Assert.Contains(draft.PreviewFields, field => field.Label == "检验备注" && field.Value == "已复核");
+        Assert.True(ProductionMessageParser.TryCreateValue(draft, out var value, out _));
+        Assert.Equal("已复核", value.Fields[dynamicKey]);
     }
 }

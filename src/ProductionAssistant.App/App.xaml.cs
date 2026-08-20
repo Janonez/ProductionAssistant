@@ -48,6 +48,8 @@ public partial class App : Application
 
         MainWindow = new MainWindow();
         MainWindow.Activate();
+        Services.PrototypeWebViewRuntime.Mark("window-activated");
+        Services.PrototypeWebViewRuntime.Prewarm();
         MainWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32(1400, 860));
     }
 }

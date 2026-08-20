@@ -63,6 +63,7 @@ public sealed partial class MainWindow : Window
             "plan-pdf" => typeof(PlanPdfExportPage),
             "production-meeting" => typeof(ProductionMeetingExportPage),
             "daily-report" => typeof(PrototypePage),
+            "report-center" => typeof(PrototypePage),
             "settings" => typeof(SettingsPage),
             _ => typeof(HomePage)
         };
@@ -73,7 +74,10 @@ public sealed partial class MainWindow : Window
         if (_currentTag != tag)
         {
             _currentTag = tag;
-            ContentFrame.Navigate(pageType, tag);
+            if (pageType == typeof(PrototypePage) && ContentFrame.Content is PrototypePage prototypePage)
+                prototypePage.NavigateToRoute(tag);
+            else
+                ContentFrame.Navigate(pageType, tag);
         }
     }
 

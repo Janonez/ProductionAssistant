@@ -22,12 +22,14 @@ internal sealed partial class PrototypeBridge
 
     private readonly WebView2 _webView;
     private readonly Action<string> _navigate;
+    private readonly Action<string, string> _ready;
     private CancellationTokenSource? _activeOperation;
 
-    internal PrototypeBridge(WebView2 webView, Action<string> navigate)
+    internal PrototypeBridge(WebView2 webView, Action<string> navigate, Action<string, string> ready)
     {
         _webView = webView;
         _navigate = navigate;
+        _ready = ready;
         _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
     }
 
@@ -40,6 +42,11 @@ internal sealed partial class PrototypeBridge
         {
             using var document = JsonDocument.Parse(args.WebMessageAsJson);
             var root = document.RootElement;
+            if (ReadString(root, "type") == "app.ready")
+            {
+                _ready(ReadString(root, "route"), ReadString(root, "navigation"));
+                return;
+            }
             id = ReadString(root, "id");
             var operation = ReadString(root, "operation");
             if (string.IsNullOrWhiteSpace(id) || !PrototypeBridgeProtocol.IsAllowed(operation))
@@ -55,7 +62,7 @@ internal sealed partial class PrototypeBridge
 
             _activeOperation?.Dispose();
             _activeOperation = new CancellationTokenSource();
-            var result = await DispatchAsync(operation, payload, _activeOperation.Token);
+            var result = await DispatchAsync(id, operation, payload, _activeOperation.Token);
             Respond(id, result);
         }
         catch (OperationCanceledException)
@@ -68,7 +75,7 @@ internal sealed partial class PrototypeBridge
         }
     }
 
-    private async Task<object?> DispatchAsync(string operation, JsonElement payload, CancellationToken cancellationToken) =>
+    private async Task<object?> DispatchAsync(string id, string operation, JsonElement payload, CancellationToken cancellationToken) =>
         operation switch
         {
             "app.getOverview" => GetOverview(),
@@ -89,11 +96,38 @@ internal sealed partial class PrototypeBridge
             "daily.checkConnection" => await CheckDailyConnectionAsync(payload, cancellationToken),
             "daily.preview" => await PreviewDailyReportAsync(payload, cancellationToken),
             "daily.test" => await TestDailyReportAsync(payload, cancellationToken),
+            "daily.sendToday" => await SendDailyReportTodayAsync(payload, cancellationToken),
             "daily.setEnabled" => await SetDailyEnabledAsync(payload),
             "daily.delete" => await DeleteDailyJobAsync(payload),
             "daily.runs" => DailyRuns(payload),
+            "report.getState" => AppServices.ReportCenter.GetState(),
+            "report.saveConfig" => SaveReportCenterConfig(payload),
+            "report.authenticate" => await AuthenticateReportCenterAsync(cancellationToken),
+            "report.run" => await RunReportCenterAsync(id, payload, cancellationToken),
             _ => throw new InvalidOperationException("不允许的界面请求。")
         };
+
+    private static async Task<object> AuthenticateReportCenterAsync(CancellationToken cancellationToken)
+    {
+        await AppServices.ReportCenter.CaptureAuthenticationAsync(cancellationToken);
+        return new { authenticated = true };
+    }
+
+    private static object SaveReportCenterConfig(JsonElement payload) => AppServices.ReportCenter.SaveConfig(
+        ReadString(payload, "sourceRoot"),
+        ReadString(payload, "outputRoot"),
+        ReadString(payload, "reportUrl"),
+        ReadString(payload, "username"),
+        ReadString(payload, "password"));
+
+    private async Task<object> RunReportCenterAsync(string id, JsonElement payload, CancellationToken cancellationToken)
+    {
+        if (!DateOnly.TryParse(ReadString(payload, "startDate"), out var startDate) ||
+            !DateOnly.TryParse(ReadString(payload, "endDate"), out var endDate))
+            throw new InvalidOperationException("请选择有效的开始日期和结束日期。");
+        var progress = new Progress<ReportRunProgress>(value => Post(new { id, type = "progress", data = value }));
+        return await AppServices.ReportCenter.RunAsync(startDate, endDate, progress, cancellationToken);
+    }
 
     private static object GetOverview()
     {
@@ -110,8 +144,7 @@ internal sealed partial class PrototypeBridge
     private object Navigate(JsonElement payload)
     {
         var tag = ReadString(payload, "tag");
-        var allowed = new[] { "home", "plan-pdf", "production-meeting", "daily-weld", "daily-report", "settings" };
-        if (!allowed.Contains(tag, StringComparer.Ordinal))
+        if (!PrototypeBridgeProtocol.IsNavigationAllowed(tag))
             throw new InvalidOperationException("不允许导航到该页面。");
         _navigate(tag);
         return new { navigated = true };
@@ -137,6 +170,8 @@ internal sealed partial class PrototypeBridge
                 draft.WarningText = "批量消息中的每一段都需要业务日期。";
             }
             ApplyMappings(draft, settings);
+            ProductionMessageParser.ApplyMappedDatabaseFields(draft, segment.Text);
+            ProductionMessageParser.ValidateDatabaseMapping(draft);
             return ToDto(draft);
         }).ToArray();
         return drafts;
@@ -152,8 +187,13 @@ internal sealed partial class PrototypeBridge
         var overwrite = !checkOnly && payload.TryGetProperty("overwriteExisting", out var overwriteElement) && overwriteElement.GetBoolean();
         var drafts = draftsElement.EnumerateArray().Select(ToDraft).ToArray();
         var batch = drafts.Length > 1;
+        var settings = NotionSettingsStore.Load();
         foreach (var draft in drafts)
+        {
             ProductionMessageParser.ApplyEdits(draft, defaultDate, !batch, out _);
+            ApplyMappings(draft, settings);
+            ProductionMessageParser.ValidateDatabaseMapping(draft);
+        }
         var values = drafts.Select(draft =>
             ProductionMessageParser.TryCreateValue(draft, out var value, out _) ? value : null)
             .Where(value => value is not null).Cast<ProductionMessageValue>().ToArray();
@@ -258,6 +298,7 @@ internal sealed partial class PrototypeBridge
             ?? schema.Properties.FirstOrDefault(property => property.Type == "date");
         if (title is null || (!summary && date is null)) throw new InvalidOperationException($"{source.Name} 缺少标题或日期字段。");
         var mapping = ProductionMessagePage.AutoMap(schema.Properties, kind);
+        AddDynamicPropertyMappings(mapping, schema.Properties, title.Name, date?.Name);
         if (!summary)
         {
             var monthly = schema.Properties.FirstOrDefault(property => property.Type == "relation" && ProductionMessagePage.SameDataSourceId(property.RelationDataSourceId, monthlyId));
@@ -266,6 +307,20 @@ internal sealed partial class PrototypeBridge
             if (yearly is not null) mapping[ProductionMessageFields.YearlySummaryRelation] = yearly.Name;
         }
         return new NotionTargetSettings { ModuleKey = moduleKey, ModuleName = moduleName, Id = source.Id, Name = source.Name, Path = source.Path, TitleProperty = title.Name, DateProperty = date?.Name ?? string.Empty, PropertyMappings = mapping };
+    }
+
+    private static void AddDynamicPropertyMappings(
+        IDictionary<string, string> mapping,
+        IReadOnlyList<NotionPropertyOption> properties,
+        string titleProperty,
+        string? dateProperty)
+    {
+        var mappedNames = mapping.Values.ToHashSet(StringComparer.Ordinal);
+        foreach (var property in properties.Where(property =>
+                     property.Name != titleProperty && property.Name != dateProperty &&
+                     property.Type is "number" or "rich_text" or "select" or "status" or "url" &&
+                     !mappedNames.Contains(property.Name)))
+            mapping[ProductionMessageFields.DatabasePropertyKey(property.Name)] = property.Name;
     }
 
     private static ProductionMessageDraft ToDraft(JsonElement element)

@@ -1,16 +1,18 @@
 export interface BridgeRequest<T = unknown> { id: string; operation: string; payload?: T }
-export interface BridgeResponse<T = unknown> { id: string; ok: boolean; data?: T; error?: string }
+export interface BridgeResponse<T = unknown> { id: string; ok?: boolean; type?: 'progress'; data?: T; error?: string }
 
-type Pending = { resolve: (value: unknown) => void; reject: (reason: Error) => void; timer: number }
+type Pending = { resolve: (value: unknown) => void; reject: (reason: Error) => void; timer: number; progress?: (value: unknown) => void }
 type WebView = { postMessage(value: unknown): void; addEventListener(name: string, handler: (event: MessageEvent) => void): void }
 
 const pending = new Map<string, Pending>()
+const readyNavigations = new Set<string>()
 let nextId = 0
 const webview = () => (window as typeof window & { chrome?: { webview?: WebView } }).chrome?.webview
 
 export function receive(response: BridgeResponse) {
   const request = pending.get(response.id)
   if (!request) return
+  if (response.type === 'progress') { request.progress?.(response.data); return }
   window.clearTimeout(request.timer)
   pending.delete(response.id)
   response.ok ? request.resolve(response.data) : request.reject(new Error(response.error || '操作失败'))
@@ -18,7 +20,13 @@ export function receive(response: BridgeResponse) {
 
 webview()?.addEventListener('message', event => receive(event.data as BridgeResponse))
 
-export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 30000): Promise<T> {
+export function notifyReady(route: string, navigation: string) {
+  if (navigation && readyNavigations.has(navigation)) return
+  if (navigation) readyNavigations.add(navigation)
+  webview()?.postMessage({ type: 'app.ready', route, navigation })
+}
+
+export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 30000, onProgress?: (value: unknown) => void): Promise<T> {
   const host = webview()
   if (!host) return Promise.reject(new Error('当前页面未连接到桌面宿主'))
   const id = `${Date.now()}-${++nextId}`
@@ -27,7 +35,7 @@ export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 3000
       pending.delete(id)
       reject(new Error('操作超时，请重试'))
     }, timeoutMs)
-    pending.set(id, { resolve: value => resolve(value as T), reject, timer })
+    pending.set(id, { resolve: value => resolve(value as T), reject, timer, progress: onProgress })
     host.postMessage({ id, operation, payload } satisfies BridgeRequest)
   })
 }

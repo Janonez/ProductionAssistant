@@ -122,6 +122,9 @@ public static class ProductionMessageParser
         }
 
         var fields = ParseEditableFields(draft.FieldsText);
+        foreach (var pair in draft.Fields.Where(pair =>
+                     ProductionMessageFields.TryGetDatabasePropertyName(pair.Key, out _)))
+            fields[pair.Key] = pair.Value;
         draft.BusinessDate = date;
         draft.DateFromInput = dateWasExplicit ||
                               !allowDefaultDate ||
@@ -150,6 +153,10 @@ public static class ProductionMessageParser
         }
 
         var acceptedFields = ProductionMessageFields.FieldsFor(draft.Kind)
+            .Where(key => draft.DatabaseFieldMappings.TryGetValue(draft.Kind, out var mapping) && mapping.ContainsKey(key))
+            .Concat(draft.Fields.Keys.Where(key =>
+                ProductionMessageFields.TryGetDatabasePropertyName(key, out _) &&
+                draft.DatabaseFieldMappings.TryGetValue(draft.Kind, out var mapping) && mapping.ContainsKey(key)))
             .ToHashSet(StringComparer.Ordinal);
         var fields = draft.Fields
             .Where(pair => acceptedFields.Contains(pair.Key))
@@ -170,6 +177,46 @@ public static class ProductionMessageParser
             draft.OriginalText,
             draft.ParserVersion);
         message = string.Empty;
+        return true;
+    }
+
+    public static void ApplyMappedDatabaseFields(ProductionMessageDraft draft, string text)
+    {
+        if (!draft.DatabaseFieldMappings.TryGetValue(draft.Kind, out var mapping)) return;
+        var fields = new Dictionary<string, string>(draft.Fields, StringComparer.Ordinal);
+        foreach (var pair in mapping.Where(pair =>
+                     ProductionMessageFields.TryGetDatabasePropertyName(pair.Key, out _)))
+        {
+            var propertyName = pair.Value;
+            var match = Regex.Match(Normalize(text),
+                $@"(?m)^(?:[-*\s]*){Regex.Escape(propertyName)}\s*[:=]\s*(?<value>[^\n]+)$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (match.Success)
+                fields[pair.Key] = match.Groups["value"].Value.Trim();
+        }
+        draft.SetFields(fields);
+    }
+
+    public static bool ValidateDatabaseMapping(ProductionMessageDraft draft)
+    {
+        if (!draft.CanWrite) return false;
+        if (!draft.DatabaseFieldMappings.TryGetValue(draft.Kind, out var mapping) || mapping.Count == 0)
+        {
+            draft.CanWrite = false;
+            draft.StatusText = "待配置";
+            draft.WarningText = "目标数据库未绑定或没有可写入字段。";
+            return false;
+        }
+        var hasMappedValue = draft.Fields.Any(pair =>
+            !string.IsNullOrWhiteSpace(pair.Value) && mapping.ContainsKey(pair.Key));
+        if (!hasMappedValue)
+        {
+            draft.CanWrite = false;
+            draft.StatusText = "待修正";
+            draft.WarningText = "未解析到目标数据库中可写入的字段。";
+            return false;
+        }
+        draft.StatusText = "待检查";
         return true;
     }
 
@@ -430,7 +477,7 @@ public static class ProductionMessageParser
         draft.CanWrite = problems.Count == 0 ||
                          (problems.Count == 1 &&
                           problems[0].StartsWith("消息未带日期", StringComparison.Ordinal));
-        draft.StatusText = draft.CanWrite ? "可写入" : "待修正";
+        draft.StatusText = draft.CanWrite ? "待检查" : "待修正";
         draft.RefreshSummary();
         return draft.CanWrite;
     }
