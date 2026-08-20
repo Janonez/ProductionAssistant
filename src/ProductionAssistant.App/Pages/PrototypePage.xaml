@@ -2,20 +2,36 @@
     x:Class="ProductionAssistant.Pages.PrototypePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid>
+    <Grid Background="#F6F8F7">
         <WebView2 x:Name="PrototypeWebView"
+                  Visibility="Collapsed"
                   HorizontalAlignment="Stretch"
                   VerticalAlignment="Stretch"
                   NavigationCompleted="PrototypeWebView_NavigationCompleted" />
+        <Grid x:Name="LoadingLayer" Padding="32">
+            <StackPanel VerticalAlignment="Top" Spacing="8">
+                <TextBlock x:Name="LoadingTitle"
+                           FontFamily="Segoe UI Variable, Microsoft YaHei UI"
+                           FontSize="34" FontWeight="Bold" Text="今天要处理什么？" />
+                <TextBlock x:Name="LoadingSubtitle" Foreground="#78847E" FontSize="16"
+                           Text="常用生产流程集中在一个清爽、可预期的工作区。" />
+                <StackPanel Margin="0,20,0,0" Orientation="Horizontal" Spacing="10">
+                    <ProgressRing Width="20" Height="20" IsActive="True"
+                                  Foreground="#4A8065" />
+                    <TextBlock VerticalAlignment="Center" Foreground="#78847E"
+                               FontSize="14" Text="正在加载页面…" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
         <Border x:Name="LoadError"
                 Visibility="Collapsed"
                 Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
                 Padding="32">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
                 <FontIcon Glyph="&#xE783;" FontSize="32" />
-                <TextBlock FontSize="20" FontWeight="SemiBold" Text="新版界面无法加载" />
+                <TextBlock FontSize="20" FontWeight="SemiBold" Text="工作区暂时无法加载" />
                 <TextBlock x:Name="LoadErrorText" TextWrapping="Wrap" TextAlignment="Center" />
-                <Button HorizontalAlignment="Center" Content="返回原版界面" Click="ReturnToNative_Click" />
+                <Button HorizontalAlignment="Center" Content="重试加载" Click="Retry_Click" />
             </StackPanel>
         </Border>
     </Grid>

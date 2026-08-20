@@ -45,6 +45,7 @@ public static class ProductionMessageKinds
 
 public static class ProductionMessageFields
 {
+    private const string DatabasePropertyPrefix = "database_property:";
     public const string Process = "process";
     public const string Shift = "shift";
     public const string Project = "project";
@@ -105,7 +106,22 @@ public static class ProductionMessageFields
     private static readonly string[] NumericUnits =
         ["公斤", "千克", "吨", "kg", "张", "件", "套", "节", "台", "米", "t", "m"];
 
-    public static string Label(string key) => Labels.TryGetValue(key, out var label) ? label : key;
+    public static string Label(string key) => Labels.TryGetValue(key, out var label)
+        ? label
+        : TryGetDatabasePropertyName(key, out var propertyName) ? propertyName : key;
+
+    public static string DatabasePropertyKey(string propertyName) => DatabasePropertyPrefix + propertyName;
+
+    public static bool TryGetDatabasePropertyName(string key, out string propertyName)
+    {
+        if (key.StartsWith(DatabasePropertyPrefix, StringComparison.Ordinal))
+        {
+            propertyName = key[DatabasePropertyPrefix.Length..];
+            return !string.IsNullOrWhiteSpace(propertyName);
+        }
+        propertyName = string.Empty;
+        return false;
+    }
 
     public static string DisplayValue(string key, string value)
     {
@@ -173,14 +189,19 @@ public sealed class ProductionMessageDraft : INotifyPropertyChanged
     public Dictionary<ProductionMessageKind, IReadOnlyDictionary<string, string>> DatabaseFieldMappings { get; } = [];
     public IReadOnlyList<string> TypeOptions => ProductionMessageKinds.Options;
 
-    public IReadOnlyList<ProductionMessageFieldPreview> PreviewFields =>
-        ProductionMessageFields.FieldsFor(Kind)
-            .Where(Fields.ContainsKey)
+    public IReadOnlyList<ProductionMessageFieldPreview> PreviewFields
+    {
+        get
+        {
+            if (!DatabaseFieldMappings.TryGetValue(Kind, out var mapping)) return [];
+            return Fields.Keys
+            .Where(key => mapping.ContainsKey(key))
+            .Where(key => ProductionMessageFields.FieldsFor(Kind).Contains(key) ||
+                          ProductionMessageFields.TryGetDatabasePropertyName(key, out _))
             .Select(key =>
             {
                 var databaseFieldName = ProductionMessageFields.Label(key);
-                if (DatabaseFieldMappings.TryGetValue(Kind, out var mapping) &&
-                    mapping.TryGetValue(key, out var databaseField) &&
+                if (mapping.TryGetValue(key, out var databaseField) &&
                     !string.IsNullOrWhiteSpace(databaseField))
                     databaseFieldName = databaseField;
                 var value = Fields.TryGetValue(key, out var fieldValue)
@@ -192,6 +213,8 @@ public sealed class ProductionMessageDraft : INotifyPropertyChanged
                     value);
             })
             .ToArray();
+        }
+    }
 
     public ProductionMessageKind Kind
     {

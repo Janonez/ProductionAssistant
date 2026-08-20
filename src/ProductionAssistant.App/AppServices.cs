@@ -8,4 +8,5 @@ internal static class AppServices
     internal static DailyReportService DailyReports { get; } = new();
     internal static PlanPdfService PlanPdf { get; } = new();
     internal static ProductionMeetingExportService ProductionMeeting { get; } = new();
+    internal static ReportCenterService ReportCenter { get; } = new();
 }

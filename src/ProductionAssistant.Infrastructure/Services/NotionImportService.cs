@@ -1475,7 +1475,7 @@ public sealed class NotionImportService : INotionImportService
     {
         payload = new { };
         message = string.Empty;
-        if (ProductionMessageFields.Numeric.Contains(key))
+        if (property.Type == "number" || ProductionMessageFields.Numeric.Contains(key))
         {
             if (property.Type != "number" || !TryParseNumber(value, out var number))
             {
@@ -1571,8 +1571,8 @@ public sealed class NotionImportService : INotionImportService
         var conflicts = new List<string>();
         foreach (var (key, incoming) in item.Fields)
         {
-            if (!ProductionMessageFields.Numeric.Contains(key) ||
-                !resolution.Properties.TryGetValue(key, out var property))
+            if (!resolution.Properties.TryGetValue(key, out var property) ||
+                property.Type != "number")
                 continue;
             var existing = ReadExistingValue(page, property);
             if (string.IsNullOrWhiteSpace(existing))

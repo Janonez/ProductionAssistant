@@ -6,13 +6,17 @@ namespace ProductionAssistant.Services;
 public static class DailyReportTaskScheduler
 {
     private const string TaskPrefix = "ProductionAssistant-DailyReport-";
+#if DEBUG
+    public static bool IsSchedulingAvailable { get; } = false;
+#else
+    public static bool IsSchedulingAvailable { get; } = true;
+#endif
     public static string TaskName(string jobId) => TaskPrefix + jobId;
 
     public static async Task<(bool Succeeded, string Message)> InstallAsync(string jobId, TimeSpan sendTime)
     {
-        var existing = await RunSchtasksAsync(["/Query", "/TN", TaskName(jobId), "/XML"], string.Empty);
-        var installedExecutable = existing.Succeeded ? ExecutableFromTaskXml(existing.Message) : string.Empty;
-        var executable = File.Exists(installedExecutable) ? installedExecutable : Environment.ProcessPath;
+        if (!IsSchedulingAvailable) return (false, "Debug 版本不支持定时发送，请使用 Release 版本。");
+        var executable = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
             return (false, "无法确定生产助手程序路径。");
         var command = $"\"{executable}\" --send-daily-report --job-id {jobId}";
@@ -26,10 +30,13 @@ public static class DailyReportTaskScheduler
     }
 
     public static Task<(bool Succeeded, string Message)> RemoveAsync(string jobId) =>
-        RunSchtasksAsync(["/Delete", "/TN", TaskName(jobId), "/F"], "定时任务已停用。");
+        IsSchedulingAvailable
+            ? RunSchtasksAsync(["/Delete", "/TN", TaskName(jobId), "/F"], "定时任务已停用。")
+            : Task.FromResult((false, "Debug 版本不支持定时发送，请使用 Release 版本。"));
 
     public static async Task<(bool Installed, string Message)> GetStatusAsync(string jobId, string configuredTime)
     {
+        if (!IsSchedulingAvailable) return (false, "Debug 版本不启用定时发送");
         var result = await RunSchtasksAsync(["/Query", "/TN", TaskName(jobId), "/XML"], string.Empty);
         if (!result.Succeeded) return (false, "未安装");
         var executable = ExecutableFromTaskXml(result.Message);

@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Draft } from './types'
 
 const invoke = vi.fn();
+const notifyReady = vi.fn();
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-vi.mock('./bridge', () => ({ invoke }))
+vi.mock('./bridge', () => ({ invoke, notifyReady }))
 vi.mock('motion/react', () => ({
   AnimatePresence: ({ children }: { children: unknown }) => children,
   motion: {
@@ -19,7 +20,11 @@ vi.mock('motion/react', () => ({
 const draft: Draft = {
   index: 1, originalText: '8.13下料2吨', parserVersion: 'test', kind: 'MaterialCutting',
   businessDate: '2026-08-13', typeDisplay: '下料日报数据库', fields: { weight: '2吨' },
-  previewFields: [{ key: 'weight', label: '重量', value: '2' }], statusText: '可写入', warningText: '', canWrite: true
+  previewFields: [
+    { key: 'weight', label: '重量', value: '2' },
+    { key: 'raw_message', label: '原始消息', value: '8.13下料2吨' },
+    { key: 'unit', label: '单位', value: '' },
+  ], statusText: '待检查', warningText: '', canWrite: true
 }
 
 describe('production message workflow', () => {
@@ -41,23 +46,33 @@ describe('production message workflow', () => {
   afterEach(() => container.remove())
 
   it('parses without checking and invalidates a completed check after editing', async () => {
+    expect(container.querySelector('.message-header .eyebrow')?.textContent).toBe('数据同步')
+    expect(container.querySelector('.parse-toolbar .date-picker')).toBeTruthy()
     const textarea = container.querySelector('textarea')!
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '8.13下料2吨'); textarea.dispatchEvent(new Event('input', { bubbles: true })) })
     const button = (label: string) => [...container.querySelectorAll('button')].find(item => item.textContent?.includes(label)) as HTMLButtonElement
-    await act(async () => { button('解析并预览').click() })
+    await act(async () => { button('解析并继续').click(); await new Promise(resolve => setTimeout(resolve, 1150)) })
     expect(invoke.mock.calls.filter(([operation]) => operation === 'production.parse')).toHaveLength(1)
     expect(invoke.mock.calls.filter(([operation]) => operation === 'production.check')).toHaveLength(0)
-    expect(button('确认写入').disabled).toBe(true)
-
-    await act(async () => { button('检查是否存在').click() })
-    expect(button('确认写入').disabled).toBe(false)
-    const select = container.querySelector('.draft-controls select') as HTMLSelectElement
-    await act(async () => { select.value = 'TowerLineDaily'; select.dispatchEvent(new Event('change', { bubbles: true })) })
-    expect(button('确认写入').disabled).toBe(true)
+    expect(container.querySelector('.message-detail')?.textContent).toContain('重量')
+    expect(container.querySelector('.message-detail')?.textContent).not.toContain('原始消息')
+    expect(container.querySelector('.message-detail')?.textContent).not.toContain('单位')
+    expect(container.querySelector('.database-route')?.textContent).toContain('下料日报数据库')
+    expect(container.querySelector('.draft-controls .picker-trigger')).toBeNull()
+    await act(async () => { button('确认核对').click(); await new Promise(resolve => setTimeout(resolve, 1150)) })
+    expect((button('查看写入确认') as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => { button('开始检查').click() })
+    expect((button('查看写入确认') as HTMLButtonElement).disabled).toBe(false)
+    await act(async () => { button('返回核对').click(); await new Promise(resolve => setTimeout(resolve, 1050)) })
+    await act(async () => { (container.querySelector('.draft-controls .date-trigger') as HTMLButtonElement).click() })
+    const nextDate = [...container.querySelectorAll('.calendar-grid button')].find(item => item.textContent === '14') as HTMLButtonElement
+    await act(async () => { nextDate.click() })
     expect(container.textContent).toContain('检查结果已失效')
+    await act(async () => { button('确认核对').click(); await new Promise(resolve => setTimeout(resolve, 1150)) })
+    expect((button('查看写入确认') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('keeps parse and check feedback beside the button that started the operation', async () => {
+  it('keeps parse and check feedback inside their workflow steps', async () => {
     let finishCheck!: (value: unknown) => void
     invoke.mockImplementation((operation: string) => {
       if (operation === 'app.getOverview') return Promise.resolve({})
@@ -69,14 +84,41 @@ describe('production message workflow', () => {
     const textarea = container.querySelector('textarea')!
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '8.13下料2吨'); textarea.dispatchEvent(new Event('input', { bubbles: true })) })
     const button = (label: string) => [...container.querySelectorAll('button')].find(item => item.textContent?.includes(label)) as HTMLButtonElement
-    await act(async () => { button('解析并预览').click() })
-    expect(container.querySelector('.input-surface > .notice')?.textContent).toContain('解析完成')
-    await act(async () => { button('检查是否存在').click(); await Promise.resolve() })
+    await act(async () => { button('解析并继续').click(); await new Promise(resolve => setTimeout(resolve, 1150)) })
+    expect(container.textContent).toContain('核对解析结果')
+    await act(async () => { button('确认核对').click(); await new Promise(resolve => setTimeout(resolve, 1150)) })
+    await act(async () => { button('开始检查').click(); await Promise.resolve() })
     expect(button('正在检查…')).toBeTruthy()
-    expect(button('解析并预览').textContent).not.toContain('正在检查')
     await act(async () => { finishCheck({ succeeded: true, message: '可以正常写入', items: [{ index: 1, businessDate: '2026-08-13', status: 'ready', message: '可以正常写入' }], requiredMonths: [] }) })
-    expect(container.querySelector('.results > .notice')?.textContent).toContain('检查完成，可以正常写入')
-    expect(container.querySelector('.result-text.success')?.textContent).toContain('可以正常写入')
+    expect(container.querySelector('.message-focus-card > .notice')?.textContent).toContain('检查完成，可以正常写入')
+    expect(container.querySelector('.check-results')?.textContent).toContain('可以正常写入')
+  })
+})
+
+describe('host lifecycle', () => {
+  it('reports each host navigation after React renders the requested route', async () => {
+    history.replaceState({}, '', '?route=home&navigation=first')
+    const container = document.createElement('div')
+    document.body.append(container)
+    invoke.mockReset().mockImplementation((operation: string) =>
+      operation === 'daily.list' ? Promise.resolve({ jobs: [] }) : Promise.resolve({}))
+    notifyReady.mockReset()
+    const { App } = await import('./App')
+    const root = createRoot(container)
+    await act(async () => { root.render(<App />) })
+    expect(notifyReady).toHaveBeenLastCalledWith('home', 'first')
+    const openProduction = [...container.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('打开生产消息')) as HTMLButtonElement
+    await act(async () => { openProduction.click() })
+    expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'production-message' })
+
+    await act(async () => {
+      history.replaceState({}, '', '?route=daily-report&navigation=second')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'second')
+    await act(async () => root.unmount())
+    container.remove()
   })
 })
 
@@ -88,7 +130,7 @@ describe('daily report workflow', () => {
     document.body.append(container)
     invoke.mockReset().mockImplementation((operation: string) => {
       if (operation === 'app.getOverview') return Promise.resolve({})
-      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, status: 'pending-test', schedulerMessage: '', dingTalkStatus: '连接正常', lastRun: '暂无运行记录', missingStep: 'template', missingMessage: '请先完成测试发送。' }] })
+      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, schedulingAvailable: true, status: 'pending-test', schedulerMessage: '', dingTalkStatus: '连接正常', lastRun: '暂无运行记录', missingStep: 'template', missingMessage: '请先完成测试发送。' }] })
       if (operation === 'daily.setEnabled') return Promise.resolve({ enabled: false, missingStep: 'template', message: '请先完成测试发送。' })
       if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', credentialMask: '••••••••（已保存）', webhookSaved: true, secretSaved: true, dingTalkStatus: '连接正常', schedulerInstalled: false, schedulerMessage: '', pagePaths: [], sources: [], fields: [], runs: [] })
       return Promise.resolve({})
@@ -135,7 +177,7 @@ describe('daily report workflow', () => {
     let finishToggle!: (value: { enabled: boolean }) => void
     invoke.mockImplementation((operation: string) => {
       if (operation === 'app.getOverview') return Promise.resolve({})
-      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '濉旂瓛鏃ユ姤', sendTime: '17:30', isEnabled: false, status: 'pending-test', dingTalkStatus: '杩炴帴姝ｅ父', lastRun: '鏆傛棤杩愯璁板綍' }] })
+      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '濉旂瓛鏃ユ姤', sendTime: '17:30', isEnabled: false, schedulingAvailable: true, status: 'pending-test', dingTalkStatus: '杩炴帴姝ｅ父', lastRun: '鏆傛棤杩愯璁板綍' }] })
       if (operation === 'daily.setEnabled') return new Promise(resolve => { finishToggle = resolve })
       return Promise.resolve({})
     })
@@ -156,7 +198,7 @@ describe('daily report workflow', () => {
   it('saves basic information only from the explicit step action', async () => {
     invoke.mockImplementation((operation: string) => {
       if (operation === 'app.getOverview') return Promise.resolve({})
-      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '', sendTime: '17:30', isEnabled: false, status: 'pending-test', dingTalkStatus: '待配置', lastRun: '暂无运行记录' }] })
+      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '', sendTime: '17:30', isEnabled: false, schedulingAvailable: true, status: 'pending-test', dingTalkStatus: '待配置', lastRun: '暂无运行记录' }] })
       if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', credentialMask: '••••••••（已保存）', webhookSaved: false, secretSaved: false, dingTalkConnected: false, pagePaths: [], sources: [], fields: [], runs: [] })
       return Promise.resolve({})
     })
@@ -209,7 +251,7 @@ describe('daily report workflow', () => {
   it('keeps a failed robot connection on the credential step', async () => {
     invoke.mockImplementation((operation: string) => {
       if (operation === 'app.getOverview') return Promise.resolve({})
-      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, status: 'pending-test', dingTalkStatus: '待测试', lastRun: '暂无运行记录' }] })
+      if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, schedulingAvailable: true, status: 'pending-test', dingTalkStatus: '待测试', lastRun: '暂无运行记录' }] })
       if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', credentialMask: '••••••••（已保存）', webhookSaved: true, secretSaved: true, dingTalkConnected: false, pagePaths: [], sources: [], fields: [], runs: [] })
       if (operation === 'daily.checkConnection') return Promise.resolve({ succeeded: false, message: '机器人无法连接' })
       return Promise.resolve({})

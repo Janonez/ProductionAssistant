@@ -18,6 +18,13 @@ public sealed class DailyReportRunner
         DailyReportJob job, DateTime businessDate, string template, CancellationToken cancellationToken = default) =>
         await ExecuteAsync(job, "test", businessDate, template, job.ActiveTemplateVersion + 1, cancellationToken, preventDuplicate: false, alertOnFailure: false);
 
+    public async Task<DailyReportExitCode> SendTodayAsync(string jobId, CancellationToken cancellationToken = default)
+    {
+        var job = DailyReportSettingsStore.LoadCatalog().Jobs.FirstOrDefault(item => item.Id == jobId);
+        if (job is null) return DailyReportExitCode.JobNotFound;
+        return await ExecuteAsync(job, "manual", DateTime.Today, job.ActiveTemplate, job.ActiveTemplateVersion, cancellationToken);
+    }
+
     private async Task<DailyReportExitCode> ExecuteAsync(
         DailyReportJob job, string source, DateTime businessDate, string template, int version,
         CancellationToken cancellationToken, bool preventDuplicate = true, bool alertOnFailure = true)
@@ -31,7 +38,7 @@ public sealed class DailyReportRunner
         WriteLog(job.Id, $"开始执行{(source == "test" ? "测试" : "自动")}日报。");
 
         if (preventDuplicate && DailyReportSettingsStore.LoadRunRecords(job.Id).Any(item =>
-                item.Id != record.Id && item.Source == "automatic" && item.Succeeded &&
+                item.Id != record.Id && item.Source != "test" && item.Succeeded &&
                 item.BusinessDate == record.BusinessDate && item.TemplateVersion == version))
             return Finish(record, true, "已发送", "今日当前版本已经成功发送，跳过重复推送。", DailyReportExitCode.AlreadySent);
         if (string.IsNullOrWhiteSpace(template) || version <= 0)

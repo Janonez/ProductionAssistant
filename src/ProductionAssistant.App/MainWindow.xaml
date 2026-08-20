@@ -66,6 +66,10 @@
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A4;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItemHeader Content="自动化任务" />
+                <NavigationViewItem x:Name="ReportCenterNavigationItem"
+                                    Content="报表中心" Tag="report-center">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE9D5;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem x:Name="DailyReportNavigationItem"
                                     Content="日报推送" Tag="daily-report">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE724;" /></NavigationViewItem.Icon>

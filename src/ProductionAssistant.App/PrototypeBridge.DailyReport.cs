@@ -35,7 +35,9 @@ internal sealed partial class PrototypeBridge
         var scheduler = await DailyReportTaskScheduler.GetStatusAsync(job.Id, job.SendTime);
         return new
         {
-            job.Id, job.Name, job.SendTime, job.IsEnabled,
+            job.Id, job.Name, job.SendTime,
+            isEnabled = DailyReportTaskScheduler.IsSchedulingAvailable && job.IsEnabled,
+            schedulingAvailable = DailyReportTaskScheduler.IsSchedulingAvailable,
             validated = IsDailyValidated(job),
             job.DraftTemplate, job.DraftTemplateDocument,
             credentialMask = "••••••••（已保存）",
@@ -58,6 +60,8 @@ internal sealed partial class PrototypeBridge
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("任务名称不能为空。");
         if (!TimeSpan.TryParse(sendTime, out var time)) throw new InvalidOperationException("发送时间无效。");
         var timeChanged = job.SendTime != sendTime;
+        if (job.IsEnabled && timeChanged && !DailyReportTaskScheduler.IsSchedulingAvailable)
+            throw new InvalidOperationException("Debug 版本不能修改已启用任务的发送时间，请使用 Release 版本。");
         job.Name = name;
         job.SendTime = time.ToString(@"hh\:mm");
         DailyReportSettingsStore.SaveJob(job);
@@ -172,8 +176,23 @@ internal sealed partial class PrototypeBridge
         return new { succeeded = result == DailyReportExitCode.Success, exitCode = result.ToString() };
     }
 
+    private static async Task<object> SendDailyReportTodayAsync(JsonElement payload, CancellationToken cancellationToken)
+    {
+        var job = FindDailyJob(payload);
+        if (!IsDailyValidated(job)) throw new InvalidOperationException("请先完成测试发送，再发送今日消息。");
+        var result = await new DailyReportRunner().SendTodayAsync(job.Id, cancellationToken);
+        return new
+        {
+            succeeded = result is DailyReportExitCode.Success or DailyReportExitCode.AlreadySent,
+            alreadySent = result == DailyReportExitCode.AlreadySent,
+            exitCode = result.ToString()
+        };
+    }
+
     private static async Task<object> SetDailyEnabledAsync(JsonElement payload)
     {
+        if (!DailyReportTaskScheduler.IsSchedulingAvailable)
+            throw new InvalidOperationException("Debug 版本不支持定时发送，请使用 Release 版本。");
         var job = FindDailyJob(payload);
         var enabled = payload.TryGetProperty("enabled", out var value) && value.GetBoolean();
         if (!enabled)
@@ -190,7 +209,13 @@ internal sealed partial class PrototypeBridge
         if (!installed.Succeeded) throw new InvalidOperationException(installed.Message);
         job.IsEnabled = true;
         DailyReportSettingsStore.SaveJob(job);
-        return new { enabled = true };
+        var catchUp = DateTime.Now.TimeOfDay >= TimeSpan.Parse(job.SendTime) &&
+            !DailyReportSettingsStore.LoadRunRecords(job.Id).Any(record =>
+                record.Source != "test" && record.Succeeded &&
+                record.BusinessDate == DateTime.Today.ToString("yyyy-MM-dd") &&
+                record.TemplateVersion == job.ActiveTemplateVersion);
+        var sentToday = catchUp && await new DailyReportRunner().RunAsync(job.Id) == DailyReportExitCode.Success;
+        return new { enabled = true, sentToday };
     }
 
     private static async Task<object> DeleteDailyJobAsync(JsonElement payload)
@@ -242,11 +267,13 @@ internal sealed partial class PrototypeBridge
     {
         var last = DailyReportSettingsStore.LoadRunRecords(job.Id).FirstOrDefault();
         var missing = DailyMissingStep(job);
-        var status = job.IsEnabled && !schedulerInstalled ? "schedule-error" : job.IsEnabled ? "enabled" :
+        var enabled = DailyReportTaskScheduler.IsSchedulingAvailable && job.IsEnabled;
+        var status = enabled && !schedulerInstalled ? "schedule-error" : enabled ? "enabled" :
             missing?.Step is "basics" or "credentials" ? "incomplete" : !IsDailyValidated(job) ? "pending-test" : "ready";
         return new
         {
-            job.Id, job.Name, job.SendTime, job.IsEnabled, status, schedulerMessage,
+            job.Id, job.Name, job.SendTime, isEnabled = enabled, status, schedulerMessage,
+            schedulingAvailable = DailyReportTaskScheduler.IsSchedulingAvailable,
             dingTalkStatus = job.DingTalkConnected == true ? "连接正常" : string.IsNullOrWhiteSpace(job.EncryptedWebhook) ? "未配置机器人" : "连接待检测",
             lastRun = last is null ? "暂无运行记录" : $"{last.StartedAt:MM-dd HH:mm} · {(last.Succeeded ? "成功" : "失败")}",
             missingStep = missing?.Step, missingMessage = missing?.Message
@@ -264,7 +291,7 @@ internal sealed partial class PrototypeBridge
     private static IEnumerable<object> DailyRunDtos(IEnumerable<DailyReportRunRecord> records) => records.Select(record => new
     {
         record.Id, time = record.StartedAt.ToString("yyyy-MM-dd HH:mm"),
-        source = record.Source == "test" ? "测试发送" : "自动运行",
+        source = record.Source == "test" ? "测试发送" : record.Source == "manual" ? "手动发送" : "自动运行",
         status = record.Succeeded ? "成功" : record.FinishedAt is null ? "执行中" : "失败",
         record.BusinessDate, record.TemplateVersion, record.Stage, record.Attempts,
         record.Response, record.Error, record.TextSummary

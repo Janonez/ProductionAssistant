@@ -22,10 +22,10 @@ import type {
 } from "./types";
 import { ReportTemplateEditor } from "./ReportTemplateEditor";
 import { ChoicePicker, ReportDatePicker, TimePicker } from "./FormPickers";
+import { WorkflowProgress, type WorkflowStepTransition } from "./WorkflowProgress";
 
 type NoticeValue = { tone: string; title: string; message: string };
 type DailyStep = 0 | 1 | 2 | 3 | 4;
-type StepTransition = { from: DailyStep; target: DailyStep; direction: 1 | -1; phase: "node" | "rail" | "arrive" };
 type NoticeScope = "page" | "basics" | "credentials" | "template" | "preview" | "test";
 const errorNotice = (error: unknown): NoticeValue => ({
   tone: "error",
@@ -180,7 +180,8 @@ export function DailyReportPage() {
                 <input
                   type="checkbox"
                   checked={job.isEnabled}
-                  disabled={busy === job.id}
+                  disabled={!job.schedulingAvailable || busy === job.id}
+                  title={job.schedulingAvailable ? undefined : "Debug 版本不支持定时发送"}
                   onChange={() => toggle(job)}
                 />
                 <span />
@@ -263,7 +264,7 @@ function DailyJobEditor({
   const [currentStep, setCurrentStep] = useState<DailyStep>(0);
   const [previousStep, setPreviousStep] = useState<DailyStep>(0);
   const [direction, setDirection] = useState(1);
-  const [stepTransition, setStepTransition] = useState<StepTransition>();
+  const [stepTransition, setStepTransition] = useState<WorkflowStepTransition>();
   const reduceMotion = useReducedMotion();
   const loaded = useRef(false);
   const initialized = useRef(false);
@@ -394,7 +395,7 @@ function DailyJobEditor({
       setCurrentStep(step);
       return;
     }
-    const transition: StepTransition = { from: currentStep, target: step, direction: nextDirection, phase: "node" };
+    const transition: WorkflowStepTransition = { from: currentStep, target: step, direction: nextDirection, phase: "node" };
     setStepTransition(transition);
     stepTransitionTimer.current = window.setTimeout(() => {
       setStepTransition({ ...transition, phase: "rail" });
@@ -496,6 +497,30 @@ function DailyJobEditor({
       setBusy("");
     }
   }
+  async function sendToday() {
+    setBusy("send-today");
+    setNotice(undefined);
+    try {
+      const result = await invoke<{ succeeded: boolean; alreadySent: boolean }>(
+        "daily.sendToday",
+        { id },
+        120000,
+      );
+      if (!result.succeeded) throw new Error("今日消息发送失败，请查看运行记录。");
+      setNotice({
+        tone: "success",
+        title: result.alreadySent ? "今日消息已发送" : "今日消息发送成功",
+        message: result.alreadySent ? "今天的当前版本已有成功记录，本次未重复推送。" : "已使用当前验证通过的模板发送。",
+      });
+      setNoticeScope("page");
+      await load();
+    } catch (error) {
+      setNotice(errorNotice(error));
+      setNoticeScope("page");
+    } finally {
+      setBusy("");
+    }
+  }
   async function showAllRuns() {
     setBusy("runs");
     try {
@@ -517,10 +542,6 @@ function DailyJobEditor({
     (webhook !== "" && webhook !== job.credentialMask) ||
     (secret !== "" && secret !== job.credentialMask);
   const steps = ["基本信息", "钉钉机器人", "编辑消息", "预览与测试"];
-  const progressStep = stepTransition?.phase === "rail" || stepTransition?.phase === "arrive"
-    ? stepTransition.target
-    : currentStep;
-  const filledSegments = Math.min(progressStep, 3);
   const motionProps = reduceMotion
     ? { initial: false as const }
     : {
@@ -543,6 +564,10 @@ function DailyJobEditor({
           </p>
         </div>
         <div className="detail-header-state">
+          <button className="secondary" disabled={!!busy || !job.validated} onClick={sendToday}>
+            {busy === "send-today" ? <LoaderCircle className="spin" /> : <Send />}
+            发送今日消息
+          </button>
           <span className={`job-status ${job.isEnabled ? "enabled" : job.validated ? "ready" : "configuring"}`}>
             {job.isEnabled ? "已启用" : job.validated ? "可启用" : "配置中"}
           </span>
@@ -550,33 +575,7 @@ function DailyJobEditor({
         </div>
       </header>
       {notice && noticeScope === "page" && <Notice value={notice} />}
-      <nav className="daily-progress" aria-label="日报配置进度">
-        <div className="progress-meta"><span>当前步骤</span><strong>{Math.min(currentStep + 1, 4)} / 4</strong></div>
-        <div className="progress-rail">
-          <div className="progress-segments" aria-hidden="true">
-            {[0, 1, 2].map(index => <span key={index}><i style={{ width: index < filledSegments ? "100%" : "0%" }} /></span>)}
-          </div>
-          <ol className={direction < 0 ? "backward" : "forward"}>
-          {steps.map((title, index) => {
-            const transitionFromNode = stepTransition ? Math.min(stepTransition.from, steps.length - 1) : -1;
-            const baseDone = index < currentStep || currentStep === 4;
-            const leavingForward = stepTransition?.direction === 1 && stepTransition.phase !== "arrive" && index === transitionFromNode;
-            const leavingBackward = stepTransition?.direction === -1 && stepTransition.phase !== "arrive" && index === transitionFromNode;
-            const done = !leavingBackward && (baseDone || leavingForward);
-            const stateClass = leavingBackward ? "idle" : done ? "done" : index === currentStep ? `active${busy ? " working" : ""}` : "idle";
-            const transitionClass = stepTransition?.phase === "node" && index === transitionFromNode
-              ? stepTransition.direction > 0 ? " just-completed" : " just-back-leave"
-              : stepTransition?.phase === "arrive" && index === stepTransition.target
-                ? stepTransition.direction > 0 ? " just-active" : " just-back-active"
-                : "";
-            return <li key={title} className={`${stateClass}${transitionClass}`} aria-current={index === currentStep ? "step" : undefined} aria-label={`${title}，${done ? "已完成" : index === currentStep ? "当前步骤" : "未开始"}`}>
-              <span>{done ? "✓" : index + 1}</span>
-              <strong>{title}</strong>
-            </li>;
-          })}
-          </ol>
-        </div>
-      </nav>
+      <WorkflowProgress label="日报配置进度" steps={steps} currentStep={currentStep} direction={direction as 1 | -1} transition={stepTransition} busy={!!busy} />
       <div className="daily-stage">
         <AnimatePresence mode="wait" initial={false}>
           <motion.section aria-labelledby={`daily-step-${currentStep}`} key={currentStep} className="surface daily-focus-card" {...motionProps}>
