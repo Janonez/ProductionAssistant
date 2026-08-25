@@ -194,8 +194,7 @@ public sealed class ProductionMessageDraft : INotifyPropertyChanged
         get
         {
             if (!DatabaseFieldMappings.TryGetValue(Kind, out var mapping)) return [];
-            return Fields.Keys
-            .Where(key => mapping.ContainsKey(key))
+            return mapping.Keys
             .Where(key => ProductionMessageFields.FieldsFor(Kind).Contains(key) ||
                           ProductionMessageFields.TryGetDatabasePropertyName(key, out _))
             .Select(key =>
@@ -206,7 +205,7 @@ public sealed class ProductionMessageDraft : INotifyPropertyChanged
                     databaseFieldName = databaseField;
                 var value = Fields.TryGetValue(key, out var fieldValue)
                     ? fieldValue.Trim()
-                    : "—";
+                    : string.Empty;
                 return new ProductionMessageFieldPreview(
                     key,
                     databaseFieldName,

@@ -1,7 +1,9 @@
 /* Shared readability baseline for the three React routes. */
 :root {
+  --font-page-title: 26px;
   --font-body: 16px;
-  --font-supporting: 13px;
+  --font-control: 15px;
+  --font-supporting: 14px;
   --font-label: 14px;
   --control-height: 44px;
   font-family: "Inter Variable", "Noto Sans SC Variable", "Microsoft YaHei UI", sans-serif;
@@ -9,7 +11,7 @@
 }
 
 body { min-width: 0; line-height: 1.5; }
-button, input, select, textarea { font-size: 15px; }
+button, input, select, textarea { font-size: var(--font-control); }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   outline: 3px solid #4a806545;
   outline-offset: 2px;

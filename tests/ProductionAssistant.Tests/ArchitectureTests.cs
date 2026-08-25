@@ -152,4 +152,32 @@ public sealed class ArchitectureTests
         Assert.Contains(draft.PreviewFields, field => field.Label == "产出（套）" && field.Value == "0套");
         Assert.Contains(draft.PreviewFields, field => field.Label == "产出（节）" && field.Value == "0节");
     }
+
+    [Fact]
+    public void Preview_fields_follow_the_database_mapping_even_when_the_message_has_no_value()
+    {
+        var draft = new ProductionMessageDraft
+        {
+            Index = 1,
+            Kind = ProductionMessageKind.TowerLineDaily,
+            BusinessDate = new DateTime(2026, 8, 25),
+            CanWrite = true
+        };
+        draft.SetFields(new Dictionary<string, string>
+        {
+            [ProductionMessageFields.DailyOutput] = "1套"
+        });
+        draft.SetDatabaseFieldMappings(new Dictionary<ProductionMessageKind, IReadOnlyDictionary<string, string>>
+        {
+            [ProductionMessageKind.TowerLineDaily] = new Dictionary<string, string>
+            {
+                [ProductionMessageFields.DailyOutput] = "产出（套）",
+                [ProductionMessageFields.OutputSections] = "产出（节）"
+            }
+        });
+
+        Assert.Contains(draft.PreviewFields, field => field.Key == ProductionMessageFields.DailyOutput);
+        Assert.Contains(draft.PreviewFields, field =>
+            field.Key == ProductionMessageFields.OutputSections && field.Value == string.Empty);
+    }
 }

@@ -46,7 +46,7 @@ describe('connected production message workflow', () => {
   })
   afterEach(() => { vi.useRealTimers(); container.remove() })
 
-  it('checks only after a field value actually changes', async () => {
+  it('keeps field edits local and only rechecks after the target date changes', async () => {
     expect(container.querySelector('.content-header h1')?.textContent).toBe('生产消息入库')
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Notion 入库')
@@ -73,13 +73,66 @@ describe('connected production message workflow', () => {
       fieldInput.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
       await Promise.resolve()
     })
-    expect(invoke.mock.calls.filter(([operation]) => operation === 'production.check')).toHaveLength(2)
+    expect(invoke.mock.calls.filter(([operation]) => operation === 'production.check')).toHaveLength(1)
+    expect(container.querySelector('.pill-new')?.textContent).toBe('新增')
     await act(async () => { (container.querySelector('.identity-section .date-picker-trigger') as HTMLButtonElement).click() })
     const nextDate = [...document.querySelectorAll('.date-picker-grid button')].find(item => item.textContent === '14') as HTMLButtonElement
     await act(async () => { nextDate.click() })
     await act(async () => { await Promise.resolve() })
-    expect(invoke.mock.calls.filter(([operation]) => operation === 'production.check')).toHaveLength(3)
+    expect(invoke.mock.calls.filter(([operation]) => operation === 'production.check')).toHaveLength(2)
     expect((button('确认入库') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('keeps Notion field rows stable and resolves an edited missing field locally', async () => {
+    const towerDraft: Draft = {
+      ...draft,
+      kind: 'TowerLineDaily',
+      typeDisplay: '塔筒产线日报库',
+      fields: { sheet_in_stock: '0吨', profile_in_stock: '0吨', cutting: '0吨', welding: '36.4吨', daily_output: '1套' },
+      previewFields: [
+        { key: 'sheet_in_stock', label: '板材（吨）', value: '0吨' },
+        { key: 'profile_in_stock', label: '型材（吨）', value: '0吨' },
+        { key: 'cutting', label: '下料（吨）', value: '0吨' },
+        { key: 'welding', label: '焊接（吨）', value: '36.4吨' },
+        { key: 'daily_output', label: '产出（套）', value: '1套' },
+        { key: 'output_sections', label: '产出（节）', value: '' },
+      ],
+    }
+    const initialFields = [
+      { key: 'sheet_in_stock', name: '板材（吨）', propertyType: 'number', parsedValue: '0吨', databaseValue: '', status: 'new', message: '' },
+      { key: 'profile_in_stock', name: '型材（吨）', propertyType: 'number', parsedValue: '0吨', databaseValue: '', status: 'new', message: '' },
+      { key: 'cutting', name: '下料（吨）', propertyType: 'number', parsedValue: '0吨', databaseValue: '', status: 'new', message: '' },
+      { key: 'welding', name: '焊接（吨）', propertyType: 'number', parsedValue: '36.4吨', databaseValue: '', status: 'new', message: '' },
+      { key: 'daily_output', name: '产出（套）', propertyType: 'number', parsedValue: '1套', databaseValue: '', status: 'new', message: '' },
+      { key: 'output_sections', name: '产出（节）', propertyType: 'number', parsedValue: '', databaseValue: '8', status: 'exception', message: '消息中未解析到产出（节）的值' },
+    ]
+    let finishCheck!: (value: unknown) => void
+    invoke.mockImplementation((operation: string) => {
+      if (operation === 'production.getBindings') return Promise.resolve({ configured: true, sources: [], selected: {} })
+      if (operation === 'production.parse') return Promise.resolve([towerDraft])
+      if (operation === 'production.check') return new Promise(resolve => { finishCheck = resolve })
+      return Promise.resolve({})
+    })
+    const textarea = container.querySelector('textarea')!
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '塔筒日报缺少节数'); textarea.dispatchEvent(new Event('input', { bubbles: true })) })
+    const parse = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('解析消息')) as HTMLButtonElement
+    await act(async () => { parse.click(); await Promise.resolve() })
+    const sectionRow = [...container.querySelectorAll('.field-row')].find(row => row.querySelector('.field-name')?.textContent === '产出（节）') as HTMLDivElement
+    const sectionInput = sectionRow.querySelector('input') as HTMLInputElement
+    expect(container.querySelectorAll('.field-row')).toHaveLength(6)
+    expect(sectionRow.querySelector('.input-unit-wrap span')?.textContent).toBe('节')
+    expect(sectionRow.querySelector('.database-value')?.textContent).toBe('—')
+    await act(async () => { finishCheck({ succeeded: false, message: '存在异常', items: [{ index: 1, businessDate: '2026-08-13', status: 'error', message: '', fields: initialFields }], requiredMonths: [] }) })
+    expect(sectionRow.querySelector('.database-value')?.textContent).toBe('8')
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(sectionInput, '12'); sectionInput.dispatchEvent(new Event('input', { bubbles: true })) })
+    await act(async () => { sectionInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await Promise.resolve() })
+    expect(container.querySelectorAll('.field-row')).toHaveLength(6)
+    expect(container.textContent).not.toContain('待检查')
+    expect(invoke.mock.calls.filter(([operation]) => operation === 'production.check')).toHaveLength(1)
+    expect(container.querySelectorAll('.field-row')).toHaveLength(6)
+    expect(sectionRow.querySelector('.pill-confirm')?.textContent).toBe('待确认')
+    expect(container.querySelector('.conflict-panel')?.textContent).toContain('原值8')
+    expect(container.querySelector('.conflict-panel')?.textContent).toContain('新值12节')
   })
 
   it('renders live Notion field names, editable values, units, and four field states', async () => {

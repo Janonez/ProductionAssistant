@@ -1,14 +1,18 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Check, RefreshCw } from "lucide-react";
 import { invoke } from "./bridge";
 import DatePicker from "./DatePicker";
-import type { BindingState, Draft, ImportResult } from "./types";
+import type { BindingState, Draft, ImportField, ImportResult } from "./types";
 
 type BusyState = "parse" | "check" | "write";
 type ConflictChoice = "keep" | "use";
 const HIDDEN_PREVIEW_KEYS = new Set(["raw_message", "message_type", "parser_version", "unit"]);
 const NUMERIC_KEYS = new Set(["piece_count", "weight", "sheet_in_stock", "profile_in_stock", "cutting", "welding", "daily_output", "monthly_output", "yearly_output", "monthly_reference", "output_sections"]);
 const UNIT_PATTERN = /(公斤|千克|kg|吨|t|张|件|套|节|台|米|m)$/i;
+const FIELD_UNITS: Record<string, string> = {
+  piece_count: "张", weight: "吨", sheet_in_stock: "吨", profile_in_stock: "吨",
+  cutting: "吨", welding: "吨", daily_output: "套", output_sections: "节",
+};
 
 function localDate() {
   const now = new Date();
@@ -18,6 +22,23 @@ function errorText(error: unknown) { return error instanceof Error ? error.messa
 function splitUnit(value: string, fallback = "") {
   const match = value.trim().match(UNIT_PATTERN);
   return { value: match ? value.trim().slice(0, -match[0].length).trim() : value, unit: match?.[0] || fallback };
+}
+function withUnit(value: string, unit: string) { return value.trim() ? `${value}${unit}` : ""; }
+function updateLocalField(field: ImportField, parsedValue: string): ImportField {
+  const incoming = splitUnit(parsedValue).value.trim();
+  const database = splitUnit(field.databaseValue).value.trim();
+  const invalidNumber = field.propertyType === "number" && !Number.isFinite(Number(incoming.replaceAll(",", "")));
+  const status = !incoming || invalidNumber ? "exception"
+    : !database ? "new"
+    : field.propertyType === "number"
+      ? Number(incoming.replaceAll(",", "")) === Number(database.replaceAll(",", "")) ? "same" : "confirm"
+      : incoming === database ? "same" : "confirm";
+  return {
+    ...field,
+    parsedValue,
+    status,
+    message: status === "exception" ? `${field.name}的输入值无效` : status === "confirm" ? "与数据库现值不同" : "",
+  };
 }
 function fieldStatus(status: string) {
   return ({ new: "新增", same: "一致", confirm: "待确认", exception: "异常", unchecked: "待检查" } as Record<string, string>)[status] || "异常";
@@ -36,8 +57,6 @@ export default function ProductionMessagePage() {
   const [bindingError, setBindingError] = useState("");
   const [requiredMonths, setRequiredMonths] = useState<string[]>([]);
   const [monthlyPlans, setMonthlyPlans] = useState<Record<string, string>>({});
-  const [dirtyFields, setDirtyFields] = useState<Record<string, boolean>>({});
-  const fieldFocusValues = useRef<Record<string, string>>({});
 
   const parsed = drafts.length > 0;
   const needsReparse = parsed && rawMessage !== parsedMessage;
@@ -49,16 +68,21 @@ export default function ProductionMessagePage() {
   }, []);
 
   async function check(nextDrafts: Draft[]) {
-    setBusy("check"); setError(""); setCheckResult(undefined); setConflictChoices({}); setDirtyFields({});
+    setBusy("check"); setError("");
+    setConflictChoices({});
     try {
-      setCheckResult(await invoke<ImportResult>("production.check", { drafts: nextDrafts, defaultDate: localDate() }));
+      const result = await invoke<ImportResult>("production.check", {
+        drafts: nextDrafts,
+        defaultDate: localDate(),
+      });
+      setCheckResult(result);
     } catch (cause) { setError(errorText(cause)); }
     finally { setBusy(undefined); }
   }
 
   async function handleParse() {
     if (!rawMessage.trim() || locked) return;
-    setBusy("parse"); setError(""); setCompleted(false); setWriteResult(undefined); setConflictChoices({});
+    setBusy("parse"); setError(""); setCompleted(false); setWriteResult(undefined); setCheckResult(undefined); setConflictChoices({});
     try {
       const nextDrafts = await invoke<Draft[]>("production.parse", { text: rawMessage, defaultDate: localDate() });
       setDrafts(nextDrafts); setParsedMessage(rawMessage);
@@ -83,18 +107,19 @@ export default function ProductionMessagePage() {
       fields: { ...draft.fields, [key]: value },
       previewFields: draft.previewFields.map((field) => field.key === key ? { ...field, value } : field),
     } : draft));
-    setDirtyFields((current) => {
-      const next = { ...current };
-      if (fieldFocusValues.current[choiceKey] === value) delete next[choiceKey];
-      else next[choiceKey] = true;
-      return next;
+    setConflictChoices((current) => Object.fromEntries(Object.entries(current).filter(([choice]) => choice !== choiceKey)));
+    setCheckResult((current) => {
+      if (!current) return current;
+      const items = current.items.map((item) => {
+        if (item.index !== draftIndex || !item.fields) return item;
+        const fields = item.fields.map((field) => field.key === key ? updateLocalField(field, value) : field);
+        const status = fields.some((field) => field.status === "exception") ? "error"
+          : fields.some((field) => field.status === "confirm") ? "existing"
+          : "ready";
+        return { ...item, fields, status };
+      });
+      return { ...current, items, succeeded: items.every((item) => item.status !== "error") };
     });
-  }
-
-  async function handleFieldBlur(choiceKey: string, value: string) {
-    const changed = fieldFocusValues.current[choiceKey] !== value;
-    delete fieldFocusValues.current[choiceKey];
-    if (changed && drafts.every((draft) => draft.canWrite)) await check(drafts);
   }
 
   async function write(plans?: Record<string, number>) {
@@ -111,7 +136,7 @@ export default function ProductionMessagePage() {
 
   function handleNext() {
     setRawMessage(""); setParsedMessage(""); setDrafts([]); setCheckResult(undefined); setWriteResult(undefined);
-    setConflictChoices({}); setDirtyFields({}); setCompleted(false); setError("");
+    setConflictChoices({}); setCompleted(false); setError("");
   }
 
   const invalidDrafts = drafts.filter((draft) => !draft.canWrite);
@@ -119,11 +144,11 @@ export default function ProductionMessagePage() {
     const checked = checkResult?.items.find((item) => item.index === draft.index)?.fields;
     if (checked?.length) return checked
       .filter((field) => !HIDDEN_PREVIEW_KEYS.has(field.key))
-      .map((field) => ({ draft, key: field.key, name: field.name, propertyType: field.propertyType, parsedValue: draft.fields[field.key] ?? field.parsedValue, databaseValue: field.databaseValue, status: dirtyFields[`${draft.index}:${field.key}`] ? "unchecked" : field.status, message: field.message }));
+        .map((field) => ({ draft, key: field.key, name: field.name, propertyType: field.propertyType, parsedValue: draft.fields[field.key] ?? field.parsedValue, databaseValue: field.databaseValue, status: field.status, message: field.message }));
     return draft.previewFields
-      .filter((field) => !HIDDEN_PREVIEW_KEYS.has(field.key) && field.value.trim() && field.value !== "—")
+      .filter((field) => !HIDDEN_PREVIEW_KEYS.has(field.key))
       .map((field) => ({ draft, key: field.key, name: field.label, propertyType: NUMERIC_KEYS.has(field.key) ? "number" : "", parsedValue: draft.fields[field.key] ?? field.value, databaseValue: "", status: draft.canWrite ? "unchecked" : "exception", message: draft.warningText }));
-  }), [drafts, checkResult, dirtyFields]);
+  }), [drafts, checkResult]);
   const summary = useMemo(() => ({
     newFields: fields.filter((field) => field.status === "new").length,
     same: fields.filter((field) => field.status === "same").length,
@@ -164,7 +189,7 @@ export default function ProductionMessagePage() {
           <div className="field-table">
             <div className="field-table-header"><div>字段</div><div>本次解析值</div><div>数据库值</div><div className="header-status">状态</div></div>
             {fields.map((field) => {
-              const parsed = splitUnit(field.parsedValue, field.propertyType === "number" ? field.draft.fields.unit || "" : "");
+              const parsed = splitUnit(field.parsedValue, field.propertyType === "number" ? FIELD_UNITS[field.key] || "" : "");
               const choiceKey = `${field.draft.index}:${field.key}`;
               return <div className="field-row" key={choiceKey}>
                 <div className="field-name">{drafts.length > 1 ? `${field.draft.index}. ${field.name}` : field.name}</div>
@@ -173,12 +198,11 @@ export default function ProductionMessagePage() {
                   value={parsed.value}
                   disabled={locked}
                   aria-invalid={field.status === "exception"}
-                  onChange={(event) => handleFieldChange(field.draft.index, field.key, `${event.target.value}${parsed.unit}`)}
-                  onFocus={() => { fieldFocusValues.current[choiceKey] = `${parsed.value}${parsed.unit}`; }}
-                  onBlur={(event) => handleFieldBlur(choiceKey, `${event.currentTarget.value}${parsed.unit}`)}
+                  onChange={(event) => handleFieldChange(field.draft.index, field.key, withUnit(event.target.value, parsed.unit))}
+                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                 />{parsed.unit && <span>{parsed.unit}</span>}</div></div>
                 <div className="database-value">{field.databaseValue || "—"}</div>
-                <div className="field-status"><span className={`pill pill-${field.status}`} title={field.message}>{fieldStatus(field.status)}</span></div>
+                <div className="field-status">{field.status !== "unchecked" && <span className={`pill pill-${field.status}`} title={field.message}>{fieldStatus(field.status)}</span>}</div>
               </div>;
             })}
           </div>
