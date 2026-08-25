@@ -222,8 +222,9 @@ describe('connected production message workflow', () => {
   })
 
   it('uses the local calendar day for the default date', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-08-23T16:30:00Z'))
+    const getFullYear = vi.spyOn(Date.prototype, 'getFullYear').mockReturnValue(2026)
+    const getMonth = vi.spyOn(Date.prototype, 'getMonth').mockReturnValue(7)
+    const getDate = vi.spyOn(Date.prototype, 'getDate').mockReturnValue(24)
     const extra = document.createElement('div')
     document.body.append(extra)
     const { default: ProductionMessagePage } = await import('./ProductionMessagePage')
@@ -236,7 +237,9 @@ describe('connected production message workflow', () => {
     expect(invoke).toHaveBeenCalledWith('production.parse', expect.objectContaining({ defaultDate: '2026-08-24' }))
     await act(async () => root.unmount())
     extra.remove()
-    vi.useRealTimers()
+    getFullYear.mockRestore()
+    getMonth.mockRestore()
+    getDate.mockRestore()
   })
 
   it('renders the Debug navigation taxonomy in the Demo sidebar and routes through the host', async () => {
