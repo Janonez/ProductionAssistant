@@ -864,11 +864,11 @@ public sealed class NotionImportService : INotionImportService
             [ProductionMessageFields.ProfileInStock] = ["型材入库", "型材入库量", "型材"],
             [ProductionMessageFields.Cutting] = ["下料量", "下料"],
             [ProductionMessageFields.Welding] = ["焊接量", "焊接"],
-            [ProductionMessageFields.DailyOutput] = ["产出情况（套）", "当日产出", "日产出", "当日产量"],
+            [ProductionMessageFields.DailyOutput] = ["产出情况（套）", "产出（套）", "当日产出", "日产出", "当日产量"],
             [ProductionMessageFields.MonthlyOutput] = ["当月累计", "当月产出", "本月累计", "本月"],
             [ProductionMessageFields.YearlyOutput] = ["全年累计", "全年产出", "年度累计", "年度"],
             [ProductionMessageFields.MonthlyReference] = ["月度参考量", "月度计划", "月计划", "参考量"],
-            [ProductionMessageFields.OutputSections] = ["产出情况（节）", "产出节数", "产出", "完成节数", "节数", "出塔节数"],
+            [ProductionMessageFields.OutputSections] = ["产出情况（节）", "产出（节）", "产出节数", "产出", "完成节数", "节数", "出塔节数"],
             [ProductionMessageFields.RawMessage] = ["原始消息", "原文", "消息原文"],
             [ProductionMessageFields.MessageType] = ["消息类型", "类型"],
             [ProductionMessageFields.ParserVersion] = ["解析器版本", "解析版本"],
@@ -1062,24 +1062,38 @@ public sealed class NotionImportService : INotionImportService
             return WriteFailure(item, $"{item.BusinessDate:yyyy-MM-dd} 已有重复日报记录，已停止写入。");
         if (request.CheckOnly)
         {
-            if (existing.Pages.Count == 0)
-                return new(item.Index, item.BusinessDate, item.Kind, "ready", "数据库中没有同日期记录，可以写入。");
-            var fields = InspectExistingFields(existing.Pages[0], resolution, item);
-            if (fields.Conflicts.Count > 0)
+            var fieldChecks = InspectFieldChecks(
+                existing.Pages.Count == 0 ? null : existing.Pages[0],
+                resolution,
+                item);
+            if (fieldChecks.Any(field => field.Status == "exception"))
+                return new(item.Index, item.BusinessDate, item.Kind, "error",
+                    "部分解析值无法写入，请先修正异常字段。", fieldChecks);
+            if (fieldChecks.Any(field => field.Status == "confirm"))
                 return new(item.Index, item.BusinessDate, item.Kind, "existing",
-                    $"以下字段已有不同数据，需要覆盖：{string.Join("；", fields.Conflicts)}。");
+                    "部分字段与 Notion 现值不同，需要确认是否覆盖。", fieldChecks);
             return new(item.Index, item.BusinessDate, item.Kind, "ready",
-                fields.MissingKeys.Count > 0
-                    ? $"同日期记录存在，但可补写空字段：{string.Join("、", fields.MissingNames)}。"
-                    : "同日期记录的相关字段与本次输入一致，无需覆盖。");
+                existing.Pages.Count == 0
+                    ? "数据库中没有同日期记录，可以写入。"
+                    : fieldChecks.Any(field => field.Status == "new")
+                        ? "同日期记录存在，可补写数据库空字段。"
+                        : "同日期记录的相关字段与本次输入一致，无需覆盖。",
+                fieldChecks);
         }
 
         var existingFields = existing.Pages.Count == 1 && !request.OverwriteExisting
             ? InspectExistingFields(existing.Pages[0], resolution, item)
             : null;
-        if (existingFields?.Conflicts.Count > 0)
+        IReadOnlyDictionary<string, string>? fieldChoices = null;
+        request.FieldChoices?.TryGetValue(item.Index, out fieldChoices);
+        var unresolved = existingFields?.ConflictKeys
+            .Where(key => fieldChoices is null ||
+                          !fieldChoices.TryGetValue(key, out var choice) ||
+                          choice is not ("keep" or "use"))
+            .ToArray() ?? [];
+        if (unresolved.Length > 0)
             return new(item.Index, item.BusinessDate, item.Kind, "conflict",
-                $"以下字段已有不同数据，未覆盖：{string.Join("；", existingFields.Conflicts)}。确认覆盖后可替换已有值。");
+                $"以下字段尚未选择处理方式：{string.Join("、", unresolved.Select(ProductionMessageFields.Label))}。");
 
         string? monthlyPageId = null;
         string? yearlyPageId = null;
@@ -1150,6 +1164,15 @@ public sealed class NotionImportService : INotionImportService
                     pageProperties.TryGetValue(property.Name, out var payload))
                     missingProperties[property.Name] = payload;
             }
+            foreach (var key in existingFields.ConflictKeys.Where(key =>
+                         fieldChoices is not null &&
+                         fieldChoices.TryGetValue(key, out var choice) &&
+                         choice == "use"))
+            {
+                if (resolution.Properties.TryGetValue(key, out var property) &&
+                    pageProperties.TryGetValue(property.Name, out var payload))
+                    missingProperties[property.Name] = payload;
+            }
 
             var pageId = existing.Pages[0].GetProperty("id").GetString();
             if (string.IsNullOrWhiteSpace(pageId))
@@ -1158,8 +1181,8 @@ public sealed class NotionImportService : INotionImportService
 
             return new(item.Index, item.BusinessDate, item.Kind,
                 "updated",
-                existingFields.MissingKeys.Count > 0
-                    ? $"已补写空字段：{string.Join("、", existingFields.MissingNames)}。"
+                existingFields.MissingKeys.Count > 0 || existingFields.ConflictKeys.Count > 0
+                    ? "已按逐字段选择补写或保留数据。"
                     : "相关字段与本次输入一致，无需覆盖。");
         }
 
@@ -1377,6 +1400,16 @@ public sealed class NotionImportService : INotionImportService
             [resolution.TitleProperty] = TitleValue(BuildMessageTitle(item)),
             [resolution.DateProperty] = DateValue(item.BusinessDate)
         };
+        var missingValues = ProductionMessageFields.FieldsFor(item.Kind)
+            .Where(resolution.Properties.ContainsKey)
+            .Where(key => !item.Fields.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
+            .Select(key => resolution.Properties[key].Name)
+            .ToArray();
+        if (missingValues.Length > 0)
+        {
+            message = $"消息中未解析到 Notion 字段：{string.Join("、", missingValues)}。";
+            return false;
+        }
         var missingMappings = new List<string>();
         foreach (var pair in item.Fields)
         {
@@ -1569,10 +1602,15 @@ public sealed class NotionImportService : INotionImportService
         var missingKeys = new List<string>();
         var missingNames = new List<string>();
         var conflicts = new List<string>();
+        var conflictKeys = new List<string>();
         foreach (var (key, incoming) in item.Fields)
         {
             if (!resolution.Properties.TryGetValue(key, out var property) ||
-                property.Type != "number")
+                key is ProductionMessageFields.PlanMonth or
+                    ProductionMessageFields.MonthlyPlanRelation or
+                    ProductionMessageFields.MonthlySummaryRelation or
+                    ProductionMessageFields.YearlySummaryRelation ||
+                !TryBuildNotionProperty(property, key, incoming, out _, out _))
                 continue;
             var existing = ReadExistingValue(page, property);
             if (string.IsNullOrWhiteSpace(existing))
@@ -1582,16 +1620,63 @@ public sealed class NotionImportService : INotionImportService
             }
             else if (!ValuesMatch(existing, incoming, property.Type))
             {
+                conflictKeys.Add(key);
                 conflicts.Add(
                     $"{property.Name}：已有 {existing}，本次 {ProductionMessageFields.DisplayValue(key, incoming)}");
             }
         }
-        return new(missingKeys, missingNames, conflicts);
+        return new(missingKeys, missingNames, conflictKeys, conflicts);
+    }
+
+    private static IReadOnlyList<ProductionMessageFieldCheck> InspectFieldChecks(
+        JsonElement? page,
+        MessageSchemaResolution resolution,
+        ProductionMessageValue item)
+    {
+        var checks = new List<ProductionMessageFieldCheck>();
+        var keys = ProductionMessageFields.FieldsFor(item.Kind)
+            .Where(resolution.Properties.ContainsKey)
+            .Concat(item.Fields.Keys)
+            .Distinct(StringComparer.Ordinal);
+        foreach (var key in keys)
+        {
+            if (!resolution.Properties.TryGetValue(key, out var property) ||
+                key is ProductionMessageFields.PlanMonth or
+                    ProductionMessageFields.MonthlyPlanRelation or
+                    ProductionMessageFields.MonthlySummaryRelation or
+                    ProductionMessageFields.YearlySummaryRelation)
+                continue;
+            if (!item.Fields.TryGetValue(key, out var incoming) || string.IsNullOrWhiteSpace(incoming))
+            {
+                checks.Add(new(key, property.Name, property.Type, string.Empty, string.Empty,
+                    "exception", $"消息中未解析到 {property.Name} 的值"));
+                continue;
+            }
+            if (!TryBuildNotionProperty(property, key, incoming, out _, out var error))
+            {
+                checks.Add(new(key, property.Name, property.Type, incoming, string.Empty, "exception", $"{property.Name}{error}"));
+                continue;
+            }
+            var existing = page is null ? string.Empty : ReadExistingValue(page.Value, property);
+            var status = string.IsNullOrWhiteSpace(existing)
+                ? "new"
+                : ValuesMatch(existing, incoming, property.Type) ? "same" : "confirm";
+            checks.Add(new(
+                key,
+                property.Name,
+                property.Type,
+                incoming,
+                existing,
+                status,
+                status == "confirm" ? "与数据库现值不同" : string.Empty));
+        }
+        return checks;
     }
 
     private sealed record ExistingFieldInspection(
         IReadOnlyList<string> MissingKeys,
         IReadOnlyList<string> MissingNames,
+        IReadOnlyList<string> ConflictKeys,
         IReadOnlyList<string> Conflicts);
 
     private static string SummarizeExisting(

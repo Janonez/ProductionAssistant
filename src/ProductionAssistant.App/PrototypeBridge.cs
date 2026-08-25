@@ -78,9 +78,8 @@ internal sealed partial class PrototypeBridge
     private async Task<object?> DispatchAsync(string id, string operation, JsonElement payload, CancellationToken cancellationToken) =>
         operation switch
         {
-            "app.getOverview" => GetOverview(),
             "app.navigateNative" => Navigate(payload),
-            "production.parse" => Parse(payload),
+            "production.parse" => await ParseAsync(payload, cancellationToken),
             "production.check" => await ImportAsync(payload, checkOnly: true, cancellationToken),
             "production.write" => await ImportAsync(payload, checkOnly: false, cancellationToken),
             "production.getBindings" => GetBindings(),
@@ -129,18 +128,6 @@ internal sealed partial class PrototypeBridge
         return await AppServices.ReportCenter.RunAsync(startDate, endDate, progress, cancellationToken);
     }
 
-    private static object GetOverview()
-    {
-        var settings = NotionSettingsStore.Load();
-        return new
-        {
-            notionConfigured = !string.IsNullOrWhiteSpace(settings.Token),
-            productionMessageReady = IsBound(FindTarget(settings, ProductionMessageKinds.TowerDailyModuleKey)),
-            dailyWeldReady = IsBound(FindTarget(settings, "daily-weld-simulation")),
-            dailyReportJobs = DailyReportSettingsStore.LoadCatalog().Jobs.Count
-        };
-    }
-
     private object Navigate(JsonElement payload)
     {
         var tag = ReadString(payload, "tag");
@@ -150,15 +137,14 @@ internal sealed partial class PrototypeBridge
         return new { navigated = true };
     }
 
-    private static object Parse(JsonElement payload)
+    private static async Task<object> ParseAsync(JsonElement payload, CancellationToken cancellationToken)
     {
         var text = ReadString(payload, "text");
         if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("请先粘贴生产消息。");
         var defaultDate = ReadDate(payload, "defaultDate");
         var segments = ProductionMessageParser.Split(text, defaultDate);
         var batch = segments.Count > 1;
-        var settings = NotionSettingsStore.Load();
-        var drafts = segments.Select((segment, index) =>
+        var parsedDrafts = segments.Select((segment, index) =>
         {
             var draft = ProductionMessageParser.Parse(segment, index + 1, defaultDate, !batch);
             if (batch && !segment.DateWasExplicit)
@@ -169,12 +155,19 @@ internal sealed partial class PrototypeBridge
                 draft.StatusText = "待补日期";
                 draft.WarningText = "批量消息中的每一段都需要业务日期。";
             }
-            ApplyMappings(draft, settings);
-            ProductionMessageParser.ApplyMappedDatabaseFields(draft, segment.Text);
-            ProductionMessageParser.ValidateDatabaseMapping(draft);
-            return ToDto(draft);
+            return (Draft: draft, segment.Text);
         }).ToArray();
-        return drafts;
+        var settings = await RefreshProductionBindingsAsync(
+            NotionSettingsStore.Load(),
+            parsedDrafts.Select(item => item.Draft.Kind).ToHashSet(),
+            cancellationToken);
+        return parsedDrafts.Select(item =>
+        {
+            ApplyMappings(item.Draft, settings);
+            ProductionMessageParser.ApplyMappedDatabaseFields(item.Draft, item.Text);
+            ProductionMessageParser.ValidateDatabaseMapping(item.Draft);
+            return ToDto(item.Draft);
+        }).ToArray();
     }
 
     private static async Task<object> ImportAsync(
@@ -194,16 +187,30 @@ internal sealed partial class PrototypeBridge
             ApplyMappings(draft, settings);
             ProductionMessageParser.ValidateDatabaseMapping(draft);
         }
-        var values = drafts.Select(draft =>
-            ProductionMessageParser.TryCreateValue(draft, out var value, out _) ? value : null)
-            .Where(value => value is not null).Cast<ProductionMessageValue>().ToArray();
-        if (values.Length == 0) throw new InvalidOperationException("没有可写入的记录，请先修正日期、类型或关键数值。");
+        var converted = drafts.Select(draft =>
+        {
+            var succeeded = ProductionMessageParser.TryCreateValue(draft, out var value, out var message);
+            return new { draft.Index, Succeeded = succeeded, Value = value, Message = message };
+        }).ToArray();
+        var invalid = converted.Where(item => !item.Succeeded).ToArray();
+        if (invalid.Length > 0)
+            throw new InvalidOperationException("整批已停止：" + string.Join("；", invalid.Select(item => $"第 {item.Index} 条 {item.Message}")));
+        var values = converted.Select(item => item.Value!).ToArray();
 
         IReadOnlyDictionary<string, double>? monthlyPlans = null;
         if (payload.TryGetProperty("monthlyPlans", out var plansElement) && plansElement.ValueKind == JsonValueKind.Object)
             monthlyPlans = plansElement.EnumerateObject().ToDictionary(item => item.Name, item => item.Value.GetDouble(), StringComparer.Ordinal);
+        IReadOnlyDictionary<int, IReadOnlyDictionary<string, string>>? fieldChoices = null;
+        if (payload.TryGetProperty("fieldChoices", out var choicesElement) && choicesElement.ValueKind == JsonValueKind.Object)
+            fieldChoices = choicesElement.EnumerateObject()
+                .Select(item => (Parts: item.Name.Split(':', 2), Choice: item.Value.GetString() ?? string.Empty))
+                .Where(item => item.Parts.Length == 2 && int.TryParse(item.Parts[0], out _))
+                .GroupBy(item => int.Parse(item.Parts[0]))
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyDictionary<string, string>)group.ToDictionary(item => item.Parts[1], item => item.Choice, StringComparer.Ordinal));
         var result = await AppServices.Notion.ImportProductionMessagesAsync(
-            new ProductionMessageImportRequest(values, overwrite, monthlyPlans, checkOnly), cancellationToken);
+            new ProductionMessageImportRequest(values, overwrite, monthlyPlans, checkOnly, fieldChoices), cancellationToken);
         var requiredMonths = result.Items.Where(item => item.Status == "monthly_plan_required")
             .Select(item => item.BusinessDate.ToString("yyyy-MM")).Distinct().ToArray();
         return new
@@ -215,7 +222,8 @@ internal sealed partial class PrototypeBridge
                 item.Index,
                 businessDate = item.BusinessDate.ToString("yyyy-MM-dd"),
                 item.Status,
-                item.Message
+                item.Message,
+                fields = item.Fields
             }),
             requiredMonths
         };
@@ -307,6 +315,37 @@ internal sealed partial class PrototypeBridge
             if (yearly is not null) mapping[ProductionMessageFields.YearlySummaryRelation] = yearly.Name;
         }
         return new NotionTargetSettings { ModuleKey = moduleKey, ModuleName = moduleName, Id = source.Id, Name = source.Name, Path = source.Path, TitleProperty = title.Name, DateProperty = date?.Name ?? string.Empty, PropertyMappings = mapping };
+    }
+
+    private static async Task<NotionSettings> RefreshProductionBindingsAsync(
+        NotionSettings settings,
+        IReadOnlySet<ProductionMessageKind> kinds,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(settings.Token)) return settings;
+        var refreshed = new List<NotionTargetSettings>();
+        if (kinds.Contains(ProductionMessageKind.MaterialCutting) &&
+            FindTarget(settings, ProductionMessageKinds.CuttingModuleKey) is { } cutting)
+            refreshed.Add(await BuildBindingAsync(settings.Token,
+                new NotionDataSourceOption(cutting.Id, cutting.Name, cutting.Path),
+                cutting.ModuleKey, cutting.ModuleName, ProductionMessageKind.MaterialCutting,
+                false, string.Empty, string.Empty, cancellationToken));
+        if (kinds.Contains(ProductionMessageKind.TowerLineDaily) &&
+            FindTarget(settings, ProductionMessageKinds.TowerDailyModuleKey) is { } daily)
+            refreshed.Add(await BuildBindingAsync(settings.Token,
+                new NotionDataSourceOption(daily.Id, daily.Name, daily.Path),
+                daily.ModuleKey, daily.ModuleName, ProductionMessageKind.TowerLineDaily,
+                false,
+                FindTarget(settings, ProductionMessageKinds.TowerMonthlyModuleKey)?.Id ?? string.Empty,
+                FindTarget(settings, ProductionMessageKinds.TowerYearlyModuleKey)?.Id ?? string.Empty,
+                cancellationToken));
+        foreach (var target in refreshed)
+        {
+            var index = settings.Targets.FindIndex(item => item.ModuleKey == target.ModuleKey);
+            if (index >= 0) settings.Targets[index] = target;
+        }
+        if (refreshed.Count > 0) NotionSettingsStore.Save(settings);
+        return settings;
     }
 
     private static void AddDynamicPropertyMappings(

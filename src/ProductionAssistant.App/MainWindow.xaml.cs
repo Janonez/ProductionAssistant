@@ -1,7 +1,6 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using ProductionAssistant.Pages;
 
 namespace ProductionAssistant;
@@ -30,34 +29,19 @@ public sealed partial class MainWindow : Window
             presenter.PreferredMinimumWidth = 1100;
             presenter.PreferredMinimumHeight = 700;
         }
-        AppNavigation.SelectedItem = HomeNavigationItem;
-        NavigateTo("home");
-    }
 
-    private void PaneToggleButton_Click(object sender, RoutedEventArgs e) =>
-        AppNavigation.IsPaneOpen = !AppNavigation.IsPaneOpen;
-
-    private void AppNavigation_SelectionChanged(
-        NavigationView sender,
-        NavigationViewSelectionChangedEventArgs args)
-    {
-        if (args.IsSettingsSelected)
-        {
-            NavigateTo("settings");
-            return;
-        }
-
-        if (args.SelectedItemContainer?.Tag is not string tag)
-            return;
-
-        NavigateTo(tag);
+        ShellFrame.Navigate(typeof(PrototypePage), "navigation:plan-pdf");
+        NavigateTo("plan-pdf");
     }
 
     internal void NavigateTo(string tag)
     {
+        if (_currentTag == tag)
+            return;
+
+        _currentTag = tag;
         var pageType = tag switch
         {
-            "home" => typeof(PrototypePage),
             "daily-weld" => typeof(DailyWeldSimulationPage),
             "production-message" => typeof(PrototypePage),
             "plan-pdf" => typeof(PlanPdfExportPage),
@@ -65,23 +49,15 @@ public sealed partial class MainWindow : Window
             "daily-report" => typeof(PrototypePage),
             "report-center" => typeof(PrototypePage),
             "settings" => typeof(SettingsPage),
-            _ => typeof(HomePage)
+            _ => typeof(PlanPdfExportPage)
         };
 
-        var navigationItem = FindNavigationItem(tag);
-        AppNavigation.SelectedItem = tag == "settings" ? AppNavigation.SettingsItem : navigationItem;
+        var reactRoute = pageType == typeof(PrototypePage);
+        if (ShellFrame.Content is PrototypePage shellPage)
+            shellPage.NavigateToRoute(reactRoute ? tag : $"navigation:{tag}");
 
-        if (_currentTag != tag)
-        {
-            _currentTag = tag;
-            if (pageType == typeof(PrototypePage) && ContentFrame.Content is PrototypePage prototypePage)
-                prototypePage.NavigateToRoute(tag);
-            else
-                ContentFrame.Navigate(pageType, tag);
-        }
+        ContentFrame.Visibility = reactRoute ? Visibility.Collapsed : Visibility.Visible;
+        if (!reactRoute)
+            ContentFrame.Navigate(pageType, tag);
     }
-
-    private NavigationViewItem? FindNavigationItem(string tag) =>
-        AppNavigation.MenuItems.OfType<NavigationViewItem>()
-            .FirstOrDefault(item => item.Tag as string == tag);
 }

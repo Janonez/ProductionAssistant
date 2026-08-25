@@ -53,3 +53,4 @@ next-env.d.ts
 /artifacts/
 /.codex/
 /ProductionAssistant-v1.4.1-win-x64.zip
+/my_tests/

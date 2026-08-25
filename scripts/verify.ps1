@@ -31,6 +31,8 @@ try {
     try { npm.cmd run build; Assert-NativeSuccess 'ReportEditor build' } finally { Pop-Location }
     Push-Location $prototype
     try {
+        npm.cmd run lint:font-weights
+        Assert-NativeSuccess 'Prototype font-weight lint'
         npm.cmd test
         Assert-NativeSuccess 'Prototype tests'
         npm.cmd run build

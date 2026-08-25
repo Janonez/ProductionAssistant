@@ -1,4 +1,4 @@
-export type Route = 'home' | 'production-message' | 'daily-report' | 'report-center'
+export type Route = 'production-message' | 'daily-report' | 'report-center' | `navigation:${string}`
 
 export interface ReportCenterState { name: string; authenticated: boolean; credentialsConfigured: boolean; configPath: string; sourceRoot: string; outputRoot: string; reportUrl: string; username: string; devices: number }
 export interface ReportRunSummary { runId: string; startedAt: string; finishedAt: string; period: { startDate: string; endDate: string }; plannedReports: number; exportedReports: number; parsedReports: number; deviceCount: number; actualDataPoints: number; expectedDataPoints: number; summaryPath: string; warnings: string[] }
@@ -23,7 +23,8 @@ export interface Draft {
   warningText: string
   canWrite: boolean
 }
-export interface ImportItem { index: number; businessDate: string; status: string; message: string }
+export interface ImportField { key: string; name: string; propertyType: string; parsedValue: string; databaseValue: string; status: 'new' | 'same' | 'confirm' | 'exception'; message: string }
+export interface ImportItem { index: number; businessDate: string; status: string; message: string; fields?: ImportField[] }
 export interface ImportResult { succeeded: boolean; message: string; items: ImportItem[]; requiredMonths: string[] }
 export interface BindingTarget { bound: boolean; name: string; path: string }
 export interface BindingState {
@@ -34,10 +35,4 @@ export interface BindingState {
   towerYearly: BindingTarget
   sources: Array<{ id: string; name: string; path: string }>
   selected: Record<string, string>
-}
-export interface Overview {
-  notionConfigured: boolean
-  productionMessageReady: boolean
-  dailyWeldReady: boolean
-  dailyReportJobs: number
 }
