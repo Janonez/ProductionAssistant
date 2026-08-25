@@ -8,7 +8,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--status-warn-bg);
-  font-size: 13px;
+  font-size: var(--font-supporting);
 }
 
 .production-message-demo .pm-dialog-overlay {
@@ -29,9 +29,9 @@
   background: var(--bg-card);
 }
 
-.production-message-demo .pm-dialog h2 { margin: 0 0 8px; font-size: 16px; }
-.production-message-demo .pm-dialog p { margin: 0 0 18px; color: var(--text-secondary); font-size: 13px; }
-.production-message-demo .pm-dialog label { display: grid; gap: 7px; margin-top: 12px; color: var(--text-primary); font-size: 13px; }
+.production-message-demo .pm-dialog h2 { margin: 0 0 8px; font-size: var(--font-body); font-weight: var(--fw-semibold); }
+.production-message-demo .pm-dialog p { margin: 0 0 18px; color: var(--text-secondary); font-size: var(--font-control); }
+.production-message-demo .pm-dialog label { display: grid; gap: 7px; margin-top: 12px; color: var(--text-primary); font-size: var(--font-label); font-weight: var(--fw-semibold); }
 .production-message-demo .pm-dialog input { height: 42px; padding: 0 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); background: var(--input-bg); }
 .production-message-demo .pm-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .production-message-demo .pm-dialog-actions button { min-height: 40px; padding: 0 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-card); }
@@ -53,6 +53,12 @@
   background: rgb(254, 242, 242);
 }
 
+.production-message-demo .field-table-header .header-status,
+.production-message-demo .field-status {
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .production-message-demo .match-status-warning,
 .production-message-demo .match-status-warning .new-record-icon {
   color: var(--status-warn-text);
@@ -70,13 +76,13 @@
 
 .production-message-demo .match-status-copy {
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--font-supporting);
   font-weight: var(--fw-regular);
   line-height: 1.4;
 }
 
 .production-message-demo .new-record-icon {
-  font-size: 13px;
+  font-size: var(--font-supporting);
   font-weight: var(--fw-semibold);
 }
 
@@ -93,7 +99,7 @@
 .production-message-demo .conflict-section-title {
   margin-bottom: 8px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-label);
   font-weight: var(--fw-semibold);
 }
 
@@ -144,7 +150,7 @@
 
 .production-message-demo .conflict-options small {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-supporting);
 }
 
 .desktop-shell-content:has(.production-message-content) {
@@ -189,9 +195,47 @@
   background: var(--input-bg);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--font-control);
   font-weight: var(--fw-regular);
   box-shadow: none;
   opacity: 1;
   cursor: default;
 }
+
+/* Shared application type scale. Keep Demo structure intact; normalize only typography. */
+.production-message-demo .content-header h1 { font-size: var(--font-page-title); font-weight: var(--fw-semibold); }
+.production-message-demo .content-header p,
+.production-message-demo .pane-title p,
+.production-message-demo .review-empty p { font-size: var(--font-control); }
+.production-message-demo .pane-title h2,
+.production-message-demo .review-header h2,
+.production-message-demo .review-empty h2,
+.production-message-demo .complete-view h2 { font-size: var(--font-body); font-weight: var(--fw-semibold); }
+.production-message-demo .step,
+.production-message-demo .message-textarea,
+.production-message-demo .primary-button,
+.production-message-demo .field-input,
+.production-message-demo .field-name,
+.production-message-demo .database-value,
+.production-message-demo .template-config-button { font-size: var(--font-control); }
+.production-message-demo .review-summary,
+.production-message-demo .identity-field label,
+.production-message-demo .field-table-header,
+.production-message-demo .pill,
+.production-message-demo .conflict-message,
+.production-message-demo .conflict-message strong,
+.production-message-demo .conflict-options label,
+.production-message-demo .conflict-options small,
+.production-message-demo .review-footer-text,
+.production-message-demo .match-status,
+.production-message-demo .match-status-copy,
+.production-message-demo .complete-view p { font-size: var(--font-supporting); }
+.production-message-demo .identity-field label,
+.production-message-demo .field-table-header,
+.production-message-demo .pill,
+.production-message-demo .conflict-message strong { font-weight: var(--fw-semibold); }
+.production-message-demo .message-textarea,
+.production-message-demo .field-input,
+.production-message-demo .field-name,
+.production-message-demo .database-value,
+.production-message-demo .template-config-button { font-weight: var(--fw-regular); }
