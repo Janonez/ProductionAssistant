@@ -205,7 +205,7 @@ public sealed class ProductionMessageDraft : INotifyPropertyChanged
                     !string.IsNullOrWhiteSpace(databaseField))
                     databaseFieldName = databaseField;
                 var value = Fields.TryGetValue(key, out var fieldValue)
-                    ? ProductionMessageFields.DisplayValue(key, fieldValue)
+                    ? fieldValue.Trim()
                     : "—";
                 return new ProductionMessageFieldPreview(
                     key,
@@ -357,12 +357,23 @@ public sealed record ProductionMessageImportRequest(
     IReadOnlyList<ProductionMessageValue> Items,
     bool OverwriteExisting,
     IReadOnlyDictionary<string, double>? CuttingMonthlyPlans = null,
-    bool CheckOnly = false);
+    bool CheckOnly = false,
+    IReadOnlyDictionary<int, IReadOnlyDictionary<string, string>>? FieldChoices = null);
 
 public sealed record ProductionMessageWriteResult(
     int Index,
     DateTime BusinessDate,
     ProductionMessageKind Kind,
+    string Status,
+    string Message,
+    IReadOnlyList<ProductionMessageFieldCheck>? Fields = null);
+
+public sealed record ProductionMessageFieldCheck(
+    string Key,
+    string Name,
+    string PropertyType,
+    string ParsedValue,
+    string DatabaseValue,
     string Status,
     string Message);
 

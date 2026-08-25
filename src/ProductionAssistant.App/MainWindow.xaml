@@ -8,74 +8,13 @@
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="222" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-        <Grid x:Name="AppTitleBar" Margin="0,0,140,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="48" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Button x:Name="PaneToggleButton" Width="48" Height="48"
-                    Padding="0" Background="Transparent"
-                    BorderThickness="0" IsTabStop="False"
-                    Click="PaneToggleButton_Click">
-                <FontIcon FontSize="16" Glyph="&#xE700;" />
-            </Button>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="9">
-                <Image Width="28" Height="28" VerticalAlignment="Center"
-                       Source="ms-appx:///Assets/production-assistant-logo.png" />
-                <TextBlock VerticalAlignment="Center" FontSize="14"
-                           FontWeight="SemiBold" Text="生产助手" />
-            </StackPanel>
-        </Grid>
-
-        <NavigationView
-            Grid.Row="1"
-            x:Name="AppNavigation"
-            IsBackButtonVisible="Collapsed"
-            IsPaneToggleButtonVisible="False"
-            IsSettingsVisible="True"
-            IsTitleBarAutoPaddingEnabled="False"
-            OpenPaneLength="220"
-            CompactPaneLength="48"
-            PaneDisplayMode="Auto"
-            ExpandedModeThresholdWidth="980"
-            SelectionChanged="AppNavigation_SelectionChanged">
-            <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="HomeNavigationItem" Content="首页" Tag="home">
-                    <NavigationViewItem.Icon>
-                        <SymbolIcon Symbol="Home" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItemHeader Content="文件处理" />
-                <NavigationViewItem x:Name="PlanPdfNavigationItem"
-                                    Content="挂网计划 PDF 导出" Tag="plan-pdf">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE749;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem x:Name="ProductionMeetingNavigationItem"
-                                    Content="生产会资料拆分" Tag="production-meeting">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A5;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItemHeader Content="数据同步" />
-                <NavigationViewItem x:Name="DailyWeldNavigationItem"
-                                    Content="每日焊接数据模拟" Tag="daily-weld">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE9D2;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem x:Name="ProductionMessageNavigationItem"
-                                    Content="生产消息 Notion 入库" Tag="production-message">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A4;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItemHeader Content="自动化任务" />
-                <NavigationViewItem x:Name="ReportCenterNavigationItem"
-                                    Content="报表中心" Tag="report-center">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE9D5;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem x:Name="DailyReportNavigationItem"
-                                    Content="日报推送" Tag="daily-report">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE724;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
-            </NavigationView.MenuItems>
-            <Frame x:Name="ContentFrame" />
-        </NavigationView>
+        <Frame x:Name="ShellFrame" Grid.RowSpan="2" Grid.ColumnSpan="2" />
+        <Frame x:Name="ContentFrame" Grid.Row="1" Grid.Column="1" Visibility="Collapsed" />
+        <Grid x:Name="AppTitleBar" Grid.Column="1" Margin="0,0,140,0" />
     </Grid>
 </Window>

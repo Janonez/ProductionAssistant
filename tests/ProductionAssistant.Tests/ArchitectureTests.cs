@@ -41,6 +41,7 @@ public sealed class ArchitectureTests
         Assert.True(PrototypeBridgeProtocol.IsNavigationAllowed("production-message"));
         Assert.True(PrototypeBridgeProtocol.IsNavigationAllowed("daily-report"));
         Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("filesystem"));
+        Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("home"));
         Assert.Equal("输入无效", PrototypeBridgeProtocol.SafeError(new InvalidOperationException("输入无效")));
         Assert.DoesNotContain("secret", PrototypeBridgeProtocol.SafeError(new Exception("secret")));
     }
@@ -51,7 +52,7 @@ public sealed class ArchitectureTests
         Assert.True(PrototypeBridgeProtocol.IsCurrentNavigation(
             "daily-report", "current", "daily-report", "current"));
         Assert.False(PrototypeBridgeProtocol.IsCurrentNavigation(
-            "home", "old", "daily-report", "current"));
+            "production-message", "old", "daily-report", "current"));
         Assert.False(PrototypeBridgeProtocol.IsCurrentNavigation(
             "daily-report", string.Empty, "daily-report", string.Empty));
     }
@@ -115,5 +116,40 @@ public sealed class ArchitectureTests
         Assert.Contains(draft.PreviewFields, field => field.Label == "检验备注" && field.Value == "已复核");
         Assert.True(ProductionMessageParser.TryCreateValue(draft, out var value, out _));
         Assert.Equal("已复核", value.Fields[dynamicKey]);
+    }
+
+    [Fact]
+    public void Tower_output_keeps_daily_sets_and_sections_separate_from_annual_totals()
+    {
+        var date = new DateTime(2026, 8, 24);
+        var draft = ProductionMessageParser.Parse(
+            ProductionMessageParser.Split("""
+                **2026‑08‑24 塔筒产线：**
+                （一）板材、型材入库情况
+                板材：当日：0 吨；当月：0 吨；全年累计：4803.41 吨
+                型材：当日：0 吨；当月：0 吨；全年累计：0 吨
+                （二）下料情况
+                当日：0 吨；当月：0 吨；全年累计：4803.41 吨
+                （三）焊接情况
+                当日：43.22吨；当月：914.63吨；全年累计：4178.06吨
+                （四）产出情况：
+                当日：0套；当月：0套；全年累计：2套（八节）
+                """, date).Single(),
+            1,
+            date,
+            false);
+        draft.SetDatabaseFieldMappings(new Dictionary<ProductionMessageKind, IReadOnlyDictionary<string, string>>
+        {
+            [ProductionMessageKind.TowerLineDaily] = new Dictionary<string, string>
+            {
+                [ProductionMessageFields.DailyOutput] = "产出（套）",
+                [ProductionMessageFields.OutputSections] = "产出（节）"
+            }
+        });
+
+        Assert.Equal("0套", draft.Fields[ProductionMessageFields.DailyOutput]);
+        Assert.Equal("0节", draft.Fields[ProductionMessageFields.OutputSections]);
+        Assert.Contains(draft.PreviewFields, field => field.Label == "产出（套）" && field.Value == "0套");
+        Assert.Contains(draft.PreviewFields, field => field.Label == "产出（节）" && field.Value == "0节");
     }
 }

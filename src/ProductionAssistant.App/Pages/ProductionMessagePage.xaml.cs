@@ -22,8 +22,8 @@ public sealed partial class ProductionMessagePage : Page
             [ProductionMessageFields.ProfileInStock] = ["型材入库", "型材入库量", "型材"],
             [ProductionMessageFields.Cutting] = ["下料量", "下料"],
             [ProductionMessageFields.Welding] = ["焊接量", "焊接"],
-            [ProductionMessageFields.DailyOutput] = ["产出情况（套）", "当日产出", "日产出", "当日产量"],
-            [ProductionMessageFields.OutputSections] = ["产出情况（节）", "产出节数", "产出", "完成节数", "节数", "出塔节数"],
+            [ProductionMessageFields.DailyOutput] = ["产出情况（套）", "产出（套）", "当日产出", "日产出", "当日产量"],
+            [ProductionMessageFields.OutputSections] = ["产出情况（节）", "产出（节）", "产出节数", "产出", "完成节数", "节数", "出塔节数"],
             [ProductionMessageFields.RawMessage] = ["原始消息", "原文", "消息原文"],
             [ProductionMessageFields.MessageType] = ["消息类型", "类型"],
             [ProductionMessageFields.ParserVersion] = ["解析器版本", "解析版本"]

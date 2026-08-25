@@ -8,20 +8,10 @@
                   HorizontalAlignment="Stretch"
                   VerticalAlignment="Stretch"
                   NavigationCompleted="PrototypeWebView_NavigationCompleted" />
-        <Grid x:Name="LoadingLayer" Padding="32">
-            <StackPanel VerticalAlignment="Top" Spacing="8">
-                <TextBlock x:Name="LoadingTitle"
-                           FontFamily="Segoe UI Variable, Microsoft YaHei UI"
-                           FontSize="34" FontWeight="Bold" Text="今天要处理什么？" />
-                <TextBlock x:Name="LoadingSubtitle" Foreground="#78847E" FontSize="16"
-                           Text="常用生产流程集中在一个清爽、可预期的工作区。" />
-                <StackPanel Margin="0,20,0,0" Orientation="Horizontal" Spacing="10">
-                    <ProgressRing Width="20" Height="20" IsActive="True"
-                                  Foreground="#4A8065" />
-                    <TextBlock VerticalAlignment="Center" Foreground="#78847E"
-                               FontSize="14" Text="正在加载页面…" />
-                </StackPanel>
-            </StackPanel>
+        <Grid x:Name="LoadingLayer" Background="#FAFAF9">
+            <ProgressRing Width="20" Height="20" IsActive="True"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Foreground="#78716C" />
         </Grid>
         <Border x:Name="LoadError"
                 Visibility="Collapsed"

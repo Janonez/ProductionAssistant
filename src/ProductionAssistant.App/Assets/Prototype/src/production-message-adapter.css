@@ -1,0 +1,197 @@
+.production-message-demo .pm-notice {
+  color: var(--status-warn-text);
+}
+
+.production-message-demo .review-empty .pm-notice {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--status-warn-bg);
+  font-size: 13px;
+}
+
+.production-message-demo .pm-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--text-primary) 35%, transparent);
+}
+
+.production-message-demo .pm-dialog {
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.production-message-demo .pm-dialog h2 { margin: 0 0 8px; font-size: 16px; }
+.production-message-demo .pm-dialog p { margin: 0 0 18px; color: var(--text-secondary); font-size: 13px; }
+.production-message-demo .pm-dialog label { display: grid; gap: 7px; margin-top: 12px; color: var(--text-primary); font-size: 13px; }
+.production-message-demo .pm-dialog input { height: 42px; padding: 0 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); background: var(--input-bg); }
+.production-message-demo .pm-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.production-message-demo .pm-dialog-actions button { min-height: 40px; padding: 0 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-card); }
+
+.production-message-demo .pill-new,
+.production-message-demo .pill-same,
+.production-message-demo .pill-unchecked {
+  color: var(--text-secondary);
+  background: rgb(245, 245, 244);
+}
+
+.production-message-demo .pill-confirm {
+  color: var(--text-primary);
+  background: rgb(249, 220, 164);
+}
+
+.production-message-demo .pill-exception {
+  color: var(--status-warn-text);
+  background: rgb(254, 242, 242);
+}
+
+.production-message-demo .match-status-warning,
+.production-message-demo .match-status-warning .new-record-icon {
+  color: var(--status-warn-text);
+}
+
+.production-message-demo .match-status-neutral,
+.production-message-demo .match-status-neutral .match-check {
+  color: var(--text-secondary);
+}
+
+.production-message-demo .match-status-error,
+.production-message-demo .match-status-error .new-record-icon {
+  color: var(--status-warn-text);
+}
+
+.production-message-demo .match-status-copy {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: var(--fw-regular);
+  line-height: 1.4;
+}
+
+.production-message-demo .new-record-icon {
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+}
+
+.production-message-demo .conflict-panel {
+  border-color: color-mix(in srgb, rgb(249, 220, 164) 72%, var(--status-warn-text));
+  background: rgb(249, 220, 164);
+  box-shadow: none;
+}
+
+.production-message-demo .conflict-section {
+  margin-top: 18px;
+}
+
+.production-message-demo .conflict-section-title {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: var(--fw-semibold);
+}
+
+.production-message-demo .conflict-section .conflict-panel {
+  margin: 0 0 8px;
+}
+
+.production-message-demo .conflict-message,
+.production-message-demo .conflict-message strong {
+  color: var(--text-primary);
+}
+
+.production-message-demo .conflict-options {
+  gap: 8px;
+}
+
+.production-message-demo .conflict-options label {
+  min-width: 112px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 58%);
+  white-space: normal;
+}
+
+.production-message-demo .conflict-options label:has(input:checked) {
+  border-color: color-mix(in srgb, var(--status-warn-text) 45%, transparent);
+  background: rgb(255 255 255 / 88%);
+}
+
+.production-message-demo .conflict-options label:focus-within {
+  outline: none;
+  box-shadow: none;
+}
+
+.production-message-demo .conflict-options input:focus,
+.production-message-demo .conflict-options input:focus-visible {
+  outline: 2px solid var(--status-warn-text);
+  outline-offset: 2px;
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+.production-message-demo .conflict-options label > span {
+  display: grid;
+  gap: 1px;
+}
+
+.production-message-demo .conflict-options small {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.desktop-shell-content:has(.production-message-content) {
+  overflow: hidden;
+}
+
+.desktop-shell-content .production-message-content,
+.desktop-shell-content .production-message-content > .app-shell,
+.production-message-content > .app-shell > .main-content {
+  height: calc(100vh - 48px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.production-message-content > .app-shell > .main-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.production-message-content .content-header {
+  flex: none;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 0 22px;
+  background: var(--bg-page);
+}
+
+.production-message-content .production-message-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.production-message-content .template-config-button {
+  height: 44px;
+  padding: 0 14px;
+  flex: none;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: var(--fw-regular);
+  box-shadow: none;
+  opacity: 1;
+  cursor: default;
+}

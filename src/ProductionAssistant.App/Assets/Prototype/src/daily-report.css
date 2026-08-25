@@ -266,14 +266,14 @@
 .choice-popover button svg { width: 15px; flex: none; }
 .picker-empty { display: block; padding: 12px 10px; color: #8a9690; }
 .time-trigger { justify-content: flex-start; color: #26352e; }
-.time-trigger > span { margin-right: auto; font-weight: 650; }
+.time-trigger > span { margin-right: auto; font-weight: var(--fw-semibold); }
 .time-trigger > svg:first-child { color: #24845b; margin-right: 9px; }
 .time-popover { width: 220px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 10px; }
 .time-column > strong { display: block; padding: 3px 0 8px; text-align: center; color: #75827b; font-size: 11px; }
 .time-column > div { height: 210px; overflow-y: auto; display: grid; gap: 3px; scrollbar-width: thin; }
 .time-column button { height: 34px; border: 0; border-radius: 8px; background: transparent; color: #34423b; }
 .time-column button:hover { background: #edf6f1; color: #417158; }
-.time-column button.selected { background: #168359; color: #fff; font-weight: 750; }
+.time-column button.selected { background: #168359; color: #fff; font-weight: var(--fw-bold); }
 .time-popover .time-done { grid-column: 1 / -1; border: 0; border-radius: 9px; background: #e9f5ee; color: #14764e; padding: 8px; font-weight: 700; }
 .preview-actions .date-picker, .preview-actions .date-trigger { width: 190px; }
 .save-state {
@@ -334,7 +334,7 @@
   padding: 2px 7px;
   margin: 0 2px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
   user-select: all;
 }
 .field-icon {
@@ -393,10 +393,9 @@
 }
 .report-preview pre {
   white-space: pre-wrap;
-  font:
-    14px/1.65 "Segoe UI Variable",
-    "Microsoft YaHei UI",
-    sans-serif;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.65;
   background: white;
   border: 1px solid #e0e7e3;
   border-radius: 12px;
@@ -891,10 +890,10 @@
   color: #fff;
   background: #b8c2bd;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: var(--fw-bold);
   transition: background .3s cubic-bezier(.16, 1, .3, 1), box-shadow .3s cubic-bezier(.16, 1, .3, 1), transform .3s cubic-bezier(.16, 1, .3, 1);
 }
-.daily-progress li > strong { overflow: hidden; width: 100%; color: #52615a; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.daily-progress li > strong { overflow: hidden; width: 100%; color: #52615a; font-size: 13px; font-weight: var(--fw-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .daily-progress li.done > span { background: #4a8065; }
 .daily-progress li.done > strong { color: #4a8065; }
 .daily-progress li.active > span { background: #8fc3a7; box-shadow: 0 0 0 5px #edf7f1; transform: scale(1.06); }
@@ -955,7 +954,7 @@
   gap: 8px;
   color: #52615a;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
 }
 .daily-focus-card input,
 .daily-focus-card select {
@@ -989,7 +988,7 @@
 .focus-actions .ghost { min-height: 44px; }
 .progressive-template { grid-template-columns: minmax(0, 4fr) minmax(280px, 1fr); margin-top: 0; }
 .editor-column { min-width: 0; }
-.editor-column > label { display: block; height: 26px; color: #52615a; font-size: 13px; font-weight: 650; }
+.editor-column > label { display: block; height: 26px; color: #52615a; font-size: 13px; font-weight: var(--fw-semibold); }
 .progressive-template .report-editor { height: 374px; min-height: 374px; overflow-y: auto; resize: none; background: #fff; }
 .progressive-template .report-editor .ProseMirror { min-height: 336px; }
 .progressive-field-picker {
@@ -1018,7 +1017,7 @@
   color: #4a8065;
   background: #e6f4ec;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: var(--fw-bold);
 }
 .insert-field-button:hover:not(:disabled) { background: #dff0e7; box-shadow: 0 8px 20px #4a80651a; }
 .insert-field-button:disabled { opacity: .55; cursor: not-allowed; }
@@ -1051,11 +1050,11 @@
   border-top: 1px solid #e3e9e5;
   color: #52615a;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: var(--fw-semibold);
 }
 .system-variable button { min-height: 32px; padding: 0 10px; border: 0; border-radius: 9px; color: #4a8065; background: #e6f4ec; font-size: 13px; font-weight: 700; }
 .preview-action-group { display: flex; align-items: flex-end; gap: 10px; }
-.preview-action-group label { width: 190px; display: grid; gap: 7px; color: #52615a; font-size: 13px; font-weight: 650; }
+.preview-action-group label { width: 190px; display: grid; gap: 7px; color: #52615a; font-size: 13px; font-weight: var(--fw-semibold); }
 .daily-complete { text-align: center; }
 .complete-mark { width: 58px; height: 58px; display: grid; place-items: center; margin: 0 auto 18px; border-radius: 18px; color: #fff; background: #4a8065; box-shadow: 0 12px 30px #4a806533; }
 .complete-mark svg { width: 28px; }

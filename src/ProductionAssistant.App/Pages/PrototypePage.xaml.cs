@@ -10,7 +10,7 @@ public sealed partial class PrototypePage : Page
 {
     private const string PrototypeHost = "prototype.production-assistant.local";
     private PrototypeBridge? _bridge;
-    private string _route = "home";
+    private string _route = "production-message";
     private string _navigationId = string.Empty;
     private bool _initialized;
     private CancellationTokenSource? _readyTimeout;
@@ -32,17 +32,11 @@ public sealed partial class PrototypePage : Page
     {
         _route = route switch
         {
+            { } navigationRoute when navigationRoute.StartsWith("navigation:", StringComparison.Ordinal) => navigationRoute,
             "production-message" => "production-message",
             "daily-report" => "daily-report",
             "report-center" => "report-center",
-            _ => "home"
-        };
-        (LoadingTitle.Text, LoadingSubtitle.Text) = _route switch
-        {
-            "production-message" => ("生产消息入库", "解析消息，核对结果，检查数据库后再安全写入 Notion。"),
-            "daily-report" => ("日报推送", "集中管理日报任务、消息内容和推送状态。"),
-            "report-center" => ("报表中心", "自动导出加工日报并生成周期实开台时汇总。"),
-            _ => ("今天要处理什么？", "常用生产流程集中在一个清爽、可预期的工作区。")
+            _ => "production-message"
         };
         _navigationId = Guid.NewGuid().ToString("N");
         if (_initialized)
@@ -67,6 +61,8 @@ public sealed partial class PrototypePage : Page
         try
         {
             await PrototypeWebView.EnsureCoreWebView2Async(await PrototypeWebViewRuntime.GetEnvironmentAsync());
+            PrototypeWebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
+            PrototypeWebView.CoreWebView2.Settings.IsPinchZoomEnabled = false;
             var assetFolder = Path.GetDirectoryName(indexPath)!;
             PrototypeWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 PrototypeHost,

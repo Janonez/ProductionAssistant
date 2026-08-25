@@ -4,7 +4,6 @@ public static class PrototypeBridgeProtocol
 {
     public static readonly IReadOnlySet<string> AllowedOperations = new HashSet<string>(StringComparer.Ordinal)
     {
-        "app.getOverview",
         "app.navigateNative",
         "production.parse",
         "production.check",
@@ -35,7 +34,6 @@ public static class PrototypeBridgeProtocol
 
     public static readonly IReadOnlySet<string> AllowedNavigationTags = new HashSet<string>(StringComparer.Ordinal)
     {
-        "home",
         "plan-pdf",
         "production-meeting",
         "daily-weld",

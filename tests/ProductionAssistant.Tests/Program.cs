@@ -306,11 +306,11 @@ real.SetDatabaseFieldMappings(new Dictionary<ProductionMessageKind, IReadOnlyDic
 });
 var previewFields = real.PreviewFields.ToDictionary(field => field.Key);
 Assert(previewFields[ProductionMessageFields.SheetInStock].Label == "板材入库情况（吨）",
-    "预览未使用数据库字段名。");
-Assert(previewFields[ProductionMessageFields.SheetInStock].Value == "0",
-    "预览未显示输入数字。");
-Assert(previewFields[ProductionMessageFields.Welding].Value == "40.12",
-    "预览未去除数值单位。");
+    "预览应使用当前 Notion 映射字段名。");
+Assert(previewFields[ProductionMessageFields.SheetInStock].Value == "0吨",
+    "预览未显示输入数值和单位。");
+Assert(previewFields[ProductionMessageFields.Welding].Value == "40.12吨",
+    "预览未保留数值单位。");
 Console.WriteLine($"Real report: kind={real.Kind}, date={real.BusinessDate:yyyy-MM-dd}, canWrite={real.CanWrite}");
 Console.WriteLine($"Real fields: {string.Join(", ", real.Fields.Select(pair => $"{pair.Key}={pair.Value}"))}");
 Console.WriteLine($"Real warning: {real.WarningText}");
