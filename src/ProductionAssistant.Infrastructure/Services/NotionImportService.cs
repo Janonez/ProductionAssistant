@@ -11,6 +11,7 @@ namespace ProductionAssistant.Services;
 public sealed class NotionImportService : INotionImportService
 {
     private const string ApiVersion = "2026-03-11";
+    private const string WeldTitleSuffix = " 焊接";
     private const int MaxTransientRetries = 2;
     private readonly HttpClient _client;
 
@@ -714,11 +715,15 @@ public sealed class NotionImportService : INotionImportService
                 }
             }
         };
-        dayFilters.AddRange(orderedValues.Select(value =>
+        dayFilters.AddRange(orderedValues.SelectMany(value => new[]
+        {
+            value.Date.ToString("yyyy-MM-dd"),
+            BuildWeldTitle(value.Date)
+        }).Distinct(StringComparer.Ordinal).Select(title =>
             (object)new
             {
                 property = dayTitle!.Name,
-                title = new { equals = value.Date.ToString("yyyy-MM-dd") }
+                title = new { equals = title }
             }));
         var dayPages = await QueryDataSourceAsync(
             settings.Token, dayTarget.Id, new { or = dayFilters }, cancellationToken);
@@ -728,7 +733,7 @@ public sealed class NotionImportService : INotionImportService
             {
                 var date = ReadDate(page, dayDate!.Name);
                 return string.IsNullOrWhiteSpace(date)
-                    ? ReadTitle(page, dayTitle!.Name)
+                    ? NormalizeWeldTitleDate(ReadTitle(page, dayTitle!.Name))
                     : date;
             })
             .Where(group => !string.IsNullOrWhiteSpace(group.Key))
@@ -783,7 +788,7 @@ public sealed class NotionImportService : INotionImportService
             progress?.Report(new(index, orderedValues.Length, value.Date, "正在同步日记录"));
             var properties = new Dictionary<string, object>
             {
-                [dayTitle!.Name] = TitleValue(dateKey),
+                [dayTitle!.Name] = TitleValue(BuildWeldTitle(value.Date)),
                 [dayQuantity!.Name] = new { number = value.Quantity },
                 [dayDate!.Name] = DateValue(value.Date),
                 [dayToMonth!.Name] = RelationValue(monthPageId),
@@ -1569,6 +1574,13 @@ public sealed class NotionImportService : INotionImportService
         => item.Kind == ProductionMessageKind.MaterialCutting
             ? $"{item.BusinessDate:yyyy-MM-dd} 下料"
             : $"{item.BusinessDate:yyyy-MM-dd} {ProductionMessageKinds.Display(item.Kind)}";
+
+    private static string BuildWeldTitle(DateTime date) => $"{date:yyyy-MM-dd}{WeldTitleSuffix}";
+
+    private static string NormalizeWeldTitleDate(string title) =>
+        title.EndsWith(WeldTitleSuffix, StringComparison.Ordinal)
+            ? title[..^WeldTitleSuffix.Length]
+            : title;
 
     private static string ReadExistingValue(JsonElement page, NotionPropertyOption property)
     {

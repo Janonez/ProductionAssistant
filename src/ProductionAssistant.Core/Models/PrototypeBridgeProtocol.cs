@@ -5,12 +5,24 @@ public static class PrototypeBridgeProtocol
     public static readonly IReadOnlySet<string> AllowedOperations = new HashSet<string>(StringComparer.Ordinal)
     {
         "app.navigateNative",
+        "settings.open",
+        "settings.close",
+        "settings.saveConnection",
+        "settings.refreshDataSources",
+        "settings.saveNotification",
+        "settings.testNotification",
+        "settings.saveNotificationRules",
         "production.parse",
         "production.check",
         "production.write",
         "production.getBindings",
         "production.saveBindings",
         "production.cancel",
+        "weld.getState",
+        "weld.generate",
+        "weld.saveBinding",
+        "weld.check",
+        "weld.write",
         "daily.list",
         "daily.create",
         "daily.get",
@@ -18,8 +30,6 @@ public static class PrototypeBridgeProtocol
         "daily.saveTemplate",
         "daily.getProperties",
         "daily.addField",
-        "daily.saveCredentials",
-        "daily.checkConnection",
         "daily.preview",
         "daily.test",
         "daily.sendToday",
@@ -39,8 +49,7 @@ public static class PrototypeBridgeProtocol
         "daily-weld",
         "production-message",
         "daily-report",
-        "report-center",
-        "settings"
+        "report-center"
     };
 
     public static bool IsAllowed(string? operation) =>
@@ -48,6 +57,13 @@ public static class PrototypeBridgeProtocol
 
     public static bool IsNavigationAllowed(string? tag) =>
         !string.IsNullOrWhiteSpace(tag) && AllowedNavigationTags.Contains(tag);
+
+    public static bool IsTrustedPrototypeSource(string? source) =>
+        Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        uri.IsDefaultPort &&
+        uri.Host == "prototype.production-assistant.local" &&
+        uri.AbsolutePath == "/index.html";
 
     public static bool IsCurrentNavigation(
         string? route,
@@ -61,5 +77,5 @@ public static class PrototypeBridgeProtocol
     public static string SafeError(Exception exception) =>
         exception is InvalidOperationException
             ? exception.Message[..Math.Min(exception.Message.Length, 500)]
-            : "操作未完成，请重试或返回原版界面查看详细状态。";
+            : "操作未完成，请重试或检查当前模块配置。";
 }

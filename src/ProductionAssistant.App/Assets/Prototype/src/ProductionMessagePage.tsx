@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, RefreshCw } from "lucide-react";
 import { invoke } from "./bridge";
 import DatePicker from "./DatePicker";
 import type { BindingState, Draft, ImportField, ImportResult } from "./types";
+import { ThreeStepProgress } from "./ThreeStepProgress";
 
 type BusyState = "parse" | "check" | "write";
 type ConflictChoice = "keep" | "use";
@@ -61,8 +62,6 @@ export default function ProductionMessagePage() {
   const parsed = drafts.length > 0;
   const needsReparse = parsed && rawMessage !== parsedMessage;
   const locked = Boolean(busy);
-  const firstDraft = drafts[0];
-
   useEffect(() => {
     invoke<BindingState>("production.getBindings").then(setBindings).catch((cause) => setBindingError(errorText(cause)));
   }, []);
@@ -93,8 +92,8 @@ export default function ProductionMessagePage() {
     } finally { setBusy((current) => current === "parse" ? undefined : current); }
   }
 
-  async function handleDateChange(value: string) {
-    const nextDrafts = drafts.map((draft, index) => index === 0 ? { ...draft, businessDate: value, canWrite: Boolean(value), warningText: value ? "" : draft.warningText } : draft);
+  async function handleDateChange(draftIndex: number, value: string) {
+    const nextDrafts = drafts.map((draft) => draft.index === draftIndex ? { ...draft, businessDate: value, canWrite: Boolean(value), warningText: value ? "" : draft.warningText } : draft);
     setDrafts(nextDrafts); setCheckResult(undefined); setConflictChoices({});
     if (nextDrafts.every((draft) => draft.canWrite)) await check(nextDrafts);
   }
@@ -139,7 +138,6 @@ export default function ProductionMessagePage() {
     setConflictChoices({}); setCompleted(false); setError("");
   }
 
-  const invalidDrafts = drafts.filter((draft) => !draft.canWrite);
   const fields = useMemo(() => drafts.flatMap((draft) => {
     const checked = checkResult?.items.find((item) => item.index === draft.index)?.fields;
     if (checked?.length) return checked
@@ -180,39 +178,48 @@ export default function ProductionMessagePage() {
           {(bindingError || bindings?.configured === false) && <div className="pm-notice" role="alert">{bindingError || "Notion 数据源尚未配置，请先完成数据源绑定。"}</div>}
         </div> : <>
           <div className="review-header"><h2>解析结果</h2><div className="review-summary"><span>新增<strong>{summary.newFields}</strong></span><i>·</i><span>一致<strong>{summary.same}</strong></span><i>·</i><span>待确认<strong>{summary.confirm}</strong></span><i>·</i><span>异常<strong>{summary.exception}</strong></span></div></div>
-          <div className="identity-section">
-            <div className="identity-field"><DatePicker label="日期" value={firstDraft?.businessDate || ""} disabled={locked} onChange={handleDateChange} /></div>
-            <div className="identity-field"><label>业务 / 产线</label><input className="field-input" value={firstDraft?.typeDisplay || ""} readOnly disabled={locked} /></div>
-          </div>
-          <MatchStatus busy={busy === "check"} result={checkResult} error={error} needsReparse={needsReparse} invalidCount={invalidDrafts.length} fieldStatuses={fields.map((field) => field.status)} />
-          <div className="data-title">数据字段</div>
-          <div className="field-table">
-            <div className="field-table-header"><div>字段</div><div>本次解析值</div><div>数据库值</div><div className="header-status">状态</div></div>
-            {fields.map((field) => {
-              const parsed = splitUnit(field.parsedValue, field.propertyType === "number" ? FIELD_UNITS[field.key] || "" : "");
-              const choiceKey = `${field.draft.index}:${field.key}`;
-              return <div className="field-row" key={choiceKey}>
-                <div className="field-name">{drafts.length > 1 ? `${field.draft.index}. ${field.name}` : field.name}</div>
-                <div className="field-editor"><div className="input-unit-wrap"><input
-                  className="field-input compact-input"
-                  value={parsed.value}
-                  disabled={locked}
-                  aria-invalid={field.status === "exception"}
-                  onChange={(event) => handleFieldChange(field.draft.index, field.key, withUnit(event.target.value, parsed.unit))}
-                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-                />{parsed.unit && <span>{parsed.unit}</span>}</div></div>
-                <div className="database-value">{field.databaseValue || "—"}</div>
-                <div className="field-status">{field.status !== "unchecked" && <span className={`pill pill-${field.status}`} title={field.message}>{fieldStatus(field.status)}</span>}</div>
-              </div>;
+          <div className="date-groups">
+            {drafts.map((draft) => {
+              const draftFields = fields.filter((field) => field.draft.index === draft.index);
+              const draftConfirmFields = draftFields.filter((field) => field.status === "confirm");
+              const draftResult = checkResult ? { ...checkResult, items: checkResult.items.filter((item) => item.index === draft.index) } : undefined;
+              return <section className="date-group" data-business-date={draft.businessDate} key={draft.index}>
+                <div className="identity-section">
+                  <div className="identity-field"><DatePicker label="日期" value={draft.businessDate || ""} disabled={locked} onChange={(value) => handleDateChange(draft.index, value)} /></div>
+                  <div className="identity-field"><label>业务 / 产线</label><input className="field-input" value={draft.typeDisplay || ""} readOnly disabled={locked} /></div>
+                </div>
+                <MatchStatus busy={busy === "check"} result={draftResult} error={error} needsReparse={needsReparse} invalidCount={draft.canWrite ? 0 : 1} fieldStatuses={draftFields.map((field) => field.status)} />
+                <div className="data-title">数据字段</div>
+                <div className="field-table">
+                  <div className="field-table-header"><div>字段</div><div>本次解析值</div><div>数据库值</div><div className="header-status">状态</div></div>
+                  {draftFields.map((field) => {
+                    const parsed = splitUnit(field.parsedValue, field.propertyType === "number" ? FIELD_UNITS[field.key] || "" : "");
+                    const choiceKey = `${field.draft.index}:${field.key}`;
+                    return <div className="field-row" key={choiceKey}>
+                      <div className="field-name">{field.name}</div>
+                      <div className="field-editor"><div className="input-unit-wrap"><input
+                        className="field-input compact-input"
+                        value={parsed.value}
+                        disabled={locked}
+                        aria-invalid={field.status === "exception"}
+                        onChange={(event) => handleFieldChange(field.draft.index, field.key, withUnit(event.target.value, parsed.unit))}
+                        onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                      />{parsed.unit && <span>{parsed.unit}</span>}</div></div>
+                      <div className="database-value">{field.databaseValue || "—"}</div>
+                      <div className="field-status">{field.status !== "unchecked" && <span className={`pill pill-${field.status}`} title={field.message}>{fieldStatus(field.status)}</span>}</div>
+                    </div>;
+                  })}
+                </div>
+                {draftConfirmFields.length > 0 && <section className="conflict-section" aria-label={`${draft.businessDate} 待确认字段`}><div className="conflict-section-title">待确认字段</div>{draftConfirmFields.map((field) => {
+                  const choiceKey = `${field.draft.index}:${field.key}`;
+                  return <div className="conflict-panel" key={choiceKey}><div className="conflict-message"><strong>{field.name}</strong><span>原值与新值不同，请选择保留项。</span></div><div className="conflict-options">
+                    <label><input type="radio" name={`conflict-${choiceKey}`} checked={conflictChoices[choiceKey] === "keep"} onChange={() => setConflictChoices((current) => ({ ...current, [choiceKey]: "keep" }))} /><span><small>原值</small><strong>{field.databaseValue || "—"}</strong></span></label>
+                    <label><input type="radio" name={`conflict-${choiceKey}`} checked={conflictChoices[choiceKey] === "use"} onChange={() => setConflictChoices((current) => ({ ...current, [choiceKey]: "use" }))} /><span><small>新值</small><strong>{field.parsedValue || "—"}</strong></span></label>
+                  </div></div>;
+                })}</section>}
+              </section>;
             })}
           </div>
-          {confirmFields.length > 0 && <section className="conflict-section" aria-labelledby="conflict-section-title"><div className="conflict-section-title" id="conflict-section-title">待确认字段</div>{confirmFields.map((field) => {
-            const choiceKey = `${field.draft.index}:${field.key}`;
-            return <div className="conflict-panel" key={choiceKey}><div className="conflict-message"><strong>{drafts.length > 1 ? `${field.draft.index}. ${field.name}` : field.name}</strong><span>原值与新值不同，请选择保留项。</span></div><div className="conflict-options">
-                <label><input type="radio" name={`conflict-${choiceKey}`} checked={conflictChoices[choiceKey] === "keep"} onChange={() => setConflictChoices((current) => ({ ...current, [choiceKey]: "keep" }))} /><span><small>原值</small><strong>{field.databaseValue || "—"}</strong></span></label>
-                <label><input type="radio" name={`conflict-${choiceKey}`} checked={conflictChoices[choiceKey] === "use"} onChange={() => setConflictChoices((current) => ({ ...current, [choiceKey]: "use" }))} /><span><small>新值</small><strong>{field.parsedValue || "—"}</strong></span></label>
-              </div></div>;
-          })}</section>}
           <div className="review-footer"><span className="review-footer-text">{drafts.length > 1 ? `本次共 ${drafts.length} 条消息，将整批写入 Notion。` : "确认后将把本次解析结果写入 Notion。"}</span><button className="primary-button confirm-button" disabled={!canSubmit} onClick={() => write()}>{busy === "write" ? "正在入库…" : "确认入库"}</button></div>
         </>}
       </section>
@@ -257,6 +264,5 @@ function MonthlyPlanDialog({ months, values, setValues, close, submit }: { month
 
 function PageTitle() { return <header className="content-header"><div><h1>生产消息入库</h1><p>解析生产消息，检查已有数据并确认入库</p></div><button type="button" className="template-config-button" disabled title="解析消息模板配置将在后续接入">模板配置</button></header>; }
 function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
-  const steps = [{ number: 1, title: "录入消息" }, { number: 2, title: "解析确认" }, { number: 3, title: "完成" }];
-  return <div className="step-bar">{steps.map((step, index) => { const state = step.number < current ? "done" : step.number === current ? "active" : "pending"; return <Fragment key={step.number}><div className={`step step-${state}`}><div className={`step-circle ${state}`}>{state === "done" ? <Check /> : step.number}</div><span>{step.title}</span></div>{index < steps.length - 1 && <div className={`step-line ${step.number < current ? "done" : step.number === current ? "transition" : "pending"}`} />}</Fragment>; })}</div>;
+  return <ThreeStepProgress current={current} titles={["录入消息", "解析确认", "完成"]} label="生产消息入库进度" />;
 }

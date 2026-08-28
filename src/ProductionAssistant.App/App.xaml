@@ -7,21 +7,17 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
-            <Color x:Key="BrandGreen">#087A59</Color>
-            <SolidColorBrush x:Key="BrandGreenBrush" Color="{StaticResource BrandGreen}" />
-            <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Offset="0" Color="#B8E9F3F1" />
-                <GradientStop Offset="0.48" Color="#A8F4F1F8" />
-                <GradientStop Offset="1" Color="#B8E8F0F7" />
-            </LinearGradientBrush>
-            <SolidColorBrush x:Key="GlassCardBrush" Color="#BFFFFFFF" />
-            <SolidColorBrush x:Key="GlassStrongBrush" Color="#E0FFFFFF" />
-            <SolidColorBrush x:Key="GlassSidebarBrush" Color="#C8F5FAF8" />
-            <SolidColorBrush x:Key="CardBorderBrush" Color="#A8FFFFFF" />
-            <SolidColorBrush x:Key="MutedTextBrush" Color="#60706A" />
-            <SolidColorBrush x:Key="NavSelectedBrush" Color="#B8DDEFE7" />
-            <SolidColorBrush x:Key="NavHoverBrush" Color="#80FFFFFF" />
-            <SolidColorBrush x:Key="GlassSubtleBrush" Color="#72FFFFFF" />
+            <Color x:Key="BrandAccent">#C2703D</Color>
+            <SolidColorBrush x:Key="BrandAccentBrush" Color="{StaticResource BrandAccent}" />
+            <SolidColorBrush x:Key="PageBackgroundBrush" Color="#FAFAF9" />
+            <SolidColorBrush x:Key="GlassCardBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="GlassStrongBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="GlassSidebarBrush" Color="#FAFAF9" />
+            <SolidColorBrush x:Key="CardBorderBrush" Color="#E7E5E4" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="#78716C" />
+            <SolidColorBrush x:Key="NavSelectedBrush" Color="#F5EBE3" />
+            <SolidColorBrush x:Key="NavHoverBrush" Color="#F5F5F4" />
+            <SolidColorBrush x:Key="GlassSubtleBrush" Color="#F5F5F4" />
             <Style x:Key="SidebarButtonStyle" TargetType="Button">
                 <Setter Property="Background" Value="Transparent" />
                 <Setter Property="BorderBrush" Value="#70FFFFFF" />
@@ -40,16 +36,6 @@
             <Style x:Key="StatCardStyle" TargetType="Border" BasedOn="{StaticResource CardStyle}">
                 <Setter Property="BorderThickness" Value="1,3,1,1" />
                 <Setter Property="Padding" Value="17,14" />
-            </Style>
-            <Style x:Key="SettingsEntryButtonStyle" TargetType="Button">
-                <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                <Setter Property="MinHeight" Value="76" />
-                <Setter Property="Padding" Value="16,12" />
-                <Setter Property="Background" Value="{StaticResource GlassCardBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="12" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>

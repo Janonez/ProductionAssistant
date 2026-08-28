@@ -96,6 +96,12 @@
   margin-top: 18px;
 }
 
+.production-message-demo .date-group + .date-group {
+  margin-top: 28px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border-soft);
+}
+
 .production-message-demo .conflict-section-title {
   margin-bottom: 8px;
   color: var(--text-primary);

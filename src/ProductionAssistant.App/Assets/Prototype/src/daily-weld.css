@@ -1,0 +1,95 @@
+.production-message-demo .daily-weld-page{padding-bottom:64px;color:var(--text-primary)}
+.production-message-demo .weld-plan-card,.production-message-demo .weld-preview{border:1px solid var(--border-subtle);border-radius:var(--radius-lg);background:var(--bg-card)}
+.production-message-demo .weld-plan-card{max-width:760px;margin:0 auto;padding:28px}
+.production-message-demo .weld-section-heading h2,.production-message-demo .weld-preview-heading h2{margin:0 0 6px;font-size:var(--font-body);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-section-heading p,.production-message-demo .weld-preview-heading p{margin:0;color:var(--text-secondary);font-size:var(--font-control);line-height:1.5}
+.production-message-demo .weld-fields{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0 18px}
+.production-message-demo .weld-field,.production-message-demo .daily-weld-page .date-picker{display:grid;grid-template-rows:20px 44px;align-content:start;gap:8px;color:var(--text-secondary);font-size:var(--font-label);font-weight:var(--fw-medium)}
+.production-message-demo .weld-field>span,.production-message-demo .daily-weld-page .date-picker-label{display:block;margin:0;font-size:var(--font-label);font-weight:var(--fw-medium);line-height:20px}
+.production-message-demo .daily-weld-page .date-picker-trigger,.production-message-demo .numeric-input{box-sizing:border-box;width:100%;height:44px;min-height:44px;max-height:44px;border:1px solid var(--input-border);border-radius:var(--radius-sm);corner-shape:squircle;background:var(--input-bg)}
+.production-message-demo .daily-weld-page .date-picker-trigger{padding:0 14px;color:var(--text-primary);font-size:var(--font-control);font-weight:var(--fw-regular)}
+.production-message-demo .daily-weld-page .date-picker-trigger:hover,.production-message-demo .daily-weld-page .date-picker-trigger-open{border-color:var(--input-border-hover);background:var(--bg-card)}
+.production-message-demo .daily-weld-page button:focus-visible,.production-message-demo .daily-weld-page input:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.production-message-demo .numeric-input{display:flex;align-items:center;overflow:hidden}
+.production-message-demo .numeric-input:focus-within{border-color:var(--input-border-focus);background:var(--bg-card)}
+.production-message-demo .numeric-input input{width:100%;min-width:0;height:100%;padding:0 14px;border:0;outline:0;background:transparent;color:var(--text-primary);font-size:var(--font-control);font-variant-numeric:tabular-nums}
+.production-message-demo .daily-weld-page .numeric-input input:focus,.production-message-demo .daily-weld-page .numeric-input input:focus-visible{outline:none;box-shadow:none;caret-color:var(--text-primary)}
+.production-message-demo .numeric-input span{padding:0 14px 0 8px;color:var(--text-secondary);font-size:var(--font-label);white-space:nowrap;cursor:default;pointer-events:none;user-select:none}
+.production-message-demo .weld-method-note{display:grid;gap:4px;padding:15px 16px;border-radius:var(--radius-sm);background:var(--status-info-bg)}
+.production-message-demo .weld-method-note strong{font-size:var(--font-label);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-method-note span{color:var(--text-secondary);font-size:var(--font-label);line-height:1.5}
+.production-message-demo .weld-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
+.production-message-demo .weld-actions.split{justify-content:space-between}
+.production-message-demo .weld-actions .secondary,.production-message-demo .weld-preview-heading .secondary{min-height:42px;padding:0 16px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font-size:var(--font-control);cursor:pointer}
+.production-message-demo .weld-preview{width:100%;max-width:760px;margin:0 auto;padding:24px}
+.production-message-demo .weld-preview-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:18px}
+.production-message-demo .weld-preview-heading .secondary{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.production-message-demo .weld-preview-heading .secondary svg{width:17px}
+.production-message-demo .weld-table-wrap{max-height:450px;overflow:auto;border:1px solid var(--border-subtle);border-radius:var(--radius-md)}
+.production-message-demo .weld-table-wrap table{width:100%;border-collapse:collapse;font-size:var(--font-label);font-variant-numeric:tabular-nums}
+.production-message-demo .weld-table-wrap th{position:sticky;top:0;z-index:1;padding:12px 16px;border-bottom:1px solid var(--border-subtle);background:var(--status-info-bg);color:var(--text-secondary);font-weight:var(--fw-medium);text-align:left}
+.production-message-demo .weld-table-wrap td{height:54px;padding:7px 16px;border-bottom:1px solid var(--border-subtle)}
+.production-message-demo .weld-table-wrap tr:last-child td{border-bottom:0}
+.production-message-demo .weld-table-wrap tbody tr:hover{background:var(--status-info-bg)}
+.production-message-demo .weld-table-wrap .numeric-input{width:132px;height:38px}
+.production-message-demo .weld-day-pill{display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;background:var(--status-info-bg);color:var(--text-secondary);font-size:var(--font-label);font-weight:var(--fw-medium)}
+.production-message-demo .weld-summary{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 4px 0;color:var(--text-secondary);font-size:var(--font-label)}
+.production-message-demo .weld-summary strong{color:var(--text-primary);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-summary em{margin-left:8px;font-style:normal;font-weight:var(--fw-medium)}
+.production-message-demo .weld-summary .mismatch,.production-message-demo .weld-notice.error{color:var(--status-warn-text)}
+.production-message-demo .weld-notice{max-width:760px;margin:0 auto 16px;padding:12px 14px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--status-info-bg);font-size:var(--font-label);line-height:1.5}
+.production-message-demo .weld-write-progress{margin-top:14px;color:var(--text-secondary);font-size:var(--font-label);text-align:right}
+.production-message-demo .weld-dialog-field{display:grid;gap:7px;margin-top:12px;color:var(--text-primary);font-size:var(--font-label);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-dialog-field .form-picker{position:relative}
+.production-message-demo .weld-dialog-field .picker-trigger{display:flex;align-items:center;justify-content:space-between;width:100%;height:44px;padding:0 14px;border:1px solid var(--input-border);border-radius:var(--radius-sm);background:var(--input-bg);color:var(--text-primary)}
+.production-message-demo .weld-dialog-field .picker-trigger:hover{border-color:var(--input-border-hover);background:var(--bg-card)}
+.production-message-demo .weld-dialog-field .picker-trigger.open,.production-message-demo .weld-dialog-field .picker-trigger:focus-visible{border-color:var(--brand);outline:none;background:var(--bg-card);box-shadow:0 0 0 3px var(--brand-soft)}
+.production-message-demo .weld-dialog-field .picker-placeholder{color:var(--text-secondary)}
+.production-message-demo .weld-dialog-field .picker-popover{z-index:30;width:100%;max-height:280px;overflow-y:auto;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--bg-card);box-shadow:0 14px 36px rgba(41,37,36,.16);scrollbar-color:var(--input-border-hover) transparent}
+.production-message-demo .weld-dialog-field .choice-popover button{min-height:40px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-primary);font-size:var(--font-label);font-weight:var(--fw-regular)}
+.production-message-demo .weld-dialog-field .choice-popover button:hover{background:var(--brand-soft);color:var(--brand-hover)}
+.production-message-demo .weld-dialog-field .choice-popover button:focus-visible{outline:2px solid var(--brand);outline-offset:-2px;background:var(--brand-soft);color:var(--brand-hover)}
+.production-message-demo .weld-dialog-field .choice-popover button.selected{background:var(--brand-soft);color:var(--brand-hover);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-settings-overlay{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:28px;background:color-mix(in srgb,var(--text-primary) 38%,transparent);backdrop-filter:blur(2px);animation:weld-overlay-in 140ms ease-out both}
+.production-message-demo .weld-settings-dialog{display:grid;grid-template-columns:210px minmax(0,1fr);width:min(900px,100%);height:min(610px,calc(100vh - 56px));overflow:hidden;border:1px solid var(--border-subtle);border-radius:var(--radius-lg);corner-shape:squircle;background:var(--bg-card);box-shadow:0 18px 48px rgba(41,37,36,.18)}
+.production-message-demo .weld-settings-nav{padding:26px 14px;border-right:1px solid var(--border-subtle);background:var(--bg-page)}
+.production-message-demo .weld-settings-nav h2{margin:0 12px 24px;font-size:var(--font-body);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-settings-nav nav{display:grid;gap:6px}
+.production-message-demo .weld-settings-nav button{display:flex;align-items:center;gap:10px;width:100%;height:42px;padding:0 12px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-secondary);font-size:var(--font-control);text-align:left;cursor:pointer}
+.production-message-demo .weld-settings-nav button:hover{background:var(--status-info-bg);color:var(--text-primary)}
+.production-message-demo .weld-settings-nav button.active{background:var(--border-subtle);color:var(--text-primary);font-weight:var(--fw-medium)}
+.production-message-demo .weld-settings-nav svg{width:18px;height:18px;stroke-width:1.8}
+.production-message-demo .weld-settings-main{position:relative;min-width:0;overflow:hidden;padding:44px 40px 32px;animation:weld-settings-in 170ms cubic-bezier(.2,.8,.2,1) both}
+.production-message-demo .weld-settings-close{position:absolute;top:18px;right:18px;display:grid;width:36px;height:36px;place-items:center;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text-primary);cursor:pointer}
+.production-message-demo .weld-settings-close:hover{background:var(--status-info-bg)}
+.production-message-demo .weld-settings-close svg{width:19px}
+.production-message-demo .weld-settings-heading{padding-right:40px}
+.production-message-demo .weld-settings-heading h3{margin:0 0 8px;font-size:var(--font-body);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-settings-heading p{max-width:58ch;margin:0;color:var(--text-secondary);font-size:var(--font-control);line-height:1.55}
+.production-message-demo .weld-rule-list{margin:30px 0 0}
+.production-message-demo .weld-rule-list>div{display:grid;grid-template-columns:132px 1fr;gap:18px;padding:18px 0;border-bottom:1px solid var(--border-subtle);font-size:var(--font-control)}
+.production-message-demo .weld-rule-list dt{color:var(--text-primary);font-weight:var(--fw-medium)}
+.production-message-demo .weld-rule-list dd{margin:0;color:var(--text-secondary)}
+.production-message-demo .weld-business-binding{margin-top:28px;padding:22px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);corner-shape:squircle;background:var(--bg-card)}
+.production-message-demo .weld-business-title{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:18px;border-bottom:1px solid var(--border-subtle)}
+.production-message-demo .weld-business-title h4{margin:0 0 4px;font-size:var(--font-body);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-business-title p{margin:0;color:var(--text-secondary);font-size:var(--font-label)}
+.production-message-demo .weld-business-title>span{padding:4px 9px;border-radius:999px;background:var(--status-info-bg);color:var(--text-secondary);font-size:var(--font-label);font-weight:var(--fw-medium)}
+.production-message-demo .weld-business-title>span.bound{background:var(--brand-soft);color:var(--brand-hover)}
+.production-message-demo .weld-binding-help{margin:14px 0 0;color:var(--text-secondary);font-size:var(--font-label);line-height:1.55}
+.production-message-demo .weld-settings-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
+.production-message-demo .weld-settings-actions button,.production-message-demo .pm-dialog-actions button{min-height:44px;padding:0 16px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);corner-shape:squircle;background:var(--bg-card);color:var(--text-primary);font-size:var(--font-control);cursor:pointer}
+.production-message-demo .weld-settings-actions .primary-button,.production-message-demo .pm-dialog-actions .primary-button{border-color:var(--brand);background:var(--brand);color:var(--bg-card);font-weight:var(--fw-semibold)}
+.production-message-demo .weld-settings-actions .primary-button:hover:not(:disabled),.production-message-demo .pm-dialog-actions .primary-button:hover:not(:disabled){border-color:var(--brand-hover);background:var(--brand-hover);color:var(--bg-card)}
+.production-message-demo .weld-settings-actions button:disabled,.production-message-demo .pm-dialog-actions button:disabled{cursor:not-allowed;opacity:.55}
+.production-message-demo .weld-confirm-dialog{border-radius:var(--radius-lg);corner-shape:squircle;box-shadow:0 18px 48px rgba(41,37,36,.18)}
+.production-message-content:has(.daily-weld-page) .template-config-button{cursor:pointer;transition:transform 120ms ease,border-color 120ms ease,background-color 120ms ease}
+.production-message-content:has(.daily-weld-page) .template-config-button:hover:not(:disabled){border-color:var(--input-border-hover);background:var(--status-info-bg)}
+.production-message-content:has(.daily-weld-page) .template-config-button:active:not(:disabled){transform:scale(.96)}
+.production-message-content:has(.daily-weld-page) .template-config-button:focus-visible{border-color:var(--brand);outline:2px solid var(--brand-soft);outline-offset:2px}
+.production-message-content:has(.daily-weld-page) .template-config-button:disabled{cursor:not-allowed;opacity:.55}
+.production-message-demo .weld-complete{margin:0}
+@keyframes weld-overlay-in{from{opacity:0}to{opacity:1}}
+@keyframes weld-settings-in{from{opacity:.75;transform:scale(.985) translateY(5px)}to{opacity:1;transform:none}}
+@media(max-width:1050px){.production-message-demo .weld-fields{grid-template-columns:1fr}.production-message-demo .weld-summary{align-items:flex-start;flex-direction:column}.production-message-demo .weld-settings-dialog{grid-template-columns:178px minmax(0,1fr)}.production-message-demo .weld-settings-main{padding-inline:28px}}
+@media(prefers-reduced-motion:reduce){.production-message-demo .daily-weld-page *,.production-message-demo .weld-settings-overlay,.production-message-demo .weld-settings-main,.production-message-content:has(.daily-weld-page) .template-config-button{scroll-behavior:auto!important;animation:none!important;transition-duration:.01ms!important}}

@@ -32,6 +32,7 @@ internal sealed partial class PrototypeBridge
     {
         var job = FindDailyJob(payload);
         var notion = NotionSettingsStore.Load();
+        var notification = NotificationSettingsStore.Load();
         var scheduler = await DailyReportTaskScheduler.GetStatusAsync(job.Id, job.SendTime);
         return new
         {
@@ -40,10 +41,11 @@ internal sealed partial class PrototypeBridge
             schedulingAvailable = DailyReportTaskScheduler.IsSchedulingAvailable,
             validated = IsDailyValidated(job),
             job.DraftTemplate, job.DraftTemplateDocument,
-            credentialMask = "••••••••（已保存）",
-            webhookSaved = !string.IsNullOrWhiteSpace(job.EncryptedWebhook),
-            secretSaved = !string.IsNullOrWhiteSpace(job.EncryptedSecret),
-            job.DingTalkConnected, job.DingTalkStatus, job.DingTalkCheckedAt,
+            notificationConfigured = notification.DingTalkEnabled &&
+                !string.IsNullOrWhiteSpace(notification.EncryptedWebhook) &&
+                !string.IsNullOrWhiteSpace(notification.EncryptedSecret),
+            notificationConnected = notification.DingTalkConnected,
+            notificationStatus = notification.DingTalkStatus,
             schedulerInstalled = scheduler.Installed, schedulerMessage = scheduler.Message,
             pagePaths = DailyReportPresentation.PagePaths(notion.CachedDataSources),
             sources = notion.CachedDataSources.Select(source => new { source.Id, source.Name, source.Path }),
@@ -126,30 +128,6 @@ internal sealed partial class PrototypeBridge
             new(source.Id, source.Name, property.Id, property.Name, property.Type));
         DailyReportSettingsStore.SaveJob(job);
         return new { field = DailyFieldDto(job, job.Fields.First(field => field.Placeholder == placeholder)) };
-    }
-
-    private static async Task<object> SaveDailyCredentialsAsync(JsonElement payload)
-    {
-        var job = FindDailyJob(payload);
-        var webhook = ReadString(payload, "webhook");
-        var secret = ReadString(payload, "secret");
-        if (string.IsNullOrWhiteSpace(webhook) && string.IsNullOrWhiteSpace(secret))
-            return new { saved = true };
-        await InvalidateDailyJobAsync(job);
-        DailyReportSettingsStore.SaveJob(job, webhook, secret);
-        return new { saved = true };
-    }
-
-    private static async Task<object> CheckDailyConnectionAsync(JsonElement payload, CancellationToken cancellationToken)
-    {
-        var job = FindDailyJob(payload);
-        var result = await DailyReports.CheckConnectionAsync(
-            DailyReportSettingsStore.ReadWebhook(job), cancellationToken);
-        job.DingTalkConnected = result.Succeeded;
-        job.DingTalkStatus = result.Message;
-        job.DingTalkCheckedAt = DateTimeOffset.Now;
-        DailyReportSettingsStore.SaveJob(job);
-        return new { result.Succeeded, result.Message, job.DingTalkCheckedAt };
     }
 
     private static async Task<object> PreviewDailyReportAsync(JsonElement payload, CancellationToken cancellationToken)
@@ -257,8 +235,12 @@ internal sealed partial class PrototypeBridge
     private static (string Step, string Message)? DailyMissingStep(DailyReportJob job)
     {
         if (string.IsNullOrWhiteSpace(job.Name)) return ("basics", "请先填写任务名称。");
-        if (string.IsNullOrWhiteSpace(job.EncryptedWebhook) || string.IsNullOrWhiteSpace(job.EncryptedSecret)) return ("credentials", "请先保存钉钉机器人配置。");
-        if (job.DingTalkConnected != true) return ("credentials", "请先测试钉钉机器人连接。");
+        var notification = NotificationSettingsStore.Load();
+        if (!notification.DingTalkEnabled || string.IsNullOrWhiteSpace(notification.EncryptedWebhook) ||
+            string.IsNullOrWhiteSpace(notification.EncryptedSecret))
+            return ("notification", "请先在系统设置中完成通知渠道配置。");
+        if (notification.DingTalkConnected != true)
+            return ("notification", "请先在系统设置中测试钉钉通知。");
         if (!IsDailyValidated(job)) return ("template", "请先生成预览并完成测试发送。");
         return null;
     }
@@ -269,12 +251,14 @@ internal sealed partial class PrototypeBridge
         var missing = DailyMissingStep(job);
         var enabled = DailyReportTaskScheduler.IsSchedulingAvailable && job.IsEnabled;
         var status = enabled && !schedulerInstalled ? "schedule-error" : enabled ? "enabled" :
-            missing?.Step is "basics" or "credentials" ? "incomplete" : !IsDailyValidated(job) ? "pending-test" : "ready";
+            missing?.Step is "basics" or "notification" ? "incomplete" : !IsDailyValidated(job) ? "pending-test" : "ready";
+        var notification = NotificationSettingsStore.Load();
         return new
         {
             job.Id, job.Name, job.SendTime, isEnabled = enabled, status, schedulerMessage,
             schedulingAvailable = DailyReportTaskScheduler.IsSchedulingAvailable,
-            dingTalkStatus = job.DingTalkConnected == true ? "连接正常" : string.IsNullOrWhiteSpace(job.EncryptedWebhook) ? "未配置机器人" : "连接待检测",
+            dingTalkStatus = notification.DingTalkConnected == true ? "全局通知正常" :
+                string.IsNullOrWhiteSpace(notification.EncryptedWebhook) ? "全局通知未配置" : "全局通知待检测",
             lastRun = last is null ? "暂无运行记录" : $"{last.StartedAt:MM-dd HH:mm} · {(last.Succeeded ? "成功" : "失败")}",
             missingStep = missing?.Step, missingMessage = missing?.Message
         };

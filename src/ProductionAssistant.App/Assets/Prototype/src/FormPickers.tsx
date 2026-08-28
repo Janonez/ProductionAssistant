@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3 } from "lucide-react";
 import { formatDate, monthGrid, parseDate, yearGrid } from "./calendar";
 
-export function ChoicePicker({ value, options, placeholder, disabled, onChange }: { value: string; options: { value: string; label: string }[]; placeholder: string; disabled?: boolean; onChange: (value: string) => void }) {
+export function ChoicePicker({ value, options, placeholder, disabled, ariaLabel, onChange }: { value: string; options: { value: string; label: string }[]; placeholder: string; disabled?: boolean; ariaLabel?: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
   const selected = options.find(option => option.value === value);
   return <div className="form-picker">
-    <button type="button" className={`picker-trigger ${open ? "open" : ""}`} disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}><span className={selected ? "" : "picker-placeholder"}>{selected?.label || placeholder}</span><ChevronDown /></button>
-    {open && <><button type="button" className="picker-backdrop" aria-label="关闭选项" onClick={() => setOpen(false)} /><motion.div className="picker-popover choice-popover" role="listbox" initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0, transitionEnd: { transform: "none" } }} transition={{ duration: .12 }}>
+    <button type="button" className={`picker-trigger ${open ? "open" : ""}`} disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}><span className={selected ? "" : "picker-placeholder"}>{selected?.label || placeholder}</span><ChevronDown /></button>
+    {open && <><button type="button" className="picker-backdrop" aria-label="关闭选项" onClick={() => setOpen(false)} /><motion.div className="picker-popover choice-popover" role="listbox" initial={reduceMotion ? false : { opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0, transitionEnd: { transform: "none" } }} transition={{ duration: reduceMotion ? 0 : .12 }}>
       {options.map(option => <button type="button" role="option" aria-selected={option.value === value} className={option.value === value ? "selected" : ""} key={option.value} onClick={() => { onChange(option.value); setOpen(false) }}><span>{option.label}</span>{option.value === value && <Check />}</button>)}
       {!options.length && <span className="picker-empty">暂无可选项</span>}
     </motion.div></>}

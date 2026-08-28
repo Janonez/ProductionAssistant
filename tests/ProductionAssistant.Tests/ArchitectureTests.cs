@@ -29,19 +29,54 @@ public sealed class ArchitectureTests
     }
 
     [Fact]
+    public void Simulation_keeps_low_monthly_totals_non_negative()
+    {
+        var rows = WeldSimulationService.Generate(16, 2026, 8, 22, new Random(42));
+
+        Assert.Equal(16, rows.Sum(row => row.Quantity));
+        Assert.All(rows, row => Assert.True(row.Quantity >= 0));
+    }
+
+    [Fact]
+    public void Weld_notion_title_includes_the_business_name()
+    {
+        var titleBuilder = typeof(NotionImportService).GetMethod(
+            "BuildWeldTitle",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var titleNormalizer = typeof(NotionImportService).GetMethod(
+            "NormalizeWeldTitleDate",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.Equal("2026-08-01 焊接", titleBuilder?.Invoke(null, [new DateTime(2026, 8, 1)]));
+        Assert.Equal("2026-08-01", titleNormalizer?.Invoke(null, ["2026-08-01 焊接"]));
+        Assert.Equal("2026-08-01", titleNormalizer?.Invoke(null, ["2026-08-01"]));
+    }
+
+    [Fact]
     public void Prototype_bridge_rejects_unknown_operations()
     {
         Assert.True(PrototypeBridgeProtocol.IsAllowed("production.parse"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("weld.generate"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("weld.write"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("app.navigateNative"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.list"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.test"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.sendToday"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("settings.open"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("settings.saveNotification"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed("filesystem.read"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed(string.Empty));
         Assert.True(PrototypeBridgeProtocol.IsNavigationAllowed("production-message"));
         Assert.True(PrototypeBridgeProtocol.IsNavigationAllowed("daily-report"));
+        Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("settings"));
         Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("filesystem"));
         Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("home"));
+        Assert.True(PrototypeBridgeProtocol.IsTrustedPrototypeSource(
+            "https://prototype.production-assistant.local/index.html?route=daily-weld"));
+        Assert.False(PrototypeBridgeProtocol.IsTrustedPrototypeSource(
+            "https://example.com/index.html?route=daily-weld"));
+        Assert.False(PrototypeBridgeProtocol.IsTrustedPrototypeSource(
+            "http://prototype.production-assistant.local/index.html"));
         Assert.Equal("输入无效", PrototypeBridgeProtocol.SafeError(new InvalidOperationException("输入无效")));
         Assert.DoesNotContain("secret", PrototypeBridgeProtocol.SafeError(new Exception("secret")));
     }

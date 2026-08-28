@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useId,
 } from "react";
 
 import { createPortal } from "react-dom";
@@ -42,6 +43,7 @@ interface DatePickerProps {
   onChange: (value: string) => void;
   label?: string;
   disabled?: boolean;
+  selectionMode?: "day" | "month";
 }
 
 
@@ -61,7 +63,7 @@ function parseDateValue(
   const [
     year,
     month,
-    day,
+    day = 1,
   ] = value
     .split("-")
     .map(Number);
@@ -194,7 +196,9 @@ export default function DatePicker({
   onChange,
   label,
   disabled = false,
+  selectionMode = "day",
 }: DatePickerProps) {
+  const pickerId = useId();
   const selectedDate =
     useMemo(
       () =>
@@ -217,7 +221,7 @@ export default function DatePicker({
     setMode,
   ] =
     useState<PickerMode>(
-      "day",
+      selectionMode,
     );
 
 
@@ -474,7 +478,7 @@ useEffect(() => {
         !clickedPopover
       ) {
         setOpen(false);
-        setMode("day");
+        setMode(selectionMode);
       }
     }
 
@@ -486,7 +490,7 @@ useEffect(() => {
         "Escape"
       ) {
         setOpen(false);
-        setMode("day");
+        setMode(selectionMode);
       }
     }
 
@@ -511,7 +515,7 @@ useEffect(() => {
         handleKeyDown,
       );
     };
-  }, []);
+  }, [selectionMode]);
 
 
   const year =
@@ -642,6 +646,11 @@ useEffect(() => {
 
 
   function handleTitleClick() {
+    if (selectionMode === "month") {
+      setMode(mode === "month" ? "year" : "month");
+      return;
+    }
+
     if (
       mode === "day"
     ) {
@@ -684,6 +693,14 @@ useEffect(() => {
   function selectMonth(
     nextMonth: number,
   ) {
+    if (selectionMode === "month") {
+      onChange(`${year}-${String(nextMonth + 1).padStart(2, "0")}`);
+      setViewDate(new Date(year, nextMonth, 1));
+      setOpen(false);
+      setMode("month");
+      return;
+    }
+
     setViewDate(
       new Date(
         year,
@@ -716,13 +733,11 @@ useEffect(() => {
       new Date();
 
     setViewDate(today);
-    onChange(
-      formatStorageDate(
-        today,
-      ),
-    );
+    onChange(selectionMode === "month"
+      ? `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
+      : formatStorageDate(today));
 
-    setMode("day");
+    setMode(selectionMode);
     setOpen(false);
   }
 
@@ -1008,7 +1023,7 @@ useEffect(() => {
               selectToday
             }
           >
-            回到今天
+            {selectionMode === "month" ? "回到本月" : "回到今天"}
           </button>
         </div>
       </div>
@@ -1024,7 +1039,7 @@ useEffect(() => {
         className="date-picker"
       >
         {label && (
-          <label className="date-picker-label">
+          <label id={`${pickerId}-label`} className="date-picker-label">
             {label}
           </label>
         )}
@@ -1042,16 +1057,20 @@ useEffect(() => {
           }`}
 onClick={() => {
   if (disabled) return;
-  setOpen(
-    (previous) =>
-      !previous,
-  );
+  setOpen((previous) => {
+    const next = !previous;
+    if (next) setMode(selectionMode);
+    return next;
+  });
 }}
           aria-expanded={
             open
           }
+          aria-labelledby={label ? `${pickerId}-label ${pickerId}-value` : undefined}
+          aria-label={label ? undefined : selectionMode === "month" ? "选择月份" : "选择日期"}
         >
           <span
+            id={`${pickerId}-value`}
             className={
               selectedDate
                 ? ""
@@ -1059,10 +1078,10 @@ onClick={() => {
             }
           >
             {selectedDate
-              ? formatDisplayDate(
-                  selectedDate,
-                )
-              : "选择日期"}
+              ? selectionMode === "month"
+                ? `${selectedDate.getFullYear()} / ${String(selectedDate.getMonth() + 1).padStart(2, "0")}`
+                : formatDisplayDate(selectedDate)
+              : selectionMode === "month" ? "选择月份" : "选择日期"}
           </span>
 
           <Calendar

@@ -26,7 +26,11 @@ function routeFor(name: string) {
   }
 }
 
-export function OperationSidebar({ active, navigate }: { active: string; navigate: (tag: string) => void }) {
+export function OperationSidebar({ active, navigate, openSettings }: {
+  active: string
+  navigate: (tag: string) => void
+  openSettings: () => void
+}) {
   return <aside className="sidebar">
     <div className="sidebar-top"><div className="sidebar-brand">生产助手</div></div>
     <nav className="sidebar-nav" aria-label="业务模块">
@@ -49,9 +53,9 @@ export function OperationSidebar({ active, navigate }: { active: string; navigat
     </nav>
     <div className="sidebar-bottom">
       <button
-        className={`sidebar-item ${active === 'settings' ? 'sidebar-item-active' : ''}`}
-        aria-current={active === 'settings' ? 'page' : undefined}
-        onClick={() => navigate('settings')}
+        className="sidebar-item"
+        aria-haspopup="dialog"
+        onClick={openSettings}
       >
         <NavIcon name="设置" />
         <span>设置</span>
