@@ -20,8 +20,11 @@ public static class DailyReportSettingsStore
         {
             if (File.Exists(JobsPath))
             {
-                var catalog = JsonSerializer.Deserialize<DailyReportJobCatalog>(File.ReadAllText(JobsPath)) ?? new();
+                var json = File.ReadAllText(JobsPath);
+                var hadLegacyNotification = ImportLegacyNotification(json);
+                var catalog = JsonSerializer.Deserialize<DailyReportJobCatalog>(json) ?? new();
                 foreach (var job in catalog.Jobs) Migrate(job);
+                if (hadLegacyNotification) SaveCatalog(catalog);
                 return catalog;
             }
             var migrated = MigrateLegacy();
@@ -37,10 +40,8 @@ public static class DailyReportSettingsStore
         AtomicWrite(JobsPath, JsonSerializer.Serialize(catalog, JsonOptions));
     }
 
-    public static void SaveJob(DailyReportJob job, string webhook = "", string secret = "")
+    public static void SaveJob(DailyReportJob job)
     {
-        if (!string.IsNullOrWhiteSpace(webhook)) job.EncryptedWebhook = WindowsTokenProtector.Protect(webhook.Trim());
-        if (!string.IsNullOrWhiteSpace(secret)) job.EncryptedSecret = WindowsTokenProtector.Protect(secret.Trim());
         var catalog = LoadCatalog();
         var index = catalog.Jobs.FindIndex(item => item.Id == job.Id);
         if (index < 0) catalog.Jobs.Add(job); else catalog.Jobs[index] = job;
@@ -87,15 +88,6 @@ public static class DailyReportSettingsStore
         finally { RunsMutex.ReleaseMutex(); }
     }
 
-    public static string ReadWebhook(DailyReportJob job) => Unprotect(job.EncryptedWebhook);
-    public static string ReadSecret(DailyReportJob job) => Unprotect(job.EncryptedSecret);
-    public static string MaskWebhook(DailyReportJob job) => MaskWebhookValue(ReadWebhook(job));
-    public static string MaskSecret(DailyReportJob job)
-    {
-        var value = ReadSecret(job);
-        return string.IsNullOrWhiteSpace(value) ? "未配置" : $"{value[..Math.Min(3, value.Length)]}****{value[^Math.Min(4, value.Length)..]}";
-    }
-
     public static string EncodeToken(DailyReportFieldToken token) =>
         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(token)))
             .Insert(0, "{{report:") + "}}";
@@ -140,15 +132,14 @@ public static class DailyReportSettingsStore
         var hasContent = old.ActiveTemplateVersion > 0 || !string.IsNullOrWhiteSpace(old.DraftTemplate) ||
                          !string.IsNullOrWhiteSpace(old.EncryptedWebhook) || old.Sources.Count > 0;
         if (!hasContent) return new();
+        NotificationSettingsStore.ImportLegacy(old.EncryptedWebhook, old.EncryptedSecret);
         return new() { Jobs = [new DailyReportJob
         {
             Id = "legacy-production-message-tower-daily", Name = "生产消息塔日报",
             IsEnabled = false, DraftTemplate = old.DraftTemplate,
             DraftTemplateDocument = old.DraftTemplateDocument, ActiveTemplate = old.ActiveTemplate,
             ActiveTemplateDocument = old.ActiveTemplateDocument, ActiveTemplateVersion = old.ActiveTemplateVersion,
-            EncryptedWebhook = old.EncryptedWebhook, EncryptedSecret = old.EncryptedSecret, SendTime = old.SendTime,
-            Sources = old.Sources, Fields = old.Fields, DingTalkCheckedAt = old.DingTalkCheckedAt,
-            DingTalkConnected = old.DingTalkConnected, DingTalkStatus = old.DingTalkStatus
+            SendTime = old.SendTime, Sources = old.Sources, Fields = old.Fields
         }] };
     }
 
@@ -184,14 +175,27 @@ public static class DailyReportSettingsStore
         return template;
     }
 
-    private static string Unprotect(string value) { try { return WindowsTokenProtector.Unprotect(value); } catch { return string.Empty; } }
-    private static string MaskWebhookValue(string value)
+    private static bool ImportLegacyNotification(string json)
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return "未配置";
-        var token = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
-            .Select(part => part.Split('=', 2)).FirstOrDefault(part => part.Length == 2 && part[0].Equals("access_token", StringComparison.OrdinalIgnoreCase))?[1];
-        var tail = string.IsNullOrWhiteSpace(token) ? "****" : $"****{token[^Math.Min(4, token.Length)..]}";
-        return $"{uri.Scheme}://{uri.Host}{uri.AbsolutePath}?access_token={tail}";
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var jobs = document.RootElement.GetProperty("Jobs");
+            var hadLegacyProperties = false;
+            foreach (var job in jobs.EnumerateArray())
+            {
+                var hasWebhook = job.TryGetProperty("EncryptedWebhook", out var webhookValue);
+                var hasSecret = job.TryGetProperty("EncryptedSecret", out var secretValue);
+                hadLegacyProperties |= hasWebhook || hasSecret;
+                var webhook = hasWebhook ? webhookValue.GetString() ?? "" : "";
+                var secret = hasSecret ? secretValue.GetString() ?? "" : "";
+                if (string.IsNullOrWhiteSpace(webhook) && string.IsNullOrWhiteSpace(secret)) continue;
+                NotificationSettingsStore.ImportLegacy(webhook, secret);
+                return true;
+            }
+            return hadLegacyProperties;
+        }
+        catch { return false; }
     }
 
     private static void SaveRunRecords(IEnumerable<DailyReportRunRecord> records)

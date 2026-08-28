@@ -1,4 +1,4 @@
-export type Route = 'production-message' | 'daily-report' | 'report-center' | `navigation:${string}`
+export type Route = 'daily-weld' | 'production-message' | 'daily-report' | 'report-center' | `navigation:${string}`
 
 export interface ReportCenterState { name: string; authenticated: boolean; credentialsConfigured: boolean; configPath: string; sourceRoot: string; outputRoot: string; reportUrl: string; username: string; devices: number }
 export interface ReportRunSummary { runId: string; startedAt: string; finishedAt: string; period: { startDate: string; endDate: string }; plannedReports: number; exportedReports: number; parsedReports: number; deviceCount: number; actualDataPoints: number; expectedDataPoints: number; summaryPath: string; warnings: string[] }
@@ -7,7 +7,7 @@ export interface ReportRunProgress { stage: 'prepare' | 'collect' | 'parse' | 's
 export interface DailyJobSummary { id: string; name: string; sendTime: string; isEnabled: boolean; schedulingAvailable: boolean; status: string; schedulerMessage: string; dingTalkStatus: string; lastRun: string; missingStep?: string; missingMessage?: string }
 export interface DailyField { placeholder: string; label: string; tooltip: string }
 export interface DailyRun { id: string; time: string; source: string; status: string; businessDate: string; templateVersion: number; stage: string; attempts: number; response: string; error: string; textSummary: string }
-export interface DailyJobDetail { id: string; name: string; sendTime: string; isEnabled: boolean; schedulingAvailable: boolean; validated: boolean; draftTemplate: string; draftTemplateDocument: string; credentialMask: string; webhookSaved: boolean; secretSaved: boolean; dingTalkConnected?: boolean; dingTalkStatus: string; dingTalkCheckedAt?: string; schedulerInstalled: boolean; schedulerMessage: string; pagePaths: string[]; sources: Array<{ id: string; name: string; path: string }>; fields: DailyField[]; runs: DailyRun[] }
+export interface DailyJobDetail { id: string; name: string; sendTime: string; isEnabled: boolean; schedulingAvailable: boolean; validated: boolean; draftTemplate: string; draftTemplateDocument: string; notificationConfigured: boolean; notificationConnected?: boolean; notificationStatus: string; schedulerInstalled: boolean; schedulerMessage: string; pagePaths: string[]; sources: Array<{ id: string; name: string; path: string }>; fields: DailyField[]; runs: DailyRun[] }
 
 export interface FieldPreview { key: string; label: string; value: string }
 export interface Draft {
@@ -36,3 +36,9 @@ export interface BindingState {
   sources: Array<{ id: string; name: string; path: string }>
   selected: Record<string, string>
 }
+
+export interface WeldRow { date: string; weekday: string; isWeekend: boolean; qty: string; note: string }
+export interface WeldState { configured: boolean; binding: BindingTarget; sources: Array<{ id: string; name: string; path: string }>; selected: string }
+export interface WeldPlanItem { date: string; newQuantity: number; pageId?: string; existingQuantity?: number; status: string }
+export interface WeldCheckResult { succeeded: boolean; message: string; hasExistingData: boolean; items: WeldPlanItem[] }
+export interface WeldProgress { current: number; total: number; date: string; status: string }

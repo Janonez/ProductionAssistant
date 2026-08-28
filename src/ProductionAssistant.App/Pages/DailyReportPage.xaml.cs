@@ -56,14 +56,15 @@ public sealed partial class DailyReportPage : Page
     private void RefreshJobList()
     {
         _catalog = DailyReportSettingsStore.LoadCatalog();
+        var notification = NotificationSettingsStore.Load();
         JobList.ItemsSource = _catalog.Jobs.Select(job =>
         {
             var last = DailyReportSettingsStore.LoadRunRecords(job.Id).FirstOrDefault();
             return new JobListItem(job,
                 job.IsEnabled ? "已启用" : job.ActiveTemplateVersion > 0 ? "已停用" : "草稿",
                 last is null ? "尚无运行记录" : $"{last.StartedAt:MM-dd HH:mm} · {(last.Succeeded ? "成功" : "失败")}",
-                job.DingTalkConnected == true ? "钉钉连接正常" :
-                    string.IsNullOrWhiteSpace(job.EncryptedWebhook) ? "尚未配置钉钉" : "钉钉连接待检测");
+                notification.DingTalkConnected == true ? "全局通知正常" :
+                    string.IsNullOrWhiteSpace(notification.EncryptedWebhook) ? "全局通知未配置" : "全局通知待检测");
         }).ToArray();
         EmptyJobsText.Visibility = _catalog.Jobs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         var normal = _catalog.Jobs.Count(job => job.IsEnabled);
@@ -169,10 +170,11 @@ public sealed partial class DailyReportPage : Page
             SetStatus(OverviewStatusInfoBar, "无法启用", "请先完成预览、测试发送并发布模板。", InfoBarSeverity.Warning);
             return;
         }
-        if (string.IsNullOrWhiteSpace(DailyReportSettingsStore.ReadWebhook(_job)) ||
-            string.IsNullOrWhiteSpace(DailyReportSettingsStore.ReadSecret(_job)))
+        var notification = NotificationSettingsStore.Load();
+        if (!notification.DingTalkEnabled || string.IsNullOrWhiteSpace(NotificationSettingsStore.ReadWebhook(notification)) ||
+            string.IsNullOrWhiteSpace(NotificationSettingsStore.ReadSecret(notification)))
         {
-            SetStatus(OverviewStatusInfoBar, "无法启用", "请先配置钉钉机器人。", InfoBarSeverity.Warning);
+            SetStatus(OverviewStatusInfoBar, "无法启用", "请先在系统设置中配置通知渠道。", InfoBarSeverity.Warning);
             return;
         }
         SaveSchedule();
@@ -386,8 +388,8 @@ public sealed partial class DailyReportPage : Page
 
     private void SaveDingTalkButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_job is null) return;
-        DailyReportSettingsStore.SaveJob(_job, WebhookBox.Password, SecretBox.Password);
+        var notification = NotificationSettingsStore.Load();
+        NotificationSettingsStore.Save(notification, WebhookBox.Password, SecretBox.Password);
         WebhookBox.Password = SecretBox.Password = string.Empty;
         RefreshDingTalkStatus();
         SetStatus(DingTalkStatusInfoBar, "推送配置已保存", "未输入的凭据保持原值。", InfoBarSeverity.Success);
@@ -395,17 +397,16 @@ public sealed partial class DailyReportPage : Page
 
     private async void CheckDingTalkButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_job is null) return;
-        DailyReportSettingsStore.SaveJob(_job, WebhookBox.Password, SecretBox.Password);
+        var notification = NotificationSettingsStore.Load();
+        NotificationSettingsStore.Save(notification, WebhookBox.Password, SecretBox.Password);
         WebhookBox.Password = SecretBox.Password = string.Empty;
         SetBusy(true);
-        var result = await _reports.CheckConnectionAsync(
-            DailyReportSettingsStore.ReadWebhook(_job));
+        var result = await _reports.CheckConnectionAsync(NotificationSettingsStore.ReadWebhook(notification));
         SetBusy(false);
-        _job.DingTalkConnected = result.Succeeded;
-        _job.DingTalkStatus = result.Message;
-        _job.DingTalkCheckedAt = DateTimeOffset.Now;
-        DailyReportSettingsStore.SaveJob(_job);
+        notification.DingTalkConnected = result.Succeeded;
+        notification.DingTalkStatus = result.Message;
+        notification.DingTalkCheckedAt = DateTimeOffset.Now;
+        NotificationSettingsStore.Save(notification);
         RefreshDingTalkStatus();
         SetStatus(DingTalkStatusInfoBar, result.Succeeded ? "连接正常" : "连接失败", result.Message,
             result.Succeeded ? InfoBarSeverity.Success : InfoBarSeverity.Error);
@@ -461,14 +462,14 @@ public sealed partial class DailyReportPage : Page
 
     private void RefreshDingTalkStatus()
     {
-        if (_job is null) return;
-        var summary = DailyReportPresentation.CredentialSummary(_job);
+        var notification = NotificationSettingsStore.Load();
+        var summary = DailyReportPresentation.CredentialSummary(notification);
         WebhookStatusText.Text = summary.WebhookText;
         SecretStatusText.Text = summary.SecretText;
         DingTalkConnectionText.Text = summary.ConnectionText;
         DingTalkConnectionText.ClearValue(TextBlock.ForegroundProperty);
-        if (_job.DingTalkConnected == true)
-            DingTalkConnectionText.Foreground = (Brush)Application.Current.Resources["BrandGreenBrush"];
+        if (notification.DingTalkConnected == true)
+            DingTalkConnectionText.Foreground = (Brush)Application.Current.Resources["BrandAccentBrush"];
     }
 
     private void RefreshRunRecords()

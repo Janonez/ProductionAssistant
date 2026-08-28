@@ -31,13 +31,13 @@ public static class DailyReportPresentation
         return "day";
     }
 
-    public static DailyReportCredentialSummary CredentialSummary(DailyReportJob job) => new(
-        string.IsNullOrWhiteSpace(job.EncryptedWebhook) ? "Webhook 未配置" : "Webhook 已保存",
-        string.IsNullOrWhiteSpace(job.EncryptedSecret) ? "Secret 未配置" : "Secret 已保存",
-        job.DingTalkConnected switch
+    public static DailyReportCredentialSummary CredentialSummary(NotificationSettings settings) => new(
+        string.IsNullOrWhiteSpace(settings.EncryptedWebhook) ? "Webhook 未配置" : "Webhook 已保存",
+        string.IsNullOrWhiteSpace(settings.EncryptedSecret) ? "Secret 未配置" : "Secret 已保存",
+        settings.DingTalkConnected switch
         {
-            true => $"连接正常 · 检测于 {job.DingTalkCheckedAt:yyyy-MM-dd HH:mm}",
-            false => $"连接失败 · {job.DingTalkStatus}",
+            true => $"连接正常 · 检测于 {settings.DingTalkCheckedAt:yyyy-MM-dd HH:mm}",
+            false => $"连接失败 · {settings.DingTalkStatus}",
             _ => "尚未检测连接"
         });
 

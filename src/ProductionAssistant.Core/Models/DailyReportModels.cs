@@ -28,14 +28,9 @@ public sealed class DailyReportJob
     public string ActiveTemplate { get; set; } = string.Empty;
     public string ActiveTemplateDocument { get; set; } = string.Empty;
     public int ActiveTemplateVersion { get; set; }
-    public string EncryptedWebhook { get; set; } = string.Empty;
-    public string EncryptedSecret { get; set; } = string.Empty;
     public string SendTime { get; set; } = "17:30";
     public List<DailyReportSourceBinding> Sources { get; set; } = [];
     public List<DailyReportFieldDefinition> Fields { get; set; } = [];
-    public DateTimeOffset? DingTalkCheckedAt { get; set; }
-    public bool? DingTalkConnected { get; set; }
-    public string DingTalkStatus { get; set; } = string.Empty;
     public bool? ConfigurationValidated { get; set; }
 }
 

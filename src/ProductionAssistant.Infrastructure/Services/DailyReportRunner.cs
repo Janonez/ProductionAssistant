@@ -5,6 +5,7 @@ namespace ProductionAssistant.Services;
 public sealed class DailyReportRunner
 {
     private readonly DailyReportService _service = new();
+    private readonly NotificationService _notifications = new();
 
     public async Task<DailyReportExitCode> RunAsync(string jobId, CancellationToken cancellationToken = default)
     {
@@ -49,7 +50,7 @@ public sealed class DailyReportRunner
         var build = await _service.BuildAsync(job, template, businessDate, cancellationToken);
         if (!build.Succeeded)
         {
-            if (alertOnFailure) await SendAlertAsync(job, build.Message, cancellationToken);
+            if (alertOnFailure) await SendAlertAsync(NotificationEvents.ReportDataNotReady, job, businessDate, build.Message, cancellationToken);
             return Finish(record, false, record.Stage, build.Message, DailyReportExitCode.InvalidData);
         }
         record.TextSummary = Summarize(build.Text);
@@ -59,29 +60,27 @@ public sealed class DailyReportRunner
         DailyReportSendResult result = new(false, "尚未发送。", 0);
         for (var attempt = 1; attempt <= 3; attempt++)
         {
-            result = (await _service.SendAsync(
-                DailyReportSettingsStore.ReadWebhook(job), DailyReportSettingsStore.ReadSecret(job),
-                build.Text, cancellationToken)) with { Attempts = attempt };
+            result = (await _notifications.SendMessageAsync(build.Text, cancellationToken)) with { Attempts = attempt };
             record.Attempts = attempt;
             if (result.Succeeded || source == "test") break;
             if (attempt < 3) await Task.Delay(TimeSpan.FromMinutes(10), cancellationToken);
         }
         if (!result.Succeeded)
         {
-            if (alertOnFailure) await SendAlertAsync(job, result.Message, cancellationToken);
+            if (alertOnFailure) await SendAlertAsync(NotificationEvents.ReportSendFailed, job, businessDate, result.Message, cancellationToken);
             return Finish(record, false, record.Stage, result.Message, DailyReportExitCode.NetworkFailure, result.Message);
         }
         return Finish(record, true, "完成", string.Empty, DailyReportExitCode.Success, result.Message);
     }
 
-    private async Task SendAlertAsync(DailyReportJob job, string error, CancellationToken cancellationToken)
-    {
-        var webhook = DailyReportSettingsStore.ReadWebhook(job);
-        var secret = DailyReportSettingsStore.ReadSecret(job);
-        if (string.IsNullOrWhiteSpace(webhook) || string.IsNullOrWhiteSpace(secret)) return;
-        await _service.SendAsync(webhook, secret,
-            $"【日报自动上报失败】\n任务：{job.Name}\n日期：{DateTime.Today:yyyy-MM-dd}\n原因：{error}", cancellationToken);
-    }
+    private async Task SendAlertAsync(string eventType, DailyReportJob job, DateTime businessDate,
+        string error, CancellationToken cancellationToken) =>
+        await _notifications.NotifyAsync(eventType, new Dictionary<string, string>
+        {
+            ["taskName"] = job.Name,
+            ["reportDate"] = businessDate.ToString("yyyy-MM-dd"),
+            ["reason"] = error
+        }, cancellationToken);
 
     private static DailyReportExitCode Finish(
         DailyReportRunRecord record, bool succeeded, string stage, string error,

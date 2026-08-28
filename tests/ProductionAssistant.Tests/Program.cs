@@ -70,23 +70,23 @@ Assert(DailyReportPresentation.SourcesForPage(sourceOptions, "生产数据 / 下
 Assert(DailyReportPresentation.PeriodFor(sourceOptions.Single(source => source.Id == "yearly"), sourceTargets) == "year" &&
        DailyReportPresentation.PeriodFor(sourceOptions.Single(source => source.Id == "unknown"), sourceTargets) == "day",
     "后台取数周期没有保持 ModuleKey 优先和旧版日库回退规则。");
-var credentialJob = new DailyReportJob();
-var credentials = DailyReportPresentation.CredentialSummary(credentialJob);
+var notificationSettings = new NotificationSettings();
+var credentials = DailyReportPresentation.CredentialSummary(notificationSettings);
 Assert(credentials.WebhookText.Contains("未配置") && credentials.SecretText.Contains("未配置"),
     "未配置的推送凭据状态不正确。");
-credentialJob.EncryptedWebhook = "encrypted";
-credentials = DailyReportPresentation.CredentialSummary(credentialJob);
+notificationSettings.EncryptedWebhook = "encrypted";
+credentials = DailyReportPresentation.CredentialSummary(notificationSettings);
 Assert(credentials.WebhookText.Contains("已保存") && credentials.SecretText.Contains("未配置"),
     "部分配置的推送凭据状态不正确。");
-credentialJob.EncryptedSecret = "encrypted";
-credentialJob.DingTalkConnected = true;
-credentials = DailyReportPresentation.CredentialSummary(credentialJob);
+notificationSettings.EncryptedSecret = "encrypted";
+notificationSettings.DingTalkConnected = true;
+credentials = DailyReportPresentation.CredentialSummary(notificationSettings);
 Assert(credentials.WebhookText.Contains("已保存") && credentials.SecretText.Contains("已保存") &&
        credentials.ConnectionText.StartsWith("连接正常"),
     "完整且连接正常的推送配置状态不正确。");
-credentialJob.DingTalkConnected = false;
-credentialJob.DingTalkStatus = "测试失败";
-Assert(DailyReportPresentation.CredentialSummary(credentialJob).ConnectionText.Contains("测试失败"),
+notificationSettings.DingTalkConnected = false;
+notificationSettings.DingTalkStatus = "测试失败";
+Assert(DailyReportPresentation.CredentialSummary(notificationSettings).ConnectionText.Contains("测试失败"),
     "连接失败原因没有进入推送配置摘要。");
 Assert(DailyReportPresentation.RecentRuns(Enumerable.Range(0, 8).Select(_ => new DailyReportRunRecord())).Count == 5,
     "最近运行记录没有限制为 5 条。");
@@ -100,6 +100,8 @@ try
         DraftTemplate = reportSettings.DraftTemplate,
         ActiveTemplate = reportSettings.DraftTemplate,
         ActiveTemplateVersion = 3,
+        EncryptedWebhook = "legacy-webhook",
+        EncryptedSecret = "legacy-secret",
         SendTime = "17:35",
         Sources = reportSettings.Sources,
         Fields = reportSettings.Fields
@@ -112,7 +114,13 @@ try
            migratedCatalog.Jobs[0].ActiveTemplateVersion == 3 &&
            migratedCatalog.Jobs[0].SendTime == "17:35",
         "旧日报配置没有完整迁移为任务实例。");
+    var migratedNotification = NotificationSettingsStore.Load();
+    Assert(migratedNotification.EncryptedWebhook == "legacy-webhook" &&
+           migratedNotification.EncryptedSecret == "legacy-secret",
+        "旧日报的钉钉凭据没有迁移到系统通知设置。");
     DailyReportSettingsStore.SaveCatalog(migratedCatalog);
+    Assert(!File.ReadAllText(Path.Combine(reportTestFolder, "daily-report-jobs.json")).Contains("EncryptedWebhook", StringComparison.Ordinal),
+        "日报任务仍在保存通知渠道凭据。");
     Assert(DailyReportSettingsStore.LoadCatalog().Jobs.Count == 1,
         "重复加载迁移配置时生成了重复任务。");
 

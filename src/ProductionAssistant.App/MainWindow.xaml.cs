@@ -1,5 +1,6 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using ProductionAssistant.Pages;
 
@@ -42,13 +43,12 @@ public sealed partial class MainWindow : Window
         _currentTag = tag;
         var pageType = tag switch
         {
-            "daily-weld" => typeof(DailyWeldSimulationPage),
+            "daily-weld" => typeof(PrototypePage),
             "production-message" => typeof(PrototypePage),
             "plan-pdf" => typeof(PlanPdfExportPage),
             "production-meeting" => typeof(ProductionMeetingExportPage),
             "daily-report" => typeof(PrototypePage),
             "report-center" => typeof(PrototypePage),
-            "settings" => typeof(SettingsPage),
             _ => typeof(PlanPdfExportPage)
         };
 
@@ -60,4 +60,7 @@ public sealed partial class MainWindow : Window
         if (!reactRoute)
             ContentFrame.Navigate(pageType, tag);
     }
+
+    internal void SetSettingsModalOpen(bool open) =>
+        Canvas.SetZIndex(ShellFrame, open ? 10 : 0);
 }

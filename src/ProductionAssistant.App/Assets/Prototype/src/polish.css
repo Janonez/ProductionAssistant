@@ -9,11 +9,10 @@
   font-family: "Inter Variable", "Noto Sans SC Variable", "Microsoft YaHei UI", sans-serif;
   font-size: var(--font-body);
 }
-
 body { min-width: 0; line-height: 1.5; }
 button, input, select, textarea { font-size: var(--font-control); }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
-  outline: 3px solid #4a806545;
+  outline: 3px solid #c2703d45;
   outline-offset: 2px;
 }
 

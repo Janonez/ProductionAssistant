@@ -37,6 +37,7 @@ internal sealed partial class PrototypeBridge
         object? sender,
         Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs args)
     {
+        if (!PrototypeBridgeProtocol.IsTrustedPrototypeSource(args.Source)) return;
         string id = string.Empty;
         try
         {
@@ -79,11 +80,23 @@ internal sealed partial class PrototypeBridge
         operation switch
         {
             "app.navigateNative" => Navigate(payload),
+            "settings.open" => OpenSettings(),
+            "settings.close" => CloseSettings(),
+            "settings.saveConnection" => await SaveSettingsConnectionAsync(payload, refresh: false, cancellationToken),
+            "settings.refreshDataSources" => await SaveSettingsConnectionAsync(payload, refresh: true, cancellationToken),
+            "settings.saveNotification" => SaveSettingsNotification(payload),
+            "settings.testNotification" => await TestSettingsNotificationAsync(payload, cancellationToken),
+            "settings.saveNotificationRules" => SaveSettingsNotificationRules(payload),
             "production.parse" => await ParseAsync(payload, cancellationToken),
             "production.check" => await ImportAsync(payload, checkOnly: true, cancellationToken),
             "production.write" => await ImportAsync(payload, checkOnly: false, cancellationToken),
             "production.getBindings" => GetBindings(),
             "production.saveBindings" => await SaveBindingsAsync(payload, cancellationToken),
+            "weld.getState" => GetWeldState(),
+            "weld.generate" => GenerateWeld(payload),
+            "weld.saveBinding" => await SaveWeldBindingAsync(payload, cancellationToken),
+            "weld.check" => await CheckWeldAsync(payload, cancellationToken),
+            "weld.write" => await WriteWeldAsync(id, payload, cancellationToken),
             "daily.list" => await ListDailyJobsAsync(),
             "daily.create" => CreateDailyJob(),
             "daily.get" => await GetDailyJobAsync(payload),
@@ -91,8 +104,6 @@ internal sealed partial class PrototypeBridge
             "daily.saveTemplate" => await SaveDailyTemplateAsync(payload),
             "daily.getProperties" => await GetDailyPropertiesAsync(payload, cancellationToken),
             "daily.addField" => await AddDailyFieldAsync(payload, cancellationToken),
-            "daily.saveCredentials" => await SaveDailyCredentialsAsync(payload),
-            "daily.checkConnection" => await CheckDailyConnectionAsync(payload, cancellationToken),
             "daily.preview" => await PreviewDailyReportAsync(payload, cancellationToken),
             "daily.test" => await TestDailyReportAsync(payload, cancellationToken),
             "daily.sendToday" => await SendDailyReportTodayAsync(payload, cancellationToken),

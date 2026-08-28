@@ -33,6 +33,7 @@ public sealed partial class PrototypePage : Page
         _route = route switch
         {
             { } navigationRoute when navigationRoute.StartsWith("navigation:", StringComparison.Ordinal) => navigationRoute,
+            "daily-weld" => "daily-weld",
             "production-message" => "production-message",
             "daily-report" => "daily-report",
             "report-center" => "report-center",
@@ -60,9 +61,18 @@ public sealed partial class PrototypePage : Page
 
         try
         {
+            Environment.SetEnvironmentVariable(
+                "WEBVIEW2_DEFAULT_BACKGROUND_COLOR",
+                "00000000",
+                EnvironmentVariableTarget.Process);
             await PrototypeWebView.EnsureCoreWebView2Async(await PrototypeWebViewRuntime.GetEnvironmentAsync());
             PrototypeWebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
             PrototypeWebView.CoreWebView2.Settings.IsPinchZoomEnabled = false;
+            PrototypeWebView.CoreWebView2.NavigationStarting += (_, args) =>
+            {
+                if (!PrototypeBridgeProtocol.IsTrustedPrototypeSource(args.Uri)) args.Cancel = true;
+            };
+            PrototypeWebView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
             var assetFolder = Path.GetDirectoryName(indexPath)!;
             PrototypeWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 PrototypeHost,

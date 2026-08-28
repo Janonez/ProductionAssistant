@@ -27,6 +27,11 @@ const draft: Draft = {
   ], statusText: '待检查', warningText: '', canWrite: true
 }
 const readyFields = [{ key: 'weight', name: '重量', propertyType: 'number', parsedValue: '2吨', databaseValue: '', status: 'new', message: '' }]
+const settingsState = {
+  notion: { configured: true, rootPageId: 'root', dataSourceCount: 2, lastSyncedAt: '2026-08-28 14:10', sources: [] },
+  notification: { enabled: true, channelName: '生产管理群', webhookConfigured: true, secretConfigured: true, connected: true, status: '连接正常', checkedAt: '2026-08-28 14:00', rules: [] },
+  version: '1.5.2',
+}
 
 describe('connected production message workflow', () => {
   let container: HTMLDivElement
@@ -81,6 +86,48 @@ describe('connected production message workflow', () => {
     await act(async () => { await Promise.resolve() })
     expect(invoke.mock.calls.filter(([operation]) => operation === 'production.check')).toHaveLength(2)
     expect((button('确认入库') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('groups a batch by each draft date and edits only the selected date', async () => {
+    const secondDraft: Draft = {
+      ...draft,
+      index: 2,
+      originalText: '8.14下料3吨',
+      businessDate: '2026-08-14',
+      fields: { weight: '3吨' },
+      previewFields: [{ key: 'weight', label: '重量', value: '3吨' }],
+    }
+    invoke.mockImplementation((operation: string) => {
+      if (operation === 'production.getBindings') return Promise.resolve({ configured: true, sources: [], selected: {} })
+      if (operation === 'production.parse') return Promise.resolve([draft, secondDraft])
+      if (operation === 'production.check') return Promise.resolve({
+        succeeded: true,
+        message: '可以写入',
+        requiredMonths: [],
+        items: [
+          { index: 1, businessDate: '2026-08-13', status: 'ready', message: '', fields: readyFields },
+          { index: 2, businessDate: '2026-08-14', status: 'ready', message: '', fields: [{ ...readyFields[0], parsedValue: '3吨' }] },
+        ],
+      })
+      return Promise.resolve({})
+    })
+    const textarea = container.querySelector('textarea')!
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '两天消息'); textarea.dispatchEvent(new Event('input', { bubbles: true })) })
+    const parse = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('解析消息')) as HTMLButtonElement
+    await act(async () => { parse.click(); await Promise.resolve() })
+
+    const groups = [...container.querySelectorAll<HTMLElement>('.date-group')]
+    expect(groups).toHaveLength(2)
+    expect(groups.map(group => group.dataset.businessDate)).toEqual(['2026-08-13', '2026-08-14'])
+    expect(groups.map(group => group.querySelector('.date-picker-trigger')?.textContent)).toEqual(['2026/08/13', '2026/08/14'])
+    expect(groups.map(group => group.querySelector('.field-editor input')?.getAttribute('value'))).toEqual(['2', '3'])
+    expect(groups.every(group => group.querySelector('.field-name')?.textContent === '重量')).toBe(true)
+
+    await act(async () => { (groups[1].querySelector('.date-picker-trigger') as HTMLButtonElement).click() })
+    const nextDate = [...document.querySelectorAll('.date-picker-grid button')].find(item => item.textContent === '15') as HTMLButtonElement
+    await act(async () => { nextDate.click(); await Promise.resolve() })
+    const checkCalls = invoke.mock.calls.filter(([operation]) => operation === 'production.check')
+    expect(checkCalls.at(-1)?.[1].drafts.map((item: Draft) => item.businessDate)).toEqual(['2026-08-13', '2026-08-15'])
   })
 
   it('keeps Notion field rows stable and resolves an edited missing field locally', async () => {
@@ -347,6 +394,26 @@ describe('production message Demo UI', () => {
 })
 
 describe('shared operation sidebar', () => {
+  it('renders daily weld as a React route with the shared sidebar selected', async () => {
+    history.replaceState({}, '', '?route=daily-weld&navigation=weld')
+    const container = document.createElement('div')
+    document.body.append(container)
+    invoke.mockReset().mockResolvedValue({})
+    notifyReady.mockReset()
+    const { App } = await import('./App')
+    const root = createRoot(container)
+
+    await act(async () => { root.render(<App />) })
+
+    expect(container.querySelector('.production-message-content h1')?.textContent).toBe('月度焊接计划拆分')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('每日焊接数据模拟')
+    expect(container.querySelector('.native-content-slot')).toBeNull()
+    expect(notifyReady).toHaveBeenLastCalledWith('daily-weld', 'weld')
+
+    await act(async () => { root.unmount() })
+    container.remove()
+  })
+
   it('shows only the module taxonomy, has no homepage, and routes through the host', async () => {
     history.replaceState({}, '', '?route=navigation:production-message&navigation=sidebar')
     const container = document.createElement('div')
@@ -376,6 +443,59 @@ describe('shared operation sidebar', () => {
       .find(button => button.textContent?.includes('日报推送')) as HTMLButtonElement
     await act(async () => { dailyReport.click(); await Promise.resolve() })
     expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'daily-report' })
+
+    await act(async () => { root.unmount() })
+    container.remove()
+  })
+
+  it('opens settings over the current route and closes without native navigation', async () => {
+    history.replaceState({}, '', '?route=navigation:production-message&navigation=settings-modal')
+    const container = document.createElement('div')
+    document.body.append(container)
+    let finishRefresh!: (value: unknown) => void
+    invoke.mockReset().mockImplementation((operation: string) => {
+      if (operation === 'settings.open') return Promise.resolve(settingsState)
+      if (operation === 'settings.refreshDataSources') return new Promise(resolve => { finishRefresh = resolve })
+      return Promise.resolve({})
+    })
+    const { App } = await import('./App')
+    const root = createRoot(container)
+    await act(async () => { root.render(<App />) })
+
+    const settings = [...container.querySelectorAll('button')]
+      .find(button => button.textContent?.trim() === '设置') as HTMLButtonElement
+    await act(async () => { settings.click(); await Promise.resolve() })
+
+    expect(container.querySelector('[role="dialog"]')).toBeTruthy()
+    expect(container.querySelector('.settings-page-header h1')?.textContent).toBe('连接')
+    expect((container.querySelector('.settings-input[type="password"]') as HTMLInputElement).value).not.toBe('')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Notion 入库')
+    expect(invoke).toHaveBeenCalledWith('settings.open')
+    expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', { tag: 'settings' })
+
+    const tab = (label: string) => [...container.querySelectorAll('.settings-nav-item')]
+      .find(button => button.textContent?.trim() === label) as HTMLButtonElement
+    await act(async () => { tab('通知').click() })
+    expect([...container.querySelectorAll<HTMLInputElement>('.settings-input[type="password"]')].map(input => input.value))
+      .toEqual(expect.arrayContaining([expect.not.stringMatching(/^$/), expect.not.stringMatching(/^$/)]))
+
+    await act(async () => { tab('数据与缓存').click() })
+    expect(container.textContent).not.toContain('模块绑定')
+    vi.useFakeTimers()
+    const refresh = [...container.querySelectorAll('button')]
+      .find(button => button.textContent?.trim() === '刷新') as HTMLButtonElement
+    await act(async () => { refresh.click() })
+    expect(container.querySelector('.settings-spinner')).toBeTruthy()
+    await act(async () => { finishRefresh({ state: settingsState, message: '数据源已刷新。' }); await Promise.resolve() })
+    expect(container.querySelector('.settings-message')?.textContent).toBe('数据源已刷新。')
+    await act(async () => { vi.advanceTimersByTime(3000) })
+    expect(container.querySelector('.settings-message')).toBeNull()
+    vi.useRealTimers()
+
+    const close = container.querySelector('[aria-label="关闭设置"]') as HTMLButtonElement
+    await act(async () => { close.click(); await Promise.resolve() })
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+    expect(invoke).toHaveBeenCalledWith('settings.close')
 
     await act(async () => { root.unmount() })
     container.remove()
@@ -421,7 +541,7 @@ describe('daily report workflow', () => {
       if (operation === 'app.getOverview') return Promise.resolve({})
       if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, schedulingAvailable: true, status: 'pending-test', schedulerMessage: '', dingTalkStatus: '连接正常', lastRun: '暂无运行记录', missingStep: 'template', missingMessage: '请先完成测试发送。' }] })
       if (operation === 'daily.setEnabled') return Promise.resolve({ enabled: false, missingStep: 'template', message: '请先完成测试发送。' })
-      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', credentialMask: '••••••••（已保存）', webhookSaved: true, secretSaved: true, dingTalkStatus: '连接正常', schedulerInstalled: false, schedulerMessage: '', pagePaths: [], sources: [], fields: [], runs: [] })
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', schedulerInstalled: false, schedulerMessage: '', pagePaths: [], sources: [], fields: [], runs: [] })
       return Promise.resolve({})
     })
     const { App } = await import('./App')
@@ -441,25 +561,25 @@ describe('daily report workflow', () => {
     expect(container.querySelector('.daily-focus-card')?.classList.contains('template-focus-card')).toBe(false)
     expect([...container.querySelectorAll('.field-label-title')].map(item => item.textContent)).toEqual(['1. 数据页', '2. 数据库', '3. 数据字段'])
     const completedMarks = [...container.querySelectorAll('.daily-progress li.done > span')]
-    expect(completedMarks.map(mark => mark.textContent)).toEqual(['✓', '✓'])
+    expect(completedMarks.map(mark => mark.textContent)).toEqual(['✓'])
     expect(completedMarks.some(mark => mark.querySelector('svg'))).toBe(false)
-    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '100%', '0%'])
+    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '0%'])
     const previewButton = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('生成消息预览')) as HTMLButtonElement
     expect(previewButton.disabled).toBe(true)
     const previous = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('返回上一步')) as HTMLButtonElement
     await act(async () => { previous.click() })
     expect(container.querySelector('.daily-progress ol')?.classList.contains('backward')).toBe(true)
-    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '100%', '0%'])
-    expect(container.querySelectorAll('.daily-progress li')[1].classList.contains('just-back-active')).toBe(false)
-    expect(container.querySelectorAll('.daily-progress li')[2].classList.contains('just-back-leave')).toBe(true)
+    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '0%'])
+    expect(container.querySelectorAll('.daily-progress li')[0].classList.contains('just-back-active')).toBe(false)
+    expect(container.querySelectorAll('.daily-progress li')[1].classList.contains('just-back-leave')).toBe(true)
     expect(container.textContent).toContain('编辑消息')
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 280)) })
-    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '0%', '0%'])
-    expect(container.querySelectorAll('.daily-progress li')[1].classList.contains('just-back-active')).toBe(false)
+    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['0%', '0%'])
+    expect(container.querySelectorAll('.daily-progress li')[0].classList.contains('just-back-active')).toBe(false)
     expect(container.textContent).toContain('编辑消息')
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 460)) })
-    expect(container.querySelectorAll('.daily-progress li')[1].classList.contains('just-back-active')).toBe(true)
-    expect(container.textContent).toContain('配置钉钉机器人')
+    expect(container.querySelectorAll('.daily-progress li')[0].classList.contains('just-back-active')).toBe(true)
+    expect(container.textContent).toContain('先确认任务的基本信息')
   })
 
   it('keeps creation independent and exposes deletion from the card context menu', async () => {
@@ -488,7 +608,7 @@ describe('daily report workflow', () => {
     invoke.mockImplementation((operation: string) => {
       if (operation === 'app.getOverview') return Promise.resolve({})
       if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '', sendTime: '17:30', isEnabled: false, schedulingAvailable: true, status: 'pending-test', dingTalkStatus: '待配置', lastRun: '暂无运行记录' }] })
-      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', credentialMask: '••••••••（已保存）', webhookSaved: false, secretSaved: false, dingTalkConnected: false, pagePaths: [], sources: [], fields: [], runs: [] })
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', pagePaths: [], sources: [], fields: [], runs: [] })
       return Promise.resolve({})
     })
     const card = container.querySelector('.daily-job-card') as HTMLElement
@@ -502,20 +622,20 @@ describe('daily report workflow', () => {
     await act(async () => { save.click() })
     expect(invoke.mock.calls.filter(([operation]) => operation === 'daily.saveBasics')).toHaveLength(1)
     expect(container.querySelectorAll('.daily-progress li')[0].classList.contains('just-completed')).toBe(true)
-    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['0%', '0%', '0%'])
+    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['0%', '0%'])
     expect(container.textContent).toContain('先确认任务的基本信息')
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)) })
-    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '0%', '0%'])
+    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '0%'])
     expect(container.querySelectorAll('.daily-progress li')[1].classList.contains('just-active')).toBe(false)
     expect(container.textContent).toContain('先确认任务的基本信息')
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 460)) })
     expect(container.querySelectorAll('.daily-progress li')[1].classList.contains('just-active')).toBe(true)
-    expect(container.textContent).toContain('配置钉钉机器人')
+    expect(container.textContent).toContain('编辑消息')
   })
 
   it('restores the test node before returning from completion to editing', async () => {
     invoke.mockImplementation((operation: string) => {
-      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: true, draftTemplate: '日报内容', draftTemplateDocument: '', credentialMask: '••••••••（已保存）', webhookSaved: true, secretSaved: true, dingTalkConnected: true, pagePaths: [], sources: [], fields: [], runs: [] })
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: true, draftTemplate: '日报内容', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', pagePaths: [], sources: [], fields: [], runs: [] })
       return Promise.resolve({})
     })
     await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click() })
@@ -523,33 +643,31 @@ describe('daily report workflow', () => {
 
     const edit = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('修改消息内容')) as HTMLButtonElement
     await act(async () => { edit.click() })
-    expect(container.querySelectorAll('.daily-progress li')[3].classList.contains('just-back-leave')).toBe(true)
-    expect(container.querySelectorAll('.daily-progress li')[3].querySelector('span')?.textContent).toBe('4')
-    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '100%', '100%'])
+    expect(container.querySelectorAll('.daily-progress li')[2].classList.contains('just-back-leave')).toBe(true)
+    expect(container.querySelectorAll('.daily-progress li')[2].querySelector('span')?.textContent).toBe('3')
+    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '100%'])
     expect(container.textContent).toContain('配置完成，可以启用')
 
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 280)) })
-    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '100%', '0%'])
+    expect([...container.querySelectorAll<HTMLElement>('.progress-segments i')].map(item => item.style.width)).toEqual(['100%', '0%'])
     expect(container.textContent).toContain('配置完成，可以启用')
 
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 460)) })
-    expect(container.querySelectorAll('.daily-progress li')[2].classList.contains('just-back-active')).toBe(true)
+    expect(container.querySelectorAll('.daily-progress li')[1].classList.contains('just-back-active')).toBe(true)
     expect(container.textContent).toContain('编辑消息')
   })
 
-  it('keeps a failed robot connection on the credential step', async () => {
+  it('keeps notification credentials out of the task editor', async () => {
     invoke.mockImplementation((operation: string) => {
       if (operation === 'app.getOverview') return Promise.resolve({})
       if (operation === 'daily.list') return Promise.resolve({ jobs: [{ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, schedulingAvailable: true, status: 'pending-test', dingTalkStatus: '待测试', lastRun: '暂无运行记录' }] })
-      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', credentialMask: '••••••••（已保存）', webhookSaved: true, secretSaved: true, dingTalkConnected: false, pagePaths: [], sources: [], fields: [], runs: [] })
-      if (operation === 'daily.checkConnection') return Promise.resolve({ succeeded: false, message: '机器人无法连接' })
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: false, notificationConnected: false, notificationStatus: '尚未配置', pagePaths: [], sources: [], fields: [], runs: [] })
       return Promise.resolve({})
     })
     await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click() })
-    const test = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('保存并检查连通')) as HTMLButtonElement
-    await act(async () => { test.click() })
-    expect(container.textContent).toContain('机器人无法连接')
-    expect(container.textContent).toContain('配置中')
-    expect(container.querySelector('[aria-current="step"]')?.textContent).toContain('钉钉机器人')
+    expect(container.textContent).toContain('全局通知尚未就绪')
+    expect(container.textContent).toContain('设置 → 通知设置')
+    expect(container.textContent).not.toContain('Webhook')
+    expect(container.textContent).not.toContain('加签 Secret')
   })
 })
