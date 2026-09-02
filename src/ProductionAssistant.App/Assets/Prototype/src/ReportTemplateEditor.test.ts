@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { migrateTemplateDocument, templateDocumentText } from './ReportTemplateEditor'
+import { dateTokenPlaceholder, migrateTemplateDocument, templateDocumentText } from './ReportTemplateEditor'
 
 describe('daily report template document', () => {
   it('keeps real empty paragraphs and removes bare carriage returns', () => {
@@ -17,5 +17,11 @@ describe('daily report template document', () => {
     ] }] }, [{ placeholder: 'prop("产量")', label: '日 · 产量', tooltip: '日报 · 产量' }])
     expect(migrated.content[0].content[0].attrs.label).toBe('日 · 产量')
     expect(templateDocumentText(migrated)).toBe('prop("产量")')
+  })
+
+  it('creates separate year month day and full-date placeholders', () => {
+    expect((['year', 'month', 'day', 'date'] as const).map(dateTokenPlaceholder)).toEqual([
+      'today("yyyy年")', 'today("M月")', 'today("d日")', 'today("yyyy年M月d日")'
+    ])
   })
 })

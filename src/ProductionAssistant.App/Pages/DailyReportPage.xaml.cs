@@ -231,7 +231,7 @@ public sealed partial class DailyReportPage : Page
     private void ResetSourceChoices()
     {
         DataPageBox.SelectedItem = null;
-        DataPageBox.ItemsSource = DailyReportPresentation.PagePaths(_dataSources);
+        DataPageBox.ItemsSource = DailyReportPresentation.BusinessSections(_dataSources);
         ResetDataSourceChoice();
     }
 
@@ -239,7 +239,7 @@ public sealed partial class DailyReportPage : Page
     {
         ResetDataSourceChoice();
         if (DataPageBox.SelectedItem is string pagePath)
-            DataSourceBox.ItemsSource = DailyReportPresentation.SourcesForPage(_dataSources, pagePath);
+            DataSourceBox.ItemsSource = DailyReportPresentation.SourcesForBusiness(_dataSources, pagePath);
     }
 
     private void ResetDataSourceChoice()

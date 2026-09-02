@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -10,14 +9,16 @@ namespace ProductionAssistant.Services;
 
 public sealed partial class DailyReportService
 {
-    private const string NotionApiVersion = "2026-03-11";
-    private readonly HttpClient _notionClient;
+    private readonly IDatabaseQueryProvider _database;
     private readonly HttpClient _dingTalkClient;
 
-    public DailyReportService(HttpClient? notionClient = null, HttpClient? dingTalkClient = null)
+    public DailyReportService(
+        HttpClient? notionClient = null,
+        HttpClient? dingTalkClient = null,
+        Func<NotionSettings>? notionSettings = null,
+        IDatabaseQueryProvider? database = null)
     {
-        _notionClient = notionClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        _notionClient.BaseAddress ??= new Uri("https://api.notion.com/v1/");
+        _database = database ?? new NotionDatabaseQueryProvider(notionClient, notionSettings);
         _dingTalkClient = dingTalkClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     }
 
@@ -27,9 +28,6 @@ public sealed partial class DailyReportService
         DateTime businessDate,
         CancellationToken cancellationToken = default)
     {
-        var notion = NotionSettingsStore.Load();
-        if (string.IsNullOrWhiteSpace(notion.Token))
-            return new(false, "尚未配置 Notion API 令牌。", string.Empty);
         if (string.IsNullOrWhiteSpace(template))
             return new(false, "日报模板为空。", string.Empty);
 
@@ -63,29 +61,66 @@ public sealed partial class DailyReportService
         foreach (var sourceGroup in tokens.GroupBy(item => item.Token.DataSourceId))
         {
             var binding = settings.Sources.FirstOrDefault(source => source.DataSourceId == sourceGroup.Key);
-            if (binding is null || string.IsNullOrWhiteSpace(FirstNotBlank(
-                    binding.MatchPropertyName, binding.DatePropertyName)))
-                return new(false, $"数据源“{sourceGroup.First().Token.DataSourceName}”未配置业务日期字段。", string.Empty);
+            if (binding is null)
+                return new(false, $"找不到数据源“{sourceGroup.First().Token.DataSourceName}”的绑定。", string.Empty);
+            if (sourceGroup.Any(item => string.IsNullOrWhiteSpace(item.Token.ViewId)))
+                return new(false, "模板中存在没有绑定 View 的旧字段，请删除后重新插入。", string.Empty);
 
-            var pageResult = await QuerySinglePageAsync(
-                notion.Token, binding, businessDate, cancellationToken);
-            if (!pageResult.Succeeded)
-                return new(false, pageResult.Message, string.Empty);
-
-            foreach (var item in sourceGroup)
+            foreach (var viewGroup in sourceGroup.GroupBy(item => new
+                     {
+                         item.Token.ViewId,
+                         item.Token.ViewName
+                     }))
             {
-                var value = ReadProperty(pageResult.Page, item.Token);
-                if (!value.Succeeded)
-                    return new(false, value.Message, string.Empty);
-                try
-                {
-                    replacements[item.Marker] = FormatValue(value.Value, value.Kind, item.Token.Format);
-                }
-                catch (FormatException)
-                {
+                var data = await _database.QueryDatasetAsync(
+                    binding.DataSourceId, viewGroup.Key.ViewId, cancellationToken);
+                if (!data.Succeeded)
+                    return new(false, data.Message, string.Empty);
+                var pages = data.Records;
+                if (pages.Count == 0)
                     return new(false,
-                        $"字段“{item.Token.DataSourceName}.{item.Token.PropertyName}”的显示格式无效。",
+                        $"“{binding.DataSourceName}”的“{viewGroup.Key.ViewName}”View 没有数据。",
                         string.Empty);
+
+                foreach (var item in viewGroup)
+                {
+                    IReadOnlyList<DatabaseRecord> selectedPages = pages;
+                    if (SupportsPeriods(item.Token.ViewName))
+                    {
+                        var periodPages = SelectPeriodPages(pages, binding, item.Token.PeriodKind, businessDate);
+                        if (!periodPages.Succeeded)
+                            return new(false, periodPages.Message, string.Empty);
+                        selectedPages = periodPages.Pages;
+                    }
+                    else if (item.Token.PeriodKind == "direct-month")
+                    {
+                        var monthPage = SelectBusinessMonthPage(pages, binding, businessDate);
+                        if (!monthPage.Succeeded)
+                            return new(false, monthPage.Message, string.Empty);
+                        selectedPages = [monthPage.Page!];
+                    }
+                    else if (string.IsNullOrWhiteSpace(item.Token.PeriodKind) &&
+                             TrySelectLegacyBusinessMonthPage(pages, binding, businessDate, out var monthPage))
+                    {
+                        if (monthPage is null)
+                            return new(false,
+                                $"“{binding.DataSourceName}”的“{item.Token.ViewName}”View 中没有 {businessDate:yyyy-MM} 月记录。",
+                                string.Empty);
+                        selectedPages = [monthPage];
+                    }
+                    var value = ReadViewValue(selectedPages, item.Token);
+                    if (!value.Succeeded)
+                        return new(false, value.Message, string.Empty);
+                    try
+                    {
+                        replacements[item.Marker] = FormatValue(value.Value, value.Kind, item.Token.Format);
+                    }
+                    catch (FormatException)
+                    {
+                        return new(false,
+                            $"字段“{item.Token.DataSourceName}.{item.Token.PropertyName}”的显示格式无效。",
+                            string.Empty);
+                    }
                 }
             }
         }
@@ -173,137 +208,131 @@ public sealed partial class DailyReportService
         }
     }
 
-    private async Task<(bool Succeeded, string Message, JsonElement Page)> QuerySinglePageAsync(
+    public async Task<IReadOnlyList<DailyReportViewResult>> GetViewsAsync(
         string token,
+        string dataSourceId,
+        CancellationToken cancellationToken = default)
+        => (await _database.GetDatasetsAsync(dataSourceId, cancellationToken))
+            .Select(view => new DailyReportViewResult(true, string.Empty, view.Id, view.Name))
+            .ToArray();
+
+    private static (bool Succeeded, string Message, object? Value, string Kind) ReadViewValue(
+        IReadOnlyList<DatabaseRecord> pages,
+        DailyReportFieldToken token)
+    {
+        var values = pages.Select(page => ReadProperty(page, token)).ToArray();
+        foreach (var value in values)
+            if (!value.Succeeded) return value;
+        if (values.Length == 1) return values[0];
+        if (values.Any(value => value.Kind != "number" || value.Value is not IConvertible))
+            return (false,
+                $"View“{token.ViewName}”包含多条记录，字段“{token.PropertyName}”只有数值类型才能汇总。",
+                null, string.Empty);
+        return (true, string.Empty,
+            values.Sum(value => Convert.ToDouble(value.Value, CultureInfo.InvariantCulture)), "number");
+    }
+
+    private static (bool Succeeded, string Message, IReadOnlyList<DatabaseRecord> Pages) SelectPeriodPages(
+        IReadOnlyList<DatabaseRecord> pages,
+        DailyReportSourceBinding binding,
+        string periodKind,
+        DateTime businessDate)
+    {
+        if (periodKind is not ("day" or "month" or "year"))
+            return (false, "“本年截止今日”View 的字段没有绑定日、月或年统计口径，请删除后重新插入。", []);
+        if (binding.MatchPropertyType != "date" || string.IsNullOrWhiteSpace(binding.MatchPropertyName))
+            return (false, "“本年截止今日”View 没有可用的日期字段，请检查数据库日期字段后重新插入。", []);
+        var range = DatabaseDateRanges.Resolve(periodKind, DateOnly.FromDateTime(businessDate));
+        if (!range.Succeeded)
+            return (false, range.Message, []);
+
+        var selected = new List<DatabaseRecord>();
+        foreach (var page in pages)
+        {
+            if (!TryReadPageDate(page, binding, out var pageDate))
+                return (false, $"“{binding.DataSourceName}”的“本年截止今日”View 中存在日期字段为空的记录。", []);
+            var day = DateOnly.FromDateTime(pageDate);
+            var included = day >= range.Start && day <= range.End;
+            if (included) selected.Add(page);
+        }
+        if (selected.Count == 0)
+        {
+            var label = periodKind switch { "day" => "日", "month" => "月", _ => "年" };
+            return (false, $"“{binding.DataSourceName}”的“本年截止今日”View 中没有当前{label}口径的数据。", []);
+        }
+        return (true, string.Empty, selected);
+    }
+
+    private static bool TryReadPageDate(
+        DatabaseRecord page,
+        DailyReportSourceBinding binding,
+        out DateTime date)
+    {
+        date = default;
+        var field = page.Fields.FirstOrDefault(candidate =>
+            candidate.Id == binding.MatchPropertyId || candidate.Name == binding.MatchPropertyName);
+        if (field?.Value is not DateTime value) return false;
+        date = value;
+        return true;
+    }
+
+    private static bool SupportsPeriods(string viewName) =>
+        string.Equals(viewName.Trim(), "本年截止今日", StringComparison.CurrentCultureIgnoreCase);
+
+    private static (bool Succeeded, string Message, DatabaseRecord? Page) SelectBusinessMonthPage(
+        IReadOnlyList<DatabaseRecord> pages,
+        DailyReportSourceBinding binding,
+        DateTime businessDate)
+    {
+        if (binding.MatchPropertyType != "date" ||
+            string.IsNullOrWhiteSpace(binding.MatchPropertyId) && string.IsNullOrWhiteSpace(binding.MatchPropertyName))
+            return (false, "按业务月份直接获取需要绑定数据库中的日期字段。", null);
+        var matches = pages
+            .Where(page => TryReadPageDate(page, binding, out var date) &&
+                           date.Year == businessDate.Year && date.Month == businessDate.Month)
+            .ToList();
+        return matches.Count switch
+        {
+            1 => (true, string.Empty, matches[0]),
+            0 => (false, $"“{binding.DataSourceName}”中没有 {businessDate:yyyy-MM} 月记录。", null),
+            _ => (false, $"“{binding.DataSourceName}”中存在多条 {businessDate:yyyy-MM} 月记录，无法直接获取唯一值。", null)
+        };
+    }
+
+    private static bool TrySelectLegacyBusinessMonthPage(
+        IReadOnlyList<DatabaseRecord> pages,
         DailyReportSourceBinding binding,
         DateTime businessDate,
-        CancellationToken cancellationToken)
+        out DatabaseRecord? selected)
     {
-        var propertyId = FirstNotBlank(
-            binding.MatchPropertyId, binding.DatePropertyId,
-            binding.MatchPropertyName, binding.DatePropertyName);
-        var propertyType = string.IsNullOrWhiteSpace(binding.MatchPropertyType)
-            ? "date"
-            : binding.MatchPropertyType;
-        var period = string.IsNullOrWhiteSpace(binding.PeriodKind) ? "day" : binding.PeriodKind;
-        var filter = BuildPeriodFilter(propertyId, propertyType, period, businessDate);
-        if (filter is null)
-            return (false, $"“{binding.DataSourceName}”的匹配字段类型不支持。", default);
-        var body = JsonSerializer.Serialize(new { filter, page_size = 2 });
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post, $"data_sources/{binding.DataSourceId}/query");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Trim());
-        request.Headers.Add("Notion-Version", NotionApiVersion);
-        request.Content = new StringContent(body, Encoding.UTF8, "application/json");
-        try
+        selected = null;
+        if (pages.Count < 2 || binding.MatchPropertyType != "date") return false;
+        var dated = new List<(DatabaseRecord Page, DateTime Date)>();
+        foreach (var page in pages)
         {
-            using var response = await _notionClient.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                return (false, $"读取“{binding.DataSourceName}”失败：Notion HTTP {(int)response.StatusCode}。", default);
-            using var document = JsonDocument.Parse(
-                await response.Content.ReadAsStringAsync(cancellationToken));
-            var pages = document.RootElement.GetProperty("results").EnumerateArray()
-                .Select(page => page.Clone()).ToArray();
-            return pages.Length switch
-            {
-                0 => (false, $"“{binding.DataSourceName}”没有匹配当前{PeriodLabel(period)}的记录。", default),
-                > 1 => (false, $"“{binding.DataSourceName}”存在多条匹配当前{PeriodLabel(period)}的记录。", default),
-                _ => (true, string.Empty, pages[0])
-            };
+            if (!TryReadPageDate(page, binding, out var date) || date.Day != 1) return false;
+            dated.Add((page, date));
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
-        {
-            return (false, $"读取“{binding.DataSourceName}”失败：{ex.Message}", default);
-        }
+        if (dated.GroupBy(item => (item.Date.Year, item.Date.Month)).Any(group => group.Count() > 1))
+            return false;
+        selected = dated.FirstOrDefault(item =>
+            item.Date.Year == businessDate.Year && item.Date.Month == businessDate.Month).Page;
+        return true;
     }
 
     private static (bool Succeeded, string Message, object? Value, string Kind) ReadProperty(
-        JsonElement page,
+        DatabaseRecord page,
         DailyReportFieldToken token)
     {
-        if (!page.TryGetProperty("properties", out var properties))
-            return (false, "Notion 页面没有 properties。", null, string.Empty);
-        JsonElement property = default;
-        var found = false;
-        foreach (var candidate in properties.EnumerateObject())
-        {
-            if ((candidate.Value.TryGetProperty("id", out var id) && id.GetString() == token.PropertyId) ||
-                candidate.Name == token.PropertyName)
-            {
-                property = candidate.Value;
-                found = true;
-                break;
-            }
-        }
-        if (!found)
+        var property = page.Fields.FirstOrDefault(candidate =>
+            candidate.Id == token.PropertyId || candidate.Name == token.PropertyName);
+        if (property is null)
             return (false, $"字段“{token.DataSourceName}.{token.PropertyName}”已不存在。", null, string.Empty);
-
-        var type = property.TryGetProperty("type", out var typeElement)
-            ? typeElement.GetString() ?? token.PropertyType
-            : token.PropertyType;
-        object? value = type switch
-        {
-            "number" => ReadNumber(property, "number"),
-            "title" => ReadText(property, "title"),
-            "rich_text" => ReadText(property, "rich_text"),
-            "select" or "status" => ReadOption(property, type),
-            "date" => ReadDateValue(property, "date"),
-            "checkbox" => property.TryGetProperty("checkbox", out var checkbox) ? checkbox.GetBoolean() : null,
-            "url" or "email" or "phone_number" => property.TryGetProperty(type, out var scalar) ? scalar.GetString() : null,
-            "formula" => ReadFormula(property),
-            "rollup" => ReadRollup(property),
-            _ => null
-        };
+        var type = property.Type;
+        var value = property.Value;
         return value is null || value is string text && string.IsNullOrWhiteSpace(text)
             ? (false, $"字段“{token.DataSourceName}.{token.PropertyName}”为空或类型不支持。", null, type)
             : (true, string.Empty, value, value is DateTime ? "date" : value is double or decimal or int or long ? "number" : type);
-    }
-
-    private static double? ReadNumber(JsonElement owner, string name) =>
-        owner.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
-            ? value.GetDouble()
-            : null;
-
-    private static string? ReadText(JsonElement owner, string name) =>
-        owner.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
-            ? string.Concat(value.EnumerateArray().Select(item =>
-                item.TryGetProperty("plain_text", out var text) ? text.GetString() : string.Empty))
-            : null;
-
-    private static string? ReadOption(JsonElement owner, string name) =>
-        owner.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object &&
-        value.TryGetProperty("name", out var option) ? option.GetString() : null;
-
-    private static DateTime? ReadDateValue(JsonElement owner, string name) =>
-        owner.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object &&
-        value.TryGetProperty("start", out var start) && DateTime.TryParse(start.GetString(), out var date)
-            ? date
-            : null;
-
-    private static object? ReadFormula(JsonElement owner)
-    {
-        if (!owner.TryGetProperty("formula", out var formula) ||
-            !formula.TryGetProperty("type", out var type)) return null;
-        return type.GetString() switch
-        {
-            "number" => ReadNumber(formula, "number"),
-            "string" => formula.TryGetProperty("string", out var text) ? text.GetString() : null,
-            "date" => ReadDateValue(formula, "date"),
-            "boolean" => formula.TryGetProperty("boolean", out var boolean) ? boolean.GetBoolean() : null,
-            _ => null
-        };
-    }
-
-    private static object? ReadRollup(JsonElement owner)
-    {
-        if (!owner.TryGetProperty("rollup", out var rollup) ||
-            !rollup.TryGetProperty("type", out var type)) return null;
-        return type.GetString() switch
-        {
-            "number" => ReadNumber(rollup, "number"),
-            "date" => ReadDateValue(rollup, "date"),
-            _ => null
-        };
     }
 
     private static string FormatValue(object? value, string kind, string format)
@@ -315,74 +344,6 @@ public sealed partial class DailyReportService
         if (value is bool boolean) return boolean ? "是" : "否";
         return Convert.ToString(value, CultureInfo.CurrentCulture) ?? string.Empty;
     }
-
-    private static object? BuildPeriodFilter(
-        string property,
-        string propertyType,
-        string period,
-        DateTime businessDate)
-    {
-        if (string.IsNullOrWhiteSpace(property)) return null;
-        if (propertyType == "date")
-        {
-            if (period == "day")
-                return new Dictionary<string, object>
-                {
-                    ["property"] = property,
-                    ["date"] = new { equals = businessDate.ToString("yyyy-MM-dd") }
-                };
-            var start = period == "month"
-                ? new DateTime(businessDate.Year, businessDate.Month, 1)
-                : new DateTime(businessDate.Year, 1, 1);
-            var end = period == "month" ? start.AddMonths(1) : start.AddYears(1);
-            return new Dictionary<string, object>
-            {
-                ["and"] = new object[]
-                {
-                    new Dictionary<string, object>
-                    {
-                        ["property"] = property,
-                        ["date"] = new { on_or_after = start.ToString("yyyy-MM-dd") }
-                    },
-                    new Dictionary<string, object>
-                    {
-                        ["property"] = property,
-                        ["date"] = new { before = end.ToString("yyyy-MM-dd") }
-                    }
-                }
-            };
-        }
-
-        var key = period switch
-        {
-            "month" => businessDate.ToString("yyyy-MM"),
-            "year" => businessDate.ToString("yyyy"),
-            _ => businessDate.ToString("yyyy-MM-dd")
-        };
-        var operatorName = propertyType switch
-        {
-            "title" => "title",
-            "rich_text" => "rich_text",
-            "select" => "select",
-            "status" => "status",
-            _ => string.Empty
-        };
-        return operatorName.Length == 0 ? null : new Dictionary<string, object>
-        {
-            ["property"] = property,
-            [operatorName] = new { equals = key }
-        };
-    }
-
-    private static string FirstNotBlank(params string[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
-
-    private static string PeriodLabel(string period) => period switch
-    {
-        "month" => "月份",
-        "year" => "年份",
-        _ => "日期"
-    };
 
     [GeneratedRegex(@"\{\{report:[A-Za-z0-9+/=]+\}\}")]
     private static partial Regex TokenRegex();

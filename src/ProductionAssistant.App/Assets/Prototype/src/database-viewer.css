@@ -1,0 +1,29 @@
+.database-viewer-page { max-width: 1480px; margin: 0 auto; }
+.database-viewer-page > header { align-items: flex-start; }
+.database-provider { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px; border: 1px solid #e7e5e4; border-radius: 14px; color: #57534e; font-size: 14px; font-weight: 500; background: #fff; }
+.database-provider svg { width: 17px; }
+.database-query-panel, .database-result, .database-empty { background: #fff; border: 1px solid #e7e5e4; border-radius: 17px; padding: 20px; }
+.database-query-heading h2, .database-result h2, .database-empty h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.database-query-heading p, .database-result p, .database-empty p { margin: 4px 0 0; color: #78716c; font-size: 14px; }
+.database-query-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+.database-query-grid > label { display: grid; gap: 8px; color: #57534e; font-size: 14px; font-weight: 500; }
+.database-query-actions { display: flex; justify-content: flex-end; margin-top: 20px; }
+.database-query-actions button { min-width: 132px; }
+.database-result { margin-top: 20px; padding-bottom: 14px; }
+.database-result-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+.database-result-head dl { display: flex; gap: 28px; margin: 0; }
+.database-result-head dl div { min-width: 108px; }
+.database-result-head dt { display: flex; align-items: center; gap: 6px; color: #78716c; font-size: 14px; }
+.database-result-head dt svg { width: 16px; }
+.database-result-head dd { margin: 4px 0 0; color: #292524; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.database-table-wrap { max-height: 420px; overflow: auto; border: 1px solid #e7e5e4; border-radius: 14px; scrollbar-color: #78716c transparent; }
+.database-table-wrap table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; white-space: nowrap; }
+.database-table-wrap th { position: sticky; top: 0; z-index: 1; padding: 11px 14px; border-bottom: 1px solid #e7e5e4; background: #f5f5f4; color: #57534e; text-align: left; font-weight: 600; }
+.database-table-wrap th small { display: block; margin-top: 2px; color: #78716c; font-size: 14px; font-weight: 400; }
+.database-table-wrap td { padding: 11px 14px; border-bottom: 1px solid #e7e5e4; color: #292524; font-variant-numeric: tabular-nums; }
+.database-table-wrap tbody tr:last-child td { border-bottom: 0; }
+.database-table-wrap tbody tr:hover td { background: #fafaf9; }
+.database-truncated { margin: 10px 2px 0 !important; }
+.database-empty { display: grid; justify-items: center; margin-top: 20px; padding: 54px 24px; text-align: center; }
+.database-empty > svg { width: 28px; height: 28px; margin-bottom: 14px; color: #78716c; }
+@media (max-width: 1180px) { .database-query-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

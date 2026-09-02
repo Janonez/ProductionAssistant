@@ -35,6 +35,7 @@ public sealed partial class PrototypePage : Page
             { } navigationRoute when navigationRoute.StartsWith("navigation:", StringComparison.Ordinal) => navigationRoute,
             "daily-weld" => "daily-weld",
             "production-message" => "production-message",
+            "database-viewer" => "database-viewer",
             "daily-report" => "daily-report",
             "report-center" => "report-center",
             _ => "production-message"

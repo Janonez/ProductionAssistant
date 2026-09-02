@@ -321,8 +321,13 @@ public static class ProductionMessageParser
         fields.TryAdd(ProductionMessageFields.Process, "下料");
         SetMatch(fields, ProductionMessageFields.Shift, text, @"(?<value>单班|双班|白班|夜班)");
         SetMatch(fields, ProductionMessageFields.Project, text, @"切割(?<value>[^，,。\s]+?)项目");
+        if (!fields.ContainsKey(ProductionMessageFields.Project))
+            SetMatch(fields, ProductionMessageFields.Project, text,
+                @"切割(?<value>[^，,。\s]+?)(?=钢板\d+(?:\.\d+)?\s*张)");
 
         var sheet = Regex.Match(text, @"项目(?<material>[^，,。\d\s]{1,10})(?<count>\d+(?:\.\d+)?)\s*张");
+        if (!sheet.Success)
+            sheet = Regex.Match(text, @"(?<material>钢板)(?<count>\d+(?:\.\d+)?)\s*张");
         if (sheet.Success)
         {
             fields.TryAdd(ProductionMessageFields.Material, sheet.Groups["material"].Value);

@@ -31,9 +31,9 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> GetDailyJobAsync(JsonElement payload)
     {
         var job = FindDailyJob(payload);
-        var notion = NotionSettingsStore.Load();
         var notification = NotificationSettingsStore.Load();
         var scheduler = await DailyReportTaskScheduler.GetStatusAsync(job.Id, job.SendTime);
+        var catalog = DatabaseSourceCatalog.Create(AppServices.DatabaseProvider.GetSources());
         return new
         {
             job.Id, job.Name, job.SendTime,
@@ -47,8 +47,9 @@ internal sealed partial class PrototypeBridge
             notificationConnected = notification.DingTalkConnected,
             notificationStatus = notification.DingTalkStatus,
             schedulerInstalled = scheduler.Installed, schedulerMessage = scheduler.Message,
-            pagePaths = DailyReportPresentation.PagePaths(notion.CachedDataSources),
-            sources = notion.CachedDataSources.Select(source => new { source.Id, source.Name, source.Path }),
+            usesBusinessSections = catalog.UsesBusinessSections,
+            businessSections = catalog.BusinessSections,
+            sources = catalog.Sources.Select(source => new { source.Id, source.Name, source.Path, businessSection = source.BusinessSection }),
             fields = DailyFieldDtos(job),
             runs = DailyRunDtos(DailyReportSettingsStore.LoadRunRecords(job.Id).Take(5))
         };
@@ -63,7 +64,7 @@ internal sealed partial class PrototypeBridge
         if (!TimeSpan.TryParse(sendTime, out var time)) throw new InvalidOperationException("发送时间无效。");
         var timeChanged = job.SendTime != sendTime;
         if (job.IsEnabled && timeChanged && !DailyReportTaskScheduler.IsSchedulingAvailable)
-            throw new InvalidOperationException("Debug 版本不能修改已启用任务的发送时间，请使用 Release 版本。");
+            job.IsEnabled = false;
         job.Name = name;
         job.SendTime = time.ToString(@"hh\:mm");
         DailyReportSettingsStore.SaveJob(job);
@@ -91,14 +92,27 @@ internal sealed partial class PrototypeBridge
 
     private static async Task<object> GetDailyPropertiesAsync(JsonElement payload, CancellationToken cancellationToken)
     {
+        var job = FindDailyJob(payload);
         var sourceId = ReadString(payload, "sourceId");
-        var notion = NotionSettingsStore.Load();
-        if (string.IsNullOrWhiteSpace(notion.Token)) throw new InvalidOperationException("请先在设置页配置 Notion 连接。");
-        var source = notion.CachedDataSources.FirstOrDefault(item => item.Id == sourceId)
+        var source = AppServices.DatabaseProvider.GetSources().FirstOrDefault(item => item.Id == sourceId)
             ?? throw new InvalidOperationException("找不到所选数据源。");
-        var schema = await AppServices.Notion.GetSchemaAsync(notion.Token, source.Id, cancellationToken);
+        var schema = await AppServices.DatabaseProvider.GetSchemaAsync(source.Id, cancellationToken);
         if (!schema.Succeeded) throw new InvalidOperationException(schema.Message);
-        return new { properties = schema.Properties.Where(IsDailySupportedValue).Select(item => new { item.Id, item.Name, item.Type }) };
+        var match = ResolveDailyDateProperty(job, source, schema.Fields);
+        var views = await AppServices.DatabaseProvider.GetDatasetsAsync(source.Id, cancellationToken);
+        return new
+        {
+            views = views.Select(view => new
+            {
+                id = view.Id,
+                name = view.Name,
+                supportsPeriods = SupportsDailyPeriods(view.Name)
+            }),
+            matchProperty = match is null ? null : new { match.Id, match.Name, match.Type },
+            properties = schema.Fields
+                .Where(IsDailySupportedValue)
+                .Select(item => new { item.Id, item.Name, item.Type })
+        };
     }
 
     private static async Task<object> AddDailyFieldAsync(JsonElement payload, CancellationToken cancellationToken)
@@ -106,28 +120,41 @@ internal sealed partial class PrototypeBridge
         var job = FindDailyJob(payload);
         var sourceId = ReadString(payload, "sourceId");
         var propertyId = ReadString(payload, "propertyId");
-        var notion = NotionSettingsStore.Load();
-        if (string.IsNullOrWhiteSpace(notion.Token)) throw new InvalidOperationException("请先在设置页配置 Notion 连接。");
-        var source = notion.CachedDataSources.FirstOrDefault(item => item.Id == sourceId)
+        var propertyName = ReadString(payload, "propertyName");
+        var propertyType = ReadString(payload, "propertyType");
+        var source = AppServices.DatabaseProvider.GetSources().FirstOrDefault(item => item.Id == sourceId)
             ?? throw new InvalidOperationException("找不到所选数据源。");
-        var schema = await AppServices.Notion.GetSchemaAsync(notion.Token, source.Id, cancellationToken);
-        if (!schema.Succeeded) throw new InvalidOperationException(schema.Message);
-        var property = schema.Properties.FirstOrDefault(item => item.Id == propertyId)
-            ?? throw new InvalidOperationException("找不到所选字段。");
-        var match = ResolveDailyDateProperty(job, source, schema.Properties, notion);
-        if (match is null) throw new InvalidOperationException($"数据源“{source.Name}”没有可用于查询的日期字段。");
+        if (string.IsNullOrWhiteSpace(propertyId) || string.IsNullOrWhiteSpace(propertyName) || string.IsNullOrWhiteSpace(propertyType))
+            throw new InvalidOperationException("请选择要插入的字段。");
+        var viewId = ReadString(payload, "viewId");
+        var viewName = ReadString(payload, "viewName");
+        var period = ReadString(payload, "periodKind");
+        if (string.IsNullOrWhiteSpace(viewId))
+            throw new InvalidOperationException("请选择统计 View。");
+        if (SupportsDailyPeriods(viewName) && period is not ("day" or "month" or "year"))
+            throw new InvalidOperationException("请选择日、月或年统计口径。");
+        if (!SupportsDailyPeriods(viewName) && period is not ("direct-month" or "view-sum"))
+            throw new InvalidOperationException("请选择直接获取业务月份或累计 View 全部记录。");
+        if (SupportsDailyPeriods(viewName) &&
+            (ReadString(payload, "matchPropertyType") != "date" ||
+             string.IsNullOrWhiteSpace(ReadString(payload, "matchPropertyName"))))
+            throw new InvalidOperationException("“本年截止今日”View 需要数据库中存在可用的日期字段。");
         await InvalidateDailyJobAsync(job);
         var binding = job.Sources.FirstOrDefault(item => item.DataSourceId == source.Id);
         if (binding is null) { binding = new() { DataSourceId = source.Id }; job.Sources.Add(binding); }
         binding.DataSourceName = source.Name;
-        binding.PeriodKind = DailyReportPresentation.PeriodFor(source, notion.Targets);
-        binding.MatchPropertyId = match.Id;
-        binding.MatchPropertyName = match.Name;
-        binding.MatchPropertyType = match.Type;
+        binding.PeriodKind = period;
+        binding.MatchPropertyId = ReadString(payload, "matchPropertyId");
+        binding.MatchPropertyName = ReadString(payload, "matchPropertyName");
+        binding.MatchPropertyType = ReadString(payload, "matchPropertyType");
+        binding.ViewId = string.Empty;
+        binding.ViewName = viewName;
         var placeholder = DailyReportSettingsStore.AddOrUpdateField(job,
-            new(source.Id, source.Name, property.Id, property.Name, property.Type));
+            new(source.Id, source.Name, propertyId, propertyName, propertyType,
+                PeriodKind: period,
+                ViewId: viewId, ViewName: viewName));
         DailyReportSettingsStore.SaveJob(job);
-        return new { field = DailyFieldDto(job, job.Fields.First(field => field.Placeholder == placeholder)) };
+        return new { field = DailyFieldDto(job.Fields.First(field => field.Placeholder == placeholder)) };
     }
 
     private static async Task<object> PreviewDailyReportAsync(JsonElement payload, CancellationToken cancellationToken)
@@ -222,8 +249,11 @@ internal sealed partial class PrototypeBridge
     {
         if (job.IsEnabled)
         {
-            var removed = await DailyReportTaskScheduler.RemoveAsync(job.Id);
-            if (!removed.Succeeded) throw new InvalidOperationException(removed.Message);
+            if (DailyReportTaskScheduler.IsSchedulingAvailable)
+            {
+                var removed = await DailyReportTaskScheduler.RemoveAsync(job.Id);
+                if (!removed.Succeeded) throw new InvalidOperationException(removed.Message);
+            }
             job.IsEnabled = false;
         }
         job.ConfigurationValidated = false;
@@ -264,12 +294,32 @@ internal sealed partial class PrototypeBridge
         };
     }
 
-    private static IEnumerable<object> DailyFieldDtos(DailyReportJob job) => job.Fields.Select(field => DailyFieldDto(job, field));
-    private static object DailyFieldDto(DailyReportJob job, DailyReportFieldDefinition field)
+    private static IEnumerable<object> DailyFieldDtos(DailyReportJob job) =>
+        job.Fields.Select(DailyFieldDto);
+
+    private static object DailyFieldDto(DailyReportFieldDefinition field)
     {
-        var period = job.Sources.FirstOrDefault(source => source.DataSourceId == field.Token.DataSourceId)?.PeriodKind ?? "day";
-        var periodLabel = period == "month" ? "月" : period == "year" ? "年" : "日";
-        return new { field.Placeholder, label = $"{periodLabel} · {field.Token.PropertyName}", tooltip = $"{field.Token.DataSourceName} · {field.Token.PropertyName}" };
+        var invalidViewField = string.IsNullOrWhiteSpace(field.Token.ViewId);
+        var periodLabel = field.Token.PeriodKind switch
+        {
+            "day" => "日",
+            "month" => "月",
+            "year" => "年",
+            _ => string.Empty
+        };
+        var label = !string.IsNullOrWhiteSpace(field.Token.ViewId)
+            ? $"{(string.IsNullOrWhiteSpace(periodLabel) ? field.Token.ViewName : periodLabel)} · {field.Token.PropertyName}"
+            : field.Token.PropertyName;
+        return new
+        {
+            field.Placeholder,
+            label = invalidViewField ? $"已失效 · {field.Token.PropertyName}" : label,
+            tooltip = invalidViewField
+                ? "旧版字段没有绑定 View，请删除后重新插入"
+                : !string.IsNullOrWhiteSpace(field.Token.ViewId)
+                    ? $"{field.Token.DataSourceName} · {field.Token.ViewName} · {field.Token.PropertyName}"
+                    : $"{field.Token.DataSourceName} · {field.Token.PropertyName}"
+        };
     }
 
     private static IEnumerable<object> DailyRunDtos(IEnumerable<DailyReportRunRecord> records) => records.Select(record => new
@@ -281,18 +331,20 @@ internal sealed partial class PrototypeBridge
         record.Response, record.Error, record.TextSummary
     });
 
-    private static NotionPropertyOption? ResolveDailyDateProperty(DailyReportJob job, NotionDataSourceOption source,
-        IReadOnlyList<NotionPropertyOption> properties, NotionSettings notion)
+    private static bool IsDailySupportedValue(DatabaseFieldInfo property) => property.Type is
+        "number" or "title" or "rich_text" or "select" or "status" or "date" or "checkbox" or
+        "url" or "email" or "phone_number" or "formula" or "rollup";
+
+    private static DatabaseFieldInfo? ResolveDailyDateProperty(DailyReportJob job, DatabaseSourceInfo source,
+        IReadOnlyList<DatabaseFieldInfo> properties)
     {
         var existing = job.Sources.FirstOrDefault(item => item.DataSourceId == source.Id);
-        var configured = notion.Targets.FirstOrDefault(target => target.Id == source.Id)?.DateProperty;
         return properties.FirstOrDefault(property => property.Type == "date" && (property.Id == existing?.MatchPropertyId || property.Name == existing?.MatchPropertyName))
-            ?? properties.FirstOrDefault(property => property.Type == "date" && property.Name == configured)
             ?? properties.FirstOrDefault(property => property.Type == "date" && property.Name.Contains("日期"))
             ?? properties.FirstOrDefault(property => property.Type == "date");
     }
 
-    private static bool IsDailySupportedValue(NotionPropertyOption property) => property.Type is
-        "number" or "title" or "rich_text" or "select" or "status" or "date" or "checkbox" or
-        "url" or "email" or "phone_number" or "formula" or "rollup";
+    private static bool SupportsDailyPeriods(string viewName) =>
+        string.Equals(viewName.Trim(), "本年截止今日", StringComparison.CurrentCultureIgnoreCase);
+
 }

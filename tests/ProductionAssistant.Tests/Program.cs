@@ -57,16 +57,16 @@ var sourceTargets = new[]
 {
     new NotionTargetSettings { Id = "yearly", ModuleKey = ProductionMessageKinds.TowerYearlyModuleKey }
 };
-var pagePaths = DailyReportPresentation.PagePaths(sourceOptions);
-Assert(pagePaths.Count == 2 && pagePaths.Contains("生产数据 / 塔筒") && pagePaths.Contains("生产数据 / 下料") &&
-       pagePaths.SequenceEqual(pagePaths.OrderBy(path => path, StringComparer.CurrentCultureIgnoreCase)),
-    "Notion 数据页没有保留完整父页面路径或稳定排序。");
-var towerSources = DailyReportPresentation.SourcesForPage(sourceOptions, "生产数据 / 塔筒");
+var businessSections = DailyReportPresentation.BusinessSections(sourceOptions);
+Assert(businessSections.Count == 2 && businessSections.Contains("塔筒") && businessSections.Contains("下料") &&
+       businessSections.SequenceEqual(businessSections.OrderBy(section => section, StringComparer.CurrentCultureIgnoreCase)),
+    "Notion 业务板块没有按数据库根页面的下一层正确解析或稳定排序。");
+var towerSources = DailyReportPresentation.SourcesForBusiness(sourceOptions, "塔筒");
 Assert(towerSources.Count == 4 && towerSources.Select(source => source.Name)
            .SequenceEqual(towerSources.Select(source => source.Name).OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)),
     "Notion 原始数据库没有按名称稳定排序。");
-Assert(DailyReportPresentation.SourcesForPage(sourceOptions, "生产数据 / 下料").Single().Id == "daily-b",
-    "不同完整页面路径下的同名数据库无法区分。");
+Assert(DailyReportPresentation.SourcesForBusiness(sourceOptions, "下料").Single().Id == "daily-b",
+    "不同业务板块下的同名数据库无法区分。");
 Assert(DailyReportPresentation.PeriodFor(sourceOptions.Single(source => source.Id == "yearly"), sourceTargets) == "year" &&
        DailyReportPresentation.PeriodFor(sourceOptions.Single(source => source.Id == "unknown"), sourceTargets) == "day",
     "后台取数周期没有保持 ModuleKey 优先和旧版日库回退规则。");

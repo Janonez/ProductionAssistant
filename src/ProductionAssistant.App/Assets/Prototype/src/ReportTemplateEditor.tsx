@@ -3,8 +3,19 @@ import { Editor, Extension, Node, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import type { DailyField } from './types'
 
-const todayPlaceholder = 'today("yyyy年M月d日")'
+export type DateInsertKind = 'date' | 'year' | 'month' | 'day'
+const datePlaceholders: Record<DateInsertKind, string> = {
+  date: 'today("yyyy年M月d日")', year: 'today("yyyy年")', month: 'today("M月")', day: 'today("d日")'
+}
 const todayPattern = /today\("[^"]+"\)/g
+export const dateTokenPlaceholder = (kind: DateInsertKind) => datePlaceholders[kind]
+const dateTokenLabel = (placeholder: string) => placeholder === datePlaceholders.year
+  ? '业务年份'
+  : placeholder === datePlaceholders.month
+    ? '业务月份'
+    : placeholder === datePlaceholders.day
+      ? '业务日'
+      : '业务日期'
 
 const FieldToken = Node.create({
   name: 'fieldToken', group: 'inline', inline: true, atom: true, selectable: true,
@@ -14,9 +25,9 @@ const FieldToken = Node.create({
 })
 const DateToken = Node.create({
   name: 'dateToken', group: 'inline', inline: true, atom: true, selectable: true,
-  addAttributes: () => ({ placeholder: { default: todayPlaceholder } }),
+  addAttributes: () => ({ placeholder: { default: datePlaceholders.date } }),
   parseHTML: () => [{ tag: 'span[data-date-token]' }],
-  renderHTML: ({ HTMLAttributes }) => ['span', mergeAttributes(HTMLAttributes, { 'data-date-token': '', class: 'field-token date-token', contenteditable: 'false' }), ['span', { class: 'field-icon' }, '◆'], ['span', { class: 'field-label' }, '业务日期']]
+  renderHTML: ({ HTMLAttributes }) => ['span', mergeAttributes(HTMLAttributes, { 'data-date-token': '', class: 'field-token date-token', contenteditable: 'false' }), ['span', { class: 'field-icon' }, '◆'], ['span', { class: 'field-label' }, dateTokenLabel(HTMLAttributes.placeholder)]]
 })
 const PlainLineBreak = Extension.create({ name: 'plainLineBreak', addKeyboardShortcuts() { return { 'Shift-Enter': () => this.editor.commands.splitBlock() } } })
 
@@ -61,7 +72,7 @@ function textContent(text: string, fields: DailyField[]) {
   }) }
 }
 
-export function ReportTemplateEditor({ text, document, fields, insert, onChange }: { text: string; document: string; fields: DailyField[]; insert?: { value: DailyField | 'today'; key: number }; onChange: (text: string, document: string) => void }) {
+export function ReportTemplateEditor({ text, document, fields, insert, onChange, onInsertHandled }: { text: string; document: string; fields: DailyField[]; insert?: { value: DailyField | DateInsertKind; key: number }; onChange: (text: string, document: string) => void; onInsertHandled: () => void }) {
   const host = useRef<HTMLDivElement>(null); const editor = useRef<Editor | undefined>(undefined); const initialized = useRef(false)
   useEffect(() => {
     let content
@@ -72,7 +83,12 @@ export function ReportTemplateEditor({ text, document, fields, insert, onChange 
   }, [])
   useEffect(() => {
     if (!initialized.current || !insert) return
-    editor.current?.chain().focus().insertContent(insert.value === 'today' ? { type: 'dateToken', attrs: { placeholder: todayPlaceholder } } : { type: 'fieldToken', attrs: insert.value }).insertContent(' ').run()
+    const activeEditor = editor.current
+    if (!activeEditor) return
+    activeEditor.chain().focus().insertContent(typeof insert.value === 'string' ? { type: 'dateToken', attrs: { placeholder: dateTokenPlaceholder(insert.value) } } : { type: 'fieldToken', attrs: insert.value }).insertContent(' ').run()
+    const json = activeEditor.getJSON()
+    onChange(documentText(json), JSON.stringify(json))
+    onInsertHandled()
   }, [insert?.key])
   return <div className="report-editor" ref={host} />
 }

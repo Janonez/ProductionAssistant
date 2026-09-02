@@ -64,7 +64,8 @@ public sealed record NotionDataSourceOption(
     string Name,
     string Path,
     string IconText = "",
-    string IconUrl = "");
+    string IconUrl = "",
+    string DatabaseId = "");
 public sealed record NotionPropertyOption(
     string Name,
     string Type,

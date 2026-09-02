@@ -13,13 +13,6 @@ internal sealed partial class PrototypeBridge
     {
         Converters = { new JsonStringEnumConverter() }
     };
-    private static readonly string[] TowerKeys =
-    [
-        ProductionMessageKinds.TowerDailyModuleKey,
-        ProductionMessageKinds.TowerMonthlyModuleKey,
-        ProductionMessageKinds.TowerYearlyModuleKey
-    ];
-
     private readonly WebView2 _webView;
     private readonly Action<string> _navigate;
     private readonly Action<string, string> _ready;
@@ -97,6 +90,9 @@ internal sealed partial class PrototypeBridge
             "weld.saveBinding" => await SaveWeldBindingAsync(payload, cancellationToken),
             "weld.check" => await CheckWeldAsync(payload, cancellationToken),
             "weld.write" => await WriteWeldAsync(id, payload, cancellationToken),
+            "database.getState" => GetDatabaseState(),
+            "database.getSchema" => await GetDatabaseSchemaAsync(payload, cancellationToken),
+            "database.inspect" => await InspectDatabaseAsync(payload, cancellationToken),
             "daily.list" => await ListDailyJobsAsync(),
             "daily.create" => CreateDailyJob(),
             "daily.get" => await GetDailyJobAsync(payload),
@@ -243,27 +239,34 @@ internal sealed partial class PrototypeBridge
     private static object GetBindings()
     {
         var settings = NotionSettingsStore.Load();
+        var catalog = DatabaseSourceCatalog.Create(AppServices.DatabaseProvider.GetSources());
         return new
         {
             configured = !string.IsNullOrWhiteSpace(settings.Token),
-            cutting = ToBindingTarget(FindTarget(settings, ProductionMessageKinds.CuttingModuleKey)),
-            towerDaily = ToBindingTarget(FindTarget(settings, ProductionMessageKinds.TowerDailyModuleKey)),
-            towerMonthly = ToBindingTarget(FindTarget(settings, ProductionMessageKinds.TowerMonthlyModuleKey)),
-            towerYearly = ToBindingTarget(FindTarget(settings, ProductionMessageKinds.TowerYearlyModuleKey)),
-            sources = settings.CachedDataSources.Select(source => new { source.Id, source.Name, source.Path }),
+            cutting = ToBindingTarget(FindTarget(settings, ProductionMessageKinds.CuttingModuleKey), settings.CachedDataSources),
+            towerDaily = ToBindingTarget(FindTarget(settings, ProductionMessageKinds.TowerDailyModuleKey), settings.CachedDataSources),
+            usesBusinessSections = catalog.UsesBusinessSections,
+            businessSections = catalog.BusinessSections,
+            sources = catalog.Sources.Select(source => new { source.Id, source.Name, source.Path, businessSection = source.BusinessSection }),
             selected = new Dictionary<string, string>
             {
-                ["cutting"] = FindTarget(settings, ProductionMessageKinds.CuttingModuleKey)?.Id ?? string.Empty,
-                ["towerDaily"] = FindTarget(settings, ProductionMessageKinds.TowerDailyModuleKey)?.Id ?? string.Empty,
-                ["towerMonthly"] = FindTarget(settings, ProductionMessageKinds.TowerMonthlyModuleKey)?.Id ?? string.Empty,
-                ["towerYearly"] = FindTarget(settings, ProductionMessageKinds.TowerYearlyModuleKey)?.Id ?? string.Empty
+                ["cutting"] = CurrentTargetId(settings, ProductionMessageKinds.CuttingModuleKey),
+                ["towerDaily"] = CurrentTargetId(settings, ProductionMessageKinds.TowerDailyModuleKey)
             }
         };
     }
 
-    private static object ToBindingTarget(NotionTargetSettings? target) => new
+    private static string CurrentTargetId(NotionSettings settings, string key)
     {
-        bound = IsBound(target),
+        var id = FindTarget(settings, key)?.Id ?? string.Empty;
+        return settings.CachedDataSources.Any(source => source.Id == id) ? id : string.Empty;
+    }
+
+    private static object ToBindingTarget(
+        NotionTargetSettings? target,
+        IReadOnlyList<NotionDataSourceOption> sources) => new
+    {
+        bound = target is not null && sources.Any(source => source.Id == target.Id),
         name = target?.Name ?? string.Empty,
         path = target?.Path ?? string.Empty
     };
@@ -275,26 +278,21 @@ internal sealed partial class PrototypeBridge
         var selections = new Dictionary<string, string>
         {
             ["cutting"] = ReadString(payload, "cutting"),
-            ["towerDaily"] = ReadString(payload, "towerDaily"),
-            ["towerMonthly"] = ReadString(payload, "towerMonthly"),
-            ["towerYearly"] = ReadString(payload, "towerYearly")
+            ["towerDaily"] = ReadString(payload, "towerDaily")
         };
-        if (new[] { "towerDaily", "towerMonthly", "towerYearly" }.Any(key => string.IsNullOrWhiteSpace(selections[key])))
-            throw new InvalidOperationException("请选择塔筒日、月、年三个数据库。");
+        if (string.IsNullOrWhiteSpace(selections["towerDaily"]))
+            throw new InvalidOperationException("请选择塔筒产线主数据库。");
         var sources = selections.ToDictionary(pair => pair.Key,
             pair => string.IsNullOrWhiteSpace(pair.Value) ? null : settings.CachedDataSources.FirstOrDefault(source => source.Id == pair.Value));
         if (sources.Where(pair => !string.IsNullOrWhiteSpace(selections[pair.Key])).Any(pair => pair.Value is null))
             throw new InvalidOperationException("选择的数据源已不在缓存中，请先刷新 Notion 数据源。");
 
-        var monthlyId = sources["towerMonthly"]!.Id;
-        var yearlyId = sources["towerYearly"]!.Id;
         var bindings = new List<NotionTargetSettings>();
         if (sources["cutting"] is not null)
-            bindings.Add(await BuildBindingAsync(settings.Token, sources["cutting"]!, ProductionMessageKinds.CuttingModuleKey, "生产消息 · 下料日报库", ProductionMessageKind.MaterialCutting, false, string.Empty, string.Empty, cancellationToken));
-        bindings.Add(await BuildBindingAsync(settings.Token, sources["towerDaily"]!, ProductionMessageKinds.TowerDailyModuleKey, "生产消息 · 塔筒产线日报库", ProductionMessageKind.TowerLineDaily, false, monthlyId, yearlyId, cancellationToken));
-        bindings.Add(await BuildBindingAsync(settings.Token, sources["towerMonthly"]!, ProductionMessageKinds.TowerMonthlyModuleKey, "生产消息 · 塔筒产线每月累计库", ProductionMessageKind.TowerLineDaily, true, string.Empty, string.Empty, cancellationToken));
-        bindings.Add(await BuildBindingAsync(settings.Token, sources["towerYearly"]!, ProductionMessageKinds.TowerYearlyModuleKey, "生产消息 · 塔筒产线每年累计库", ProductionMessageKind.TowerLineDaily, true, string.Empty, string.Empty, cancellationToken));
+            bindings.Add(await BuildBindingAsync(settings.Token, sources["cutting"]!, ProductionMessageKinds.CuttingModuleKey, "生产消息 · 下料日报库", ProductionMessageKind.MaterialCutting, cancellationToken));
+        bindings.Add(await BuildBindingAsync(settings.Token, sources["towerDaily"]!, ProductionMessageKinds.TowerDailyModuleKey, "生产消息 · 塔筒产线日报库", ProductionMessageKind.TowerLineDaily, cancellationToken));
         settings.Targets.RemoveAll(target => target.ModuleKey == ProductionMessageKinds.CuttingModuleKey && sources["cutting"] is null);
+        settings.Targets.RemoveAll(target => target.ModuleKey is ProductionMessageKinds.TowerMonthlyModuleKey or ProductionMessageKinds.TowerYearlyModuleKey);
         foreach (var binding in bindings)
         {
             var index = settings.Targets.FindIndex(target => target.ModuleKey == binding.ModuleKey);
@@ -306,8 +304,7 @@ internal sealed partial class PrototypeBridge
 
     private static async Task<NotionTargetSettings> BuildBindingAsync(
         string token, NotionDataSourceOption source, string moduleKey, string moduleName,
-        ProductionMessageKind kind, bool summary, string monthlyId, string yearlyId,
-        CancellationToken cancellationToken)
+        ProductionMessageKind kind, CancellationToken cancellationToken)
     {
         var schema = await AppServices.Notion.GetSchemaAsync(token, source.Id, cancellationToken);
         if (!schema.Succeeded) throw new InvalidOperationException($"{source.Name}：{schema.Message}");
@@ -315,15 +312,14 @@ internal sealed partial class PrototypeBridge
         var date = schema.Properties.FirstOrDefault(property => property.Type == "date" &&
             (property.Name.Contains("日期", StringComparison.Ordinal) || property.Name.Contains("时间", StringComparison.Ordinal)))
             ?? schema.Properties.FirstOrDefault(property => property.Type == "date");
-        if (title is null || (!summary && date is null)) throw new InvalidOperationException($"{source.Name} 缺少标题或日期字段。");
+        if (title is null || date is null) throw new InvalidOperationException($"{source.Name} 缺少标题或日期字段。");
         var mapping = ProductionMessagePage.AutoMap(schema.Properties, kind);
         AddDynamicPropertyMappings(mapping, schema.Properties, title.Name, date?.Name);
-        if (!summary)
+        if (kind == ProductionMessageKind.MaterialCutting)
         {
-            var monthly = schema.Properties.FirstOrDefault(property => property.Type == "relation" && ProductionMessagePage.SameDataSourceId(property.RelationDataSourceId, monthlyId));
-            var yearly = schema.Properties.FirstOrDefault(property => property.Type == "relation" && ProductionMessagePage.SameDataSourceId(property.RelationDataSourceId, yearlyId));
+            var monthly = schema.Properties.FirstOrDefault(property =>
+                property.Type == "relation" && property.Name.Contains("月份", StringComparison.Ordinal));
             if (monthly is not null) mapping[ProductionMessageFields.MonthlySummaryRelation] = monthly.Name;
-            if (yearly is not null) mapping[ProductionMessageFields.YearlySummaryRelation] = yearly.Name;
         }
         return new NotionTargetSettings { ModuleKey = moduleKey, ModuleName = moduleName, Id = source.Id, Name = source.Name, Path = source.Path, TitleProperty = title.Name, DateProperty = date?.Name ?? string.Empty, PropertyMappings = mapping };
     }
@@ -336,19 +332,16 @@ internal sealed partial class PrototypeBridge
         if (string.IsNullOrWhiteSpace(settings.Token)) return settings;
         var refreshed = new List<NotionTargetSettings>();
         if (kinds.Contains(ProductionMessageKind.MaterialCutting) &&
-            FindTarget(settings, ProductionMessageKinds.CuttingModuleKey) is { } cutting)
+            FindCurrentSource(settings, ProductionMessageKinds.CuttingModuleKey) is { } cutting)
             refreshed.Add(await BuildBindingAsync(settings.Token,
-                new NotionDataSourceOption(cutting.Id, cutting.Name, cutting.Path),
-                cutting.ModuleKey, cutting.ModuleName, ProductionMessageKind.MaterialCutting,
-                false, string.Empty, string.Empty, cancellationToken));
+                cutting.Source,
+                cutting.Target.ModuleKey, cutting.Target.ModuleName, ProductionMessageKind.MaterialCutting,
+                cancellationToken));
         if (kinds.Contains(ProductionMessageKind.TowerLineDaily) &&
-            FindTarget(settings, ProductionMessageKinds.TowerDailyModuleKey) is { } daily)
+            FindCurrentSource(settings, ProductionMessageKinds.TowerDailyModuleKey) is { } daily)
             refreshed.Add(await BuildBindingAsync(settings.Token,
-                new NotionDataSourceOption(daily.Id, daily.Name, daily.Path),
-                daily.ModuleKey, daily.ModuleName, ProductionMessageKind.TowerLineDaily,
-                false,
-                FindTarget(settings, ProductionMessageKinds.TowerMonthlyModuleKey)?.Id ?? string.Empty,
-                FindTarget(settings, ProductionMessageKinds.TowerYearlyModuleKey)?.Id ?? string.Empty,
+                daily.Source,
+                daily.Target.ModuleKey, daily.Target.ModuleName, ProductionMessageKind.TowerLineDaily,
                 cancellationToken));
         foreach (var target in refreshed)
         {
@@ -357,6 +350,17 @@ internal sealed partial class PrototypeBridge
         }
         if (refreshed.Count > 0) NotionSettingsStore.Save(settings);
         return settings;
+    }
+
+    private static (NotionTargetSettings Target, NotionDataSourceOption Source)? FindCurrentSource(
+        NotionSettings settings,
+        string key)
+    {
+        var target = FindTarget(settings, key);
+        var source = target is null
+            ? null
+            : settings.CachedDataSources.FirstOrDefault(item => item.Id == target.Id);
+        return target is not null && source is not null ? (target, source) : null;
     }
 
     private static void AddDynamicPropertyMappings(
@@ -411,7 +415,6 @@ internal sealed partial class PrototypeBridge
         });
 
     private static NotionTargetSettings? FindTarget(NotionSettings settings, string key) => settings.Targets.FirstOrDefault(target => target.ModuleKey == key);
-    private static bool IsBound(NotionTargetSettings? target) => target is not null && !string.IsNullOrWhiteSpace(target.Id);
     private static string ReadString(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) ? value.GetString() ?? string.Empty : string.Empty;
     private static DateTime ReadDate(JsonElement element, string name) => DateTime.TryParse(ReadString(element, name), out var date) ? date.Date : DateTime.Today;
     private void Respond(string id, object? data) => Post(new { id, ok = true, data });

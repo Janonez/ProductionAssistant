@@ -4,16 +4,28 @@ namespace ProductionAssistant.Services;
 
 public static class DailyReportPresentation
 {
-    public static IReadOnlyList<string> PagePaths(IEnumerable<NotionDataSourceOption> sources) => sources
-        .Select(source => PagePath(source.Path))
+    public static IReadOnlyList<NotionDataSourceOption> VisibleSources(
+        IEnumerable<NotionDataSourceOption> sources,
+        IEnumerable<NotionTargetSettings> targets) => sources.ToArray();
+
+    public static IReadOnlyList<string> BusinessSections(IEnumerable<NotionDataSourceOption> sources) => sources
+        .Select(source => BusinessSection(source.Path))
+        .Where(section => !string.IsNullOrWhiteSpace(section))
         .Distinct(StringComparer.CurrentCultureIgnoreCase)
-        .OrderBy(path => path, StringComparer.CurrentCultureIgnoreCase)
+        .OrderBy(section => section, StringComparer.CurrentCultureIgnoreCase)
         .ToArray();
 
-    public static IReadOnlyList<NotionDataSourceOption> SourcesForPage(
+    public static IReadOnlyList<string> BusinessSections(IEnumerable<DatabaseSourceInfo> sources) => sources
+        .Select(source => source.BusinessSection)
+        .Where(section => !string.IsNullOrWhiteSpace(section))
+        .Distinct(StringComparer.CurrentCultureIgnoreCase)
+        .OrderBy(section => section, StringComparer.CurrentCultureIgnoreCase)
+        .ToArray();
+
+    public static IReadOnlyList<NotionDataSourceOption> SourcesForBusiness(
         IEnumerable<NotionDataSourceOption> sources,
-        string pagePath) => sources
-        .Where(source => string.Equals(PagePath(source.Path), pagePath, StringComparison.CurrentCultureIgnoreCase) &&
+        string businessSection) => sources
+        .Where(source => string.Equals(BusinessSection(source.Path), businessSection, StringComparison.CurrentCultureIgnoreCase) &&
                          !string.IsNullOrWhiteSpace(source.Id))
         .OrderBy(source => source.Name, StringComparer.CurrentCultureIgnoreCase)
         .ThenBy(source => source.Path, StringComparer.CurrentCultureIgnoreCase)
@@ -44,10 +56,10 @@ public static class DailyReportPresentation
     public static IReadOnlyList<DailyReportRunRecord> RecentRuns(IEnumerable<DailyReportRunRecord> records) =>
         records.Take(5).ToArray();
 
-    private static string PagePath(string path)
+    public static string BusinessSection(string path)
     {
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return parts.Length > 1 ? string.Join(" / ", parts[..^1]) : "根页面";
+        return parts.Length >= 3 ? parts[1] : string.Empty;
     }
 
     private static bool ContainsAny(string value, params string[] terms) =>

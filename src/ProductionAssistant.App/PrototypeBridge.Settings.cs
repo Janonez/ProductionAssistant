@@ -141,7 +141,7 @@ internal sealed partial class PrototypeBridge
         notification ??= NotificationSettingsStore.Load();
         var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion ?? "1.5.2";
+            .InformationalVersion ?? "1.5.3";
         return new
         {
             notion = new

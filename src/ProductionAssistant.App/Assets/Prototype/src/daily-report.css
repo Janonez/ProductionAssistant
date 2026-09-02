@@ -1007,6 +1007,19 @@
 .field-label-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .progressive-field-picker label b { color: #c2703d; }
 .progressive-field-picker .picker-trigger { min-height: 38px; padding-block: 8px; background: #fff; }
+.fixed-view-scope {
+  display: grid;
+  gap: 3px;
+  margin: 2px 0 10px;
+  padding: 11px 12px;
+  border: 1px solid #e7e5e4;
+  border-radius: 14px;
+  color: #292524;
+  background: #fafaf9;
+}
+.fixed-view-scope span,
+.fixed-view-scope small { color: #78716c; font-size: 14px; font-weight: 400; line-height: 1.45; }
+.fixed-view-scope strong { font-size: 14px; font-weight: 600; }
 .insert-field-button {
   width: 100%;
   min-height: 38px;
@@ -1048,10 +1061,11 @@
   padding-top: 9px;
   border-top: 1px solid #e7e5e4;
   color: #57534e;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--fw-semibold);
 }
-.system-variable button { min-height: 32px; padding: 0 10px; border: 0; border-radius: 9px; color: #c2703d; background: #f5ebe3; font-size: 13px; font-weight: 700; }
+.system-variable-actions { display: flex; align-items: center; gap: 6px; }
+.system-variable button { min-height: 32px; padding: 0 9px; border: 0; border-radius: 9px; color: #c2703d; background: #f5ebe3; font-size: 14px; font-weight: 700; }
 .preview-action-group { display: flex; align-items: flex-end; gap: 10px; }
 .preview-action-group label { width: 190px; display: grid; gap: 7px; color: #57534e; font-size: 13px; font-weight: var(--fw-semibold); }
 .daily-complete { text-align: center; }

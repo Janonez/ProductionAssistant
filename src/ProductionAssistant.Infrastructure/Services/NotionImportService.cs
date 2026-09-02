@@ -89,7 +89,8 @@ public sealed class NotionImportService : INotionImportService
 
                 var name = ReadRichTextTitle(source, "未命名数据源");
                 var icon = ReadIcon(source);
-                sources.Add(new(id, name, "令牌授权  /  Notion 数据源", icon.Text, icon.Url));
+                sources.Add(new(id, name, "令牌授权  /  Notion 数据源", icon.Text, icon.Url,
+                    ReadParentDatabaseId(source)));
             }
 
             cursor = document.RootElement.GetProperty("has_more").GetBoolean()
@@ -186,9 +187,15 @@ public sealed class NotionImportService : INotionImportService
                        string.IsNullOrWhiteSpace(sourceIcon.Url)
                 ? databaseIcon
                 : sourceIcon;
-            sources.Add(new(id, name, fullPath, icon.Text, icon.Url));
+            sources.Add(new(id, name, fullPath, icon.Text, icon.Url, databaseId));
         }
     }
+
+    private static string ReadParentDatabaseId(JsonElement owner) =>
+        owner.TryGetProperty("parent", out var parent) &&
+        parent.TryGetProperty("database_id", out var databaseId)
+            ? databaseId.GetString() ?? string.Empty
+            : string.Empty;
 
     private static (string Text, string Url) ReadIcon(JsonElement owner)
     {
@@ -864,7 +871,7 @@ public sealed class NotionImportService : INotionImportService
             [ProductionMessageFields.Project] = ["项目号", "项目", "产品"],
             [ProductionMessageFields.Material] = ["材料", "材质", "规格"],
             [ProductionMessageFields.PieceCount] = ["张数", "件数", "数量", "件"],
-            [ProductionMessageFields.Weight] = ["日模拟产量/吨", "重量", "吨位"],
+            [ProductionMessageFields.Weight] = ["日模拟产量/吨", "下料（吨）", "下料量", "重量", "吨位"],
             [ProductionMessageFields.Unit] = ["单位"],
             [ProductionMessageFields.Line] = ["产线", "线别", "生产线"],
             [ProductionMessageFields.SheetInStock] = ["板材入库", "板材入库量", "板材"],
@@ -936,29 +943,7 @@ public sealed class NotionImportService : INotionImportService
             if (candidate is not null) mapping[key] = candidate;
         }
 
-        if (kind == ProductionMessageKind.TowerLineDaily && !summary)
-        {
-            var monthlyTarget = settings.Targets.FirstOrDefault(item =>
-                item.ModuleKey == ProductionMessageKinds.TowerMonthlyModuleKey);
-            var yearlyTarget = settings.Targets.FirstOrDefault(item =>
-                item.ModuleKey == ProductionMessageKinds.TowerYearlyModuleKey);
-            AddRelationMapping(
-                mapping,
-                schema.Properties,
-                monthlyTarget?.Id,
-                ProductionMessageFields.MonthlySummaryRelation);
-            AddRelationMapping(
-                mapping,
-                schema.Properties,
-                yearlyTarget?.Id,
-                ProductionMessageFields.YearlySummaryRelation);
-
-            // Reuse the old monthly-plan mapping if settings were saved by an older build.
-            if (!mapping.ContainsKey(ProductionMessageFields.MonthlySummaryRelation) &&
-                mapping.TryGetValue(ProductionMessageFields.MonthlyPlanRelation, out var legacyRelation))
-                mapping[ProductionMessageFields.MonthlySummaryRelation] = legacyRelation;
-        }
-        else if (kind == ProductionMessageKind.MaterialCutting && !summary)
+        if (kind == ProductionMessageKind.MaterialCutting && !summary)
         {
             var monthlyRelation = schema.Properties.FirstOrDefault(property =>
                 property.Type == "relation" &&
@@ -981,31 +966,6 @@ public sealed class NotionImportService : INotionImportService
         if (title is not null) mapping["__title"] = title;
         if (date is not null) mapping["__date"] = date;
         return new(true, "字段检查通过。", title!.Name, date?.Name ?? string.Empty, mapping);
-    }
-
-    private static void AddRelationMapping(
-        IDictionary<string, NotionPropertyOption> mapping,
-        IReadOnlyList<NotionPropertyOption> properties,
-        string? relationTargetId,
-        string key)
-    {
-        if (string.IsNullOrWhiteSpace(relationTargetId) || mapping.ContainsKey(key))
-            return;
-        var relation = properties.FirstOrDefault(property =>
-            property.Type == "relation" &&
-            SameDataSourceId(property.RelationDataSourceId, relationTargetId));
-        if (relation is not null)
-            mapping[key] = relation;
-    }
-
-    private static bool SameDataSourceId(string left, string right)
-    {
-        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
-            return false;
-        return string.Equals(
-            NormalizeDataSourceId(left),
-            NormalizeDataSourceId(right),
-            StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeDataSourceId(string value)
@@ -1109,19 +1069,7 @@ public sealed class NotionImportService : INotionImportService
                 "相关字段与本次输入一致，无需写入。");
 
         string? monthlyPageId = null;
-        string? yearlyPageId = null;
-        if (item.Kind == ProductionMessageKind.TowerLineDaily)
-        {
-            var summaries = await ResolveSummaryPagesAsync(
-                settings,
-                item,
-                cancellationToken);
-            if (!summaries.Succeeded)
-                return WriteFailure(item, summaries.Message);
-            monthlyPageId = summaries.MonthlyPageId;
-            yearlyPageId = summaries.YearlyPageId;
-        }
-        else if (item.Kind == ProductionMessageKind.MaterialCutting)
+        if (item.Kind == ProductionMessageKind.MaterialCutting)
         {
             var month = await ResolveCuttingMonthAsync(
                 settings.Token,
@@ -1137,8 +1085,6 @@ public sealed class NotionImportService : INotionImportService
         if (!TryBuildMessageProperties(
                 item,
                 resolution,
-                monthlyPageId,
-                yearlyPageId,
                 out var pageProperties,
                 out var propertyMessage))
             return WriteFailure(item, propertyMessage);
@@ -1161,11 +1107,7 @@ public sealed class NotionImportService : INotionImportService
             };
             foreach (var relationKey in item.Kind == ProductionMessageKind.MaterialCutting
                          ? new[] { ProductionMessageFields.MonthlySummaryRelation }
-                         : new[]
-                         {
-                             ProductionMessageFields.MonthlySummaryRelation,
-                             ProductionMessageFields.YearlySummaryRelation
-                         })
+                         : Array.Empty<string>())
             {
                 if (resolution.Properties.TryGetValue(relationKey, out var relation) &&
                     pageProperties.TryGetValue(relation.Name, out var relationPayload))
@@ -1218,18 +1160,10 @@ public sealed class NotionImportService : INotionImportService
         }
 
         var message = operation == "updated" ? "已覆盖同日期记录" : "已创建日报记录";
-        if (item.Kind == ProductionMessageKind.TowerLineDaily)
-            message += $"；已关联 {item.BusinessDate:yyyy-MM} 月累计和 {item.BusinessDate:yyyy} 年累计";
         if (!string.IsNullOrWhiteSpace(propertyMessage))
             message += $"；{propertyMessage.TrimEnd('。')}";
         return new(item.Index, item.BusinessDate, item.Kind, operation, message + "。");
     }
-
-    private sealed record SummaryPageResolution(
-        bool Succeeded,
-        string Message,
-        string? MonthlyPageId,
-        string? YearlyPageId);
 
     private sealed record CuttingMonthResolution(
         bool Succeeded,
@@ -1259,9 +1193,9 @@ public sealed class NotionImportService : INotionImportService
         var date = schema.Properties.FirstOrDefault(property =>
             property.Type == "date" && property.Name.Contains("日期", StringComparison.OrdinalIgnoreCase));
         var plan = schema.Properties.FirstOrDefault(property =>
-            property.Type == "number" && property.Name.Contains("预计产量", StringComparison.OrdinalIgnoreCase));
+            property.Type == "number" && property.Name.Contains("计划", StringComparison.OrdinalIgnoreCase));
         if (title is null || date is null || plan is null)
-            return new(false, "error", "下料月库缺少月份、日期变量或预计产量字段。", null);
+            return new(false, "error", "下料月计划库缺少标题、日期或计划数值字段。", null);
 
         var monthStart = new DateTime(item.BusinessDate.Year, item.BusinessDate.Month, 1);
         var monthKey = monthStart.ToString("yyyy-MM");
@@ -1302,109 +1236,9 @@ public sealed class NotionImportService : INotionImportService
             : new(true, string.Empty, string.Empty, pageId);
     }
 
-    private sealed record SummaryPageLookup(
-        bool Succeeded,
-        string Message,
-        string? PageId);
-
-    private async Task<SummaryPageResolution> ResolveSummaryPagesAsync(
-        NotionSettings settings,
-        ProductionMessageValue item,
-        CancellationToken cancellationToken)
-    {
-        var monthlyTarget = settings.Targets.FirstOrDefault(target =>
-            target.ModuleKey == ProductionMessageKinds.TowerMonthlyModuleKey);
-        var yearlyTarget = settings.Targets.FirstOrDefault(target =>
-            target.ModuleKey == ProductionMessageKinds.TowerYearlyModuleKey);
-        if (monthlyTarget is null || yearlyTarget is null)
-        {
-            return new(
-                false,
-                "请先绑定塔筒产线日报库、每月累计库和每年累计库。",
-                null,
-                null);
-        }
-
-        var monthly = await FindSummaryPageAsync(
-            settings.Token,
-            monthlyTarget,
-            new DateTime(item.BusinessDate.Year, item.BusinessDate.Month, 1),
-            "每月累计",
-            cancellationToken);
-        if (!monthly.Succeeded)
-            return new(false, monthly.Message, null, null);
-
-        var yearly = await FindSummaryPageAsync(
-            settings.Token,
-            yearlyTarget,
-            new DateTime(item.BusinessDate.Year, 1, 1),
-            "每年累计",
-            cancellationToken);
-        if (!yearly.Succeeded)
-            return new(false, yearly.Message, null, null);
-
-        return new(true, string.Empty, monthly.PageId, yearly.PageId);
-    }
-
-    private async Task<SummaryPageLookup> FindSummaryPageAsync(
-        string token,
-        NotionTargetSettings target,
-        DateTime summaryDate,
-        string summaryName,
-        CancellationToken cancellationToken)
-    {
-        object filter;
-        if (!string.IsNullOrWhiteSpace(target.DateProperty))
-        {
-            filter = new
-            {
-                property = target.DateProperty,
-                date = new { equals = summaryDate.ToString("yyyy-MM-dd") }
-            };
-        }
-        else if (!string.IsNullOrWhiteSpace(target.TitleProperty))
-        {
-            var title = target.ModuleKey == ProductionMessageKinds.TowerMonthlyModuleKey
-                ? $"{summaryDate:yyyy-MM} 塔筒产线"
-                : $"{summaryDate:yyyy} 塔筒产线";
-            filter = new { property = target.TitleProperty, title = new { equals = title } };
-        }
-        else
-        {
-            return new(false, $"{summaryName}库缺少日期或标题字段映射。", null);
-        }
-
-        var pages = await QueryDataSourceAsync(
-            token,
-            target.Id,
-            filter,
-            cancellationToken);
-        if (!pages.Succeeded)
-            return new(false, $"读取{summaryName}库失败：{pages.Message}", null);
-        if (pages.Pages.Count == 0)
-            return new(
-                false,
-                $"{summaryName}库中没有 {summaryDate:yyyy-MM-dd} 对应的汇总页，请先创建该月份/年份记录。",
-                null);
-        if (pages.Pages.Count > 1)
-            return new(
-                false,
-                $"{summaryName}库中存在重复的 {summaryDate:yyyy-MM-dd} 汇总页。",
-                null);
-
-        var pageId = pages.Pages[0].TryGetProperty("id", out var id)
-            ? id.GetString()
-            : null;
-        return string.IsNullOrWhiteSpace(pageId)
-            ? new(false, $"{summaryName}汇总页缺少页面标识。", null)
-            : new(true, string.Empty, pageId);
-    }
-
     private static bool TryBuildMessageProperties(
         ProductionMessageValue item,
         MessageSchemaResolution resolution,
-        string? monthlyPageId,
-        string? yearlyPageId,
         out Dictionary<string, object> properties,
         out string message)
     {
@@ -1452,44 +1286,6 @@ public sealed class NotionImportService : INotionImportService
                 return false;
             }
             properties[property.Name] = value;
-        }
-
-        if (item.Kind == ProductionMessageKind.TowerLineDaily)
-        {
-            if (string.IsNullOrWhiteSpace(monthlyPageId) ||
-                string.IsNullOrWhiteSpace(yearlyPageId))
-            {
-                message = "未找到对应的每月累计或每年累计汇总页，日报未写入。";
-                return false;
-            }
-
-            if (!resolution.Properties.TryGetValue(
-                    ProductionMessageFields.MonthlySummaryRelation,
-                    out var monthlyRelation))
-            {
-                message = "日报库缺少指向每月累计库的 Relation 字段，请重新检测绑定。";
-                return false;
-            }
-            if (monthlyRelation.Type != "relation")
-            {
-                message = "日报库的每月累计关联字段不是 Relation 类型。";
-                return false;
-            }
-            properties[monthlyRelation.Name] = RelationValue(monthlyPageId);
-
-            if (!resolution.Properties.TryGetValue(
-                    ProductionMessageFields.YearlySummaryRelation,
-                    out var yearlyRelation))
-            {
-                message = "日报库缺少指向每年累计库的 Relation 字段，请重新检测绑定。";
-                return false;
-            }
-            if (yearlyRelation.Type != "relation")
-            {
-                message = "日报库的每年累计关联字段不是 Relation 类型。";
-                return false;
-            }
-            properties[yearlyRelation.Name] = RelationValue(yearlyPageId);
         }
 
         message = missingMappings.Count > 0
