@@ -32,7 +32,10 @@
 .production-message-demo .pm-dialog h2 { margin: 0 0 8px; font-size: var(--font-body); font-weight: var(--fw-semibold); }
 .production-message-demo .pm-dialog p { margin: 0 0 18px; color: var(--text-secondary); font-size: var(--font-control); }
 .production-message-demo .pm-dialog label { display: grid; gap: 7px; margin-top: 12px; color: var(--text-primary); font-size: var(--font-label); font-weight: var(--fw-semibold); }
-.production-message-demo .pm-dialog input { height: 42px; padding: 0 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); background: var(--input-bg); }
+.production-message-demo .pm-dialog input,
+.production-message-demo .pm-dialog select { height: 42px; padding: 0 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); background: var(--input-bg); color: var(--text-primary); font: inherit; }
+.production-message-demo .pm-binding-dialog { width: min(560px, calc(100vw - 40px)); }
+.production-message-demo .pm-binding-dialog .pm-notice { margin-top: 14px; }
 .production-message-demo .pm-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .production-message-demo .pm-dialog-actions button { min-height: 40px; padding: 0 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-card); }
 

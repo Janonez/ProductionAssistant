@@ -15,6 +15,7 @@ import './daily-weld.css'
 import './operation-sidebar.css'
 import './settings-modal.css'
 import './report-center.css'
+import './database-viewer.css'
 import './polish.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

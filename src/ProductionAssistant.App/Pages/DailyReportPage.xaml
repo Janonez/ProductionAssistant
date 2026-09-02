@@ -203,7 +203,7 @@
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <ComboBox Grid.Row="0" x:Name="DataPageBox" Header="1. 数据页" PlaceholderText="请选择完整页面路径"
+                                        <ComboBox Grid.Row="0" x:Name="DataPageBox" Header="1. 业务板块" PlaceholderText="请选择业务板块"
                                                   HorizontalAlignment="Stretch" SelectionChanged="DataPageBox_SelectionChanged" />
                                         <ComboBox Grid.Row="1" x:Name="DataSourceBox" Header="2. 数据库" PlaceholderText="请选择原始数据库"
                                                   HorizontalAlignment="Stretch" DisplayMemberPath="Name"

@@ -20,7 +20,7 @@ import type {
   DailyJobSummary,
   DailyRun,
 } from "./types";
-import { ReportTemplateEditor } from "./ReportTemplateEditor";
+import { ReportTemplateEditor, type DateInsertKind } from "./ReportTemplateEditor";
 import { ChoicePicker, ReportDatePicker, TimePicker } from "./FormPickers";
 import { WorkflowProgress, type WorkflowStepTransition } from "./WorkflowProgress";
 
@@ -242,15 +242,19 @@ function DailyJobEditor({
   const [saveState, setSaveState] = useState("");
   const [notice, setNotice] = useState<NoticeValue | undefined>(initialNotice);
   const [noticeScope, setNoticeScope] = useState<NoticeScope>("page");
-  const [pagePath, setPagePath] = useState("");
+  const [businessSection, setBusinessSection] = useState("");
   const [sourceId, setSourceId] = useState("");
   const [propertyId, setPropertyId] = useState("");
   const [properties, setProperties] = useState<
     Array<{ id: string; name: string; type: string }>
   >([]);
   const [propertiesError, setPropertiesError] = useState("");
+  const [viewId, setViewId] = useState("");
+  const [views, setViews] = useState<Array<{ id: string; name: string; supportsPeriods: boolean }>>([]);
+  const [matchProperty, setMatchProperty] = useState<{ id: string; name: string; type: string }>();
+  const [periodKind, setPeriodKind] = useState("");
   const [insert, setInsert] = useState<{
-    value: DailyField | "today";
+    value: DailyField | DateInsertKind;
     key: number;
   }>();
   const [preview, setPreview] = useState("");
@@ -325,22 +329,28 @@ function DailyJobEditor({
 
   const sources = useMemo(
     () =>
-      job?.sources.filter((source) => pageFor(source.path) === pagePath) || [],
-    [job, pagePath],
+      job?.sources.filter((source) => !job.usesBusinessSections || source.businessSection === businessSection) || [],
+    [job, businessSection],
   );
   async function chooseSource(value: string) {
     setSourceId(value);
     setPropertyId("");
     setProperties([]);
     setPropertiesError("");
+    setViewId("");
+    setViews([]);
+    setMatchProperty(undefined);
+    setPeriodKind("");
     if (!value) return;
     setBusy("properties");
     try {
-      const result = await invoke<{ properties: typeof properties }>(
+      const result = await invoke<{ properties: typeof properties; views: typeof views; matchProperty?: typeof matchProperty }>(
         "daily.getProperties",
-        { sourceId: value },
+        { id, sourceId: value },
       );
       setProperties(result.properties);
+      setViews(result.views || []);
+      setMatchProperty(result.matchProperty);
     } catch (error) {
       setNotice(errorNotice(error));
     } finally {
@@ -349,12 +359,23 @@ function DailyJobEditor({
   }
   async function addField() {
     if (!sourceId || !propertyId) return;
-    setBusy("field");
+    const property = properties.find((item) => item.id === propertyId);
+    const selectedView = views.find((item) => item.id === viewId);
+    if (!property) return;
     try {
       const result = await invoke<{ field: DailyField }>(
         "daily.addField",
-        { id, sourceId, propertyId },
-        60000,
+        {
+          id, sourceId, propertyId,
+          propertyName: property.name,
+          propertyType: property.type,
+          viewId: selectedView?.id || "",
+          viewName: selectedView?.name || "",
+          periodKind,
+          matchPropertyId: matchProperty?.id || "",
+          matchPropertyName: matchProperty?.name || "",
+          matchPropertyType: matchProperty?.type || "",
+        },
       );
       setJob((current) =>
         current
@@ -376,12 +397,11 @@ function DailyJobEditor({
     } catch (error) {
       setPropertiesError(error instanceof Error ? error.message : String(error));
       setNoticeScope("template");
-    } finally {
-      setBusy("");
     }
   }
   const advanceTo = (step: DailyStep) => {
-    if (stepTransition) return;
+    if (stepTransition && currentStep === stepTransition.from) return;
+    if (stepTransitionTimer.current) window.clearTimeout(stepTransitionTimer.current);
     const nextDirection = step >= currentStep ? 1 : -1;
     setPreviousStep(currentStep);
     setDirection(nextDirection);
@@ -555,18 +575,20 @@ function DailyJobEditor({
               <div className="focus-actions"><button className="primary" disabled={!!busy || !name.trim() || !sendTime} onClick={saveBasicsAndContinue}>{busy === "basics" && <LoaderCircle className="spin" />}保存设置</button></div>
             </>}
             {currentStep === 1 && <>
-              <StepTitle id="daily-step-1" number="02" title="编辑消息" text="从不同业务数据页中选择数据库字段，可连续插入到同一条消息。" />
+              <StepTitle id="daily-step-1" number="02" title="编辑消息" text="从当前数据库目录中选择字段，可连续插入到同一条消息。" />
               {!job.notificationConfigured || !job.notificationConnected ? <div className="notice warning" role="status"><Bot /><div><strong>全局通知尚未就绪</strong><span>请先到“设置 → 通知设置”完成钉钉渠道配置和测试。</span></div></div> : null}
               <div className="template-workspace progressive-template">
-                <div className="editor-column"><label>消息模板</label><ReportTemplateEditor text={template} document={document} fields={job.fields} insert={insert} onChange={(nextText, nextDocument) => { setTemplate(nextText); setDocument(nextDocument); setPreview(""); setJob(current => current ? { ...current, validated: false, isEnabled: false } : current) }} /></div>
+                <div className="editor-column"><label>消息模板</label><ReportTemplateEditor text={template} document={document} fields={job.fields} insert={insert} onInsertHandled={() => setInsert(undefined)} onChange={(nextText, nextDocument) => { setTemplate(nextText); setDocument(nextDocument); setPreview(""); setJob(current => current ? { ...current, validated: false, isEnabled: false } : current) }} /></div>
                 <aside className="field-picker progressive-field-picker">
                   <div className="field-picker-heading"><h3><Database />数据源字段</h3><span>可跨数据库连续添加</span></div>
-                  <label><span className="field-label-title"><b>1.</b> 数据页</span><ChoicePicker value={pagePath} placeholder="请选择数据页" options={job.pagePaths.map(path => ({ value: path, label: path }))} onChange={value => { setPagePath(value); chooseSource("") }} /></label>
-                  <label><span className="field-label-title"><b>2.</b> 数据库</span><ChoicePicker value={sourceId} placeholder="请选择数据库" options={sources.map(source => ({ value: source.id, label: source.name }))} onChange={chooseSource} /></label>
-                  <label><span className="field-label-title"><b>3.</b> 数据字段</span><ChoicePicker value={propertyId} placeholder={busy === "properties" ? "正在读取字段…" : "请选择数据字段"} disabled={busy === "properties"} options={properties.map(property => ({ value: property.id, label: `${property.name} · ${property.type}` }))} onChange={setPropertyId} /></label>
+                  {job.usesBusinessSections && <label><span className="field-label-title"><b>1.</b> 业务板块</span><ChoicePicker value={businessSection} placeholder="请选择业务板块" options={job.businessSections.map(section => ({ value: section, label: section }))} onChange={value => { setBusinessSection(value); chooseSource("") }} /></label>}
+                  <label><span className="field-label-title"><b>{job.usesBusinessSections ? 2 : 1}.</b> 数据库</span><ChoicePicker value={sourceId} placeholder="请选择数据库" disabled={job.usesBusinessSections && !businessSection} options={sources.map(source => ({ value: source.id, label: source.name }))} onChange={chooseSource} /></label>
+                  <label><span className="field-label-title"><b>{job.usesBusinessSections ? 3 : 2}.</b> 数据字段</span><ChoicePicker value={propertyId} placeholder={busy === "properties" ? "正在读取字段…" : "请选择数据字段"} disabled={busy === "properties"} options={properties.map(property => ({ value: property.id, label: `${property.name} · ${property.type}` }))} onChange={setPropertyId} /></label>
+                  {sourceId && <label><span className="field-label-title"><b>{job.usesBusinessSections ? 4 : 3}.</b> 统计 View</span><ChoicePicker value={viewId} placeholder={views.length ? "请选择数据库 View" : "数据库中没有可用 View"} options={views.map(view => ({ value: view.id, label: view.name }))} onChange={value => { const view = views.find(item => item.id === value); setViewId(value); setPeriodKind(view?.supportsPeriods ? "day" : "") }} /></label>}
+                  {viewId && <label><span className="field-label-title"><b>{job.usesBusinessSections ? 5 : 4}.</b> {views.find(view => view.id === viewId)?.supportsPeriods ? "累计口径" : "取数方式"}</span><ChoicePicker value={periodKind} placeholder={views.find(view => view.id === viewId)?.supportsPeriods ? "请选择累计口径" : "请选择取数方式"} options={views.find(view => view.id === viewId)?.supportsPeriods ? [{ value: "day", label: "日 · 当天值" }, { value: "month", label: "月 · 当月截至当日" }, { value: "year", label: "年 · 本年截至当日" }] : [{ value: "direct-month", label: "直接获取 · 对应业务月份" }, { value: "view-sum", label: "累计 · View 全部记录" }]} onChange={setPeriodKind} /></label>}
                   {propertiesError && <div className="field-error" role="alert"><span>字段读取失败：{propertiesError}</span><button type="button" onClick={() => chooseSource(sourceId)}>重试</button></div>}
-                  <button className="insert-field-button" disabled={!propertyId || !!busy} onClick={addField}>{busy === "field" && <LoaderCircle className="spin" />}插入所选字段</button>
-                  <div className="system-variable"><span>系统变量</span><button type="button" onClick={() => setInsert({ value: "today", key: Date.now() })}>业务日期</button></div>
+                  <button className="insert-field-button" disabled={!propertyId || !!busy || !viewId || !periodKind} onClick={addField}>插入所选字段</button>
+                  <div className="system-variable"><span>业务日期</span><div className="system-variable-actions"><button type="button" onClick={() => setInsert({ value: "year", key: Date.now() })}>年</button><button type="button" onClick={() => setInsert({ value: "month", key: Date.now() })}>月</button><button type="button" onClick={() => setInsert({ value: "day", key: Date.now() })}>日</button><button type="button" onClick={() => setInsert({ value: "date", key: Date.now() })}>完整日期</button></div></div>
                 </aside>
               </div>
               {notice && noticeScope === "template" && <Notice value={notice} />}
@@ -681,13 +703,6 @@ function RunList({ runs }: { runs: DailyRun[] }) {
       {!runs.length && <p className="muted">暂无运行记录</p>}
     </div>
   );
-}
-function pageFor(path: string) {
-  const parts = path
-    .split("/")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  return parts.length > 1 ? parts.slice(0, -1).join(" / ") : "根页面";
 }
 function statusLabel(status: string) {
   return (

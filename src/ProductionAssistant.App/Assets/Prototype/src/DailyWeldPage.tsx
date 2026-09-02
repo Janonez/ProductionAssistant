@@ -7,7 +7,7 @@ import { NumericInput } from './NumericInput'
 import { ThreeStepProgress } from './ThreeStepProgress'
 import type { WeldCheckResult, WeldProgress, WeldRow, WeldState } from './types'
 
-const EMPTY_STATE: WeldState = { configured: false, binding: { bound: false, name: '', path: '' }, sources: [], selected: '' }
+const EMPTY_STATE: WeldState = { configured: false, binding: { bound: false, name: '', path: '' }, usesBusinessSections: false, businessSections: [], sources: [], selected: '' }
 
 function currentMonth() {
   const now = new Date()
@@ -22,6 +22,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
   const [state, setState] = useState<WeldState>(EMPTY_STATE)
   const [bindingOpen, setBindingOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<'rules' | 'database'>('database')
+  const [selectedBusiness, setSelectedBusiness] = useState('')
   const [selectedSource, setSelectedSource] = useState('')
   const [overwriteOpen, setOverwriteOpen] = useState(false)
   const [busy, setBusy] = useState<'state' | 'generate' | 'binding' | 'check' | 'write' | undefined>('state')
@@ -35,6 +36,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
     invoke<WeldState>('weld.getState').then(value => {
       const next = value?.binding && Array.isArray(value.sources) ? value : EMPTY_STATE
       setState(next)
+      setSelectedBusiness(next.sources.find(source => source.id === next.selected)?.businessSection || '')
       setSelectedSource(next.selected)
     }).catch(reason => setError(reason instanceof Error ? reason.message : '读取 Notion 配置失败')).finally(() => setBusy(undefined))
   }, [])
@@ -43,6 +45,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
   const sum = useMemo(() => rows.reduce((value, row) => value + Number(row.qty || 0), 0), [rows])
   const diff = sum - Number(total || 0)
   const rowsValid = rows.length > 0 && rows.every(row => /^\d+$/.test(row.qty)) && diff === 0
+  const businessSources = state.usesBusinessSections ? state.sources.filter(source => source.businessSection === selectedBusiness) : state.sources
   const locked = busy === 'generate' || busy === 'check' || busy === 'write'
 
   async function generate() {
@@ -154,7 +157,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
             {error && <div className="weld-notice error" role="alert">{error}</div>}
             <section className="weld-business-binding" aria-labelledby="weld-business-title">
               <div className="weld-business-title"><div><h4 id="weld-business-title">焊接业务</h4><p>每日焊接计划的主写入数据库</p></div><span className={state.binding.bound ? 'bound' : ''}>{state.binding.bound ? '已绑定' : '未绑定'}</span></div>
-              {!state.configured || !state.sources.length ? <div className="weld-notice">请先在系统设置中完成 Notion 连接并刷新数据源。</div> : <div className="weld-dialog-field"><span>主写入数据库</span><ChoicePicker value={selectedSource} options={state.sources.map(source => ({ value: source.id, label: source.path || source.name }))} placeholder="选择每日焊接量数据库" ariaLabel="焊接业务主写入数据库" disabled={busy === 'binding'} onChange={setSelectedSource} /></div>}
+              {!state.configured || !state.sources.length ? <div className="weld-notice">请先在系统设置中完成数据库连接并刷新数据源。</div> : <div className="weld-dialog-field">{state.usesBusinessSections && <><span>业务板块</span><ChoicePicker value={selectedBusiness} options={state.businessSections.map(section => ({ value: section, label: section }))} placeholder="选择焊接业务板块" ariaLabel="焊接业务板块" disabled={busy === 'binding'} onChange={value => { setSelectedBusiness(value); setSelectedSource('') }} /></>}<span>主写入数据库</span><ChoicePicker value={selectedSource} options={businessSources.map(source => ({ value: source.id, label: source.name }))} placeholder="选择每日焊接量数据库" ariaLabel="焊接业务主写入数据库" disabled={(state.usesBusinessSections && !selectedBusiness) || busy === 'binding'} onChange={setSelectedSource} /></div>}
               <p className="weld-binding-help">月度和周度汇总数据库由系统在写入时自动维护，无需单独绑定。</p>
             </section>
             <div className="weld-settings-actions"><button type="button" disabled={busy === 'binding'} onClick={() => setBindingOpen(false)}>取消</button>{(!state.configured || !state.sources.length) ? <button type="button" className="primary-button" onClick={openSettings}>前往系统设置</button> : <button type="button" className="primary-button" disabled={!selectedSource || busy === 'binding'} onClick={saveBinding}>{busy === 'binding' ? '正在检测…' : '保存绑定'}</button>}</div>

@@ -38,6 +38,71 @@ public sealed class ArchitectureTests
     }
 
     [Fact]
+    public void Daily_report_lists_every_database_returned_by_notion()
+    {
+        var sources = new[]
+        {
+            new NotionDataSourceOption("daily", "塔筒产线数据库", "生产数据 / 塔筒 / 塔筒产线数据库"),
+            new NotionDataSourceOption("monthly", "塔筒产线每月累计", "生产数据 / 塔筒 / 塔筒产线每月累计"),
+            new NotionDataSourceOption("yearly", "塔筒产线每年累计", "生产数据 / 塔筒 / 塔筒产线每年累计")
+        };
+        var targets = new[]
+        {
+            new NotionTargetSettings { ModuleKey = ProductionMessageKinds.TowerDailyModuleKey, Id = "daily" },
+            new NotionTargetSettings { ModuleKey = ProductionMessageKinds.TowerMonthlyModuleKey, Id = "monthly" },
+            new NotionTargetSettings { ModuleKey = ProductionMessageKinds.TowerYearlyModuleKey, Id = "yearly" }
+        };
+
+        var visible = DailyReportPresentation.VisibleSources(sources, targets);
+
+        Assert.Equal(new[] { "daily", "monthly", "yearly" }, visible.Select(source => source.Id));
+    }
+
+    [Fact]
+    public void Database_root_exposes_business_pages_before_their_databases()
+    {
+        var sources = new[]
+        {
+            new DatabaseSourceInfo("cutting", "下料数据库", "数据库 / 下料数据库 / 下料数据库", "下料数据库"),
+            new DatabaseSourceInfo("plan", "下料每月计划数据库", "数据库 / 下料数据库 / 下料每月计划数据库", "下料数据库"),
+            new DatabaseSourceInfo("toolbox", "工具箱", "数据库 / 工具箱")
+        };
+
+        Assert.Equal(["下料数据库"], DailyReportPresentation.BusinessSections(sources));
+        Assert.Equal("下料数据库", DailyReportPresentation.BusinessSection(sources[0].Path));
+        Assert.Equal(string.Empty, DailyReportPresentation.BusinessSection(sources[2].Path));
+    }
+
+    [Fact]
+    public void Flat_database_provider_does_not_require_business_pages()
+    {
+        var catalog = DatabaseSourceCatalog.Create([
+            new DatabaseSourceInfo("daily", "本地产量表", "本地产量表"),
+            new DatabaseSourceInfo("plan", "本地计划表", "本地计划表")
+        ]);
+
+        Assert.False(catalog.UsesBusinessSections);
+        Assert.Empty(catalog.BusinessSections);
+        Assert.Equal(2, catalog.Sources.Count);
+    }
+
+    [Fact]
+    public void Daily_report_keeps_separate_tokens_for_each_view()
+    {
+        var job = new DailyReportJob();
+
+        var day = DailyReportSettingsStore.AddOrUpdateField(job,
+            new("tower", "塔筒产线数据库", "weld", "焊接（吨）", "number", ViewId: "day", ViewName: "日"));
+        var month = DailyReportSettingsStore.AddOrUpdateField(job,
+            new("tower", "塔筒产线数据库", "weld", "焊接（吨）", "number", ViewId: "month", ViewName: "月"));
+        var year = DailyReportSettingsStore.AddOrUpdateField(job,
+            new("tower", "塔筒产线数据库", "weld", "焊接（吨）", "number", ViewId: "year", ViewName: "年"));
+
+        Assert.Equal(3, job.Fields.Count);
+        Assert.Equal(3, new[] { day, month, year }.Distinct().Count());
+    }
+
+    [Fact]
     public void Weld_notion_title_includes_the_business_name()
     {
         var titleBuilder = typeof(NotionImportService).GetMethod(
@@ -122,6 +187,24 @@ public sealed class ArchitectureTests
             ProductionMessageFields.Weight,
             value.Fields[ProductionMessageFields.Weight]));
         Assert.DoesNotContain(ProductionMessageFields.PieceCount, value.Fields.Keys);
+    }
+
+    [Fact]
+    public void Natural_cutting_message_parses_sheet_count_without_project_suffix()
+    {
+        var date = new DateTime(2026, 9, 1);
+        var draft = ProductionMessageParser.Parse(
+            ProductionMessageParser.Split(
+                "9.1下料今日双班，计划切割新疆新业气化炉钢板2张16吨",
+                date).Single(),
+            1,
+            date,
+            false);
+
+        Assert.Equal("新疆新业气化炉", draft.Fields[ProductionMessageFields.Project]);
+        Assert.Equal("钢板", draft.Fields[ProductionMessageFields.Material]);
+        Assert.Equal("2张", draft.Fields[ProductionMessageFields.PieceCount]);
+        Assert.Equal("16吨", draft.Fields[ProductionMessageFields.Weight]);
     }
 
     [Fact]

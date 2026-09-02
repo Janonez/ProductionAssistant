@@ -16,7 +16,7 @@ public sealed partial class ProductionMessagePage : Page
             [ProductionMessageFields.Project] = ["项目号", "项目", "产品"],
             [ProductionMessageFields.Material] = ["材料", "材质", "规格"],
             [ProductionMessageFields.PieceCount] = ["张数", "件数", "数量", "件"],
-            [ProductionMessageFields.Weight] = ["日模拟产量/吨", "重量", "吨位"],
+            [ProductionMessageFields.Weight] = ["日模拟产量/吨", "下料（吨）", "下料量", "重量", "吨位"],
             [ProductionMessageFields.Unit] = ["单位"],
             [ProductionMessageFields.SheetInStock] = ["板材入库", "板材入库量", "板材"],
             [ProductionMessageFields.ProfileInStock] = ["型材入库", "型材入库量", "型材"],

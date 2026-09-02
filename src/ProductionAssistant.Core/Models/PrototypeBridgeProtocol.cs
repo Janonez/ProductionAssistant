@@ -23,6 +23,9 @@ public static class PrototypeBridgeProtocol
         "weld.saveBinding",
         "weld.check",
         "weld.write",
+        "database.getState",
+        "database.getSchema",
+        "database.inspect",
         "daily.list",
         "daily.create",
         "daily.get",
@@ -47,6 +50,7 @@ public static class PrototypeBridgeProtocol
         "plan-pdf",
         "production-meeting",
         "daily-weld",
+        "database-viewer",
         "production-message",
         "daily-report",
         "report-center"

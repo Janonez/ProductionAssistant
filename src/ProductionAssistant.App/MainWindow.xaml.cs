@@ -45,6 +45,7 @@ public sealed partial class MainWindow : Window
         {
             "daily-weld" => typeof(PrototypePage),
             "production-message" => typeof(PrototypePage),
+            "database-viewer" => typeof(PrototypePage),
             "plan-pdf" => typeof(PlanPdfExportPage),
             "production-meeting" => typeof(ProductionMeetingExportPage),
             "daily-report" => typeof(PrototypePage),

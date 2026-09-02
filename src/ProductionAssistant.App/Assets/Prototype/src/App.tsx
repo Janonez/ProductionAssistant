@@ -8,6 +8,7 @@ import { OperationSidebar } from './OperationSidebar'
 import ProductionMessagePage from './ProductionMessagePage'
 import { ReportCenterPage } from './ReportCenterPage'
 import SettingsModal from './SettingsModal'
+import { DatabaseViewerPage } from './DatabaseViewerPage'
 
 export function App() {
   const [location, setLocation] = useState(() => window.location.search)
@@ -24,6 +25,7 @@ export function App() {
     requested?.startsWith('navigation:') ||
     requested === 'daily-weld' ||
     requested === 'production-message' ||
+    requested === 'database-viewer' ||
     requested === 'daily-report' ||
     requested === 'report-center'
       ? requested
@@ -63,7 +65,7 @@ export function App() {
               exit={reduced ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: .2 }}
             >
-              {route === 'daily-report' ? <DailyReportPage /> : <ReportCenterPage />}
+              {route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <DailyReportPage /> : <ReportCenterPage />}
             </motion.div>
           </AnimatePresence></main></div>}
     </div>

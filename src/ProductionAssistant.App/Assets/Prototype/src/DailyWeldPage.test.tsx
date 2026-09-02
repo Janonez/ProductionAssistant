@@ -13,7 +13,9 @@ let root: Root
 const state = {
   configured: true,
   binding: { bound: true, name: '每日焊接量', path: '焊接数据库 / 每日焊接量' },
-  sources: [{ id: 'day-source', name: '每日焊接量', path: '焊接数据库 / 每日焊接量' }],
+  usesBusinessSections: true,
+  businessSections: ['焊接数据库'],
+  sources: [{ id: 'day-source', name: '每日焊接量', path: '数据库 / 焊接数据库 / 每日焊接量', businessSection: '焊接数据库' }],
   selected: 'day-source',
 }
 
@@ -78,9 +80,28 @@ describe('daily weld workflow', () => {
     const dialog = container.querySelector('.weld-settings-dialog')
     expect(dialog?.getAttribute('aria-modal')).toBe('true')
     expect(dialog?.textContent).toContain('焊接业务')
+    expect(dialog?.textContent).toContain('业务板块')
     expect(dialog?.textContent).toContain('主写入数据库')
     expect(dialog?.textContent).toContain('汇总数据库由系统在写入时自动维护')
     expect(dialog?.querySelectorAll('[aria-label="焊接业务主写入数据库"]')).toHaveLength(1)
+    expect(dialog?.querySelectorAll('[aria-label="焊接业务板块"]')).toHaveLength(1)
+  })
+
+  it('hides the business level for a flat local database provider', async () => {
+    invoke.mockImplementation((operation: string) => operation === 'weld.getState' ? Promise.resolve({
+      configured: true,
+      binding: { bound: false, name: '', path: '' },
+      usesBusinessSections: false,
+      businessSections: [],
+      sources: [{ id: 'local', name: '本地焊接表', path: '本地焊接表', businessSection: '' }],
+      selected: '',
+    }) : Promise.resolve({}))
+    await renderPage()
+    const settings = [...container.querySelectorAll('button')].find(button => button.textContent === '焊接设置') as HTMLButtonElement
+    await act(async () => settings.click())
+
+    expect(container.querySelector('[aria-label="焊接业务板块"]')).toBeNull()
+    expect(container.querySelector('[aria-label="焊接业务主写入数据库"]')).toBeTruthy()
   })
 
   it('asks the host service to generate an editable monthly preview', async () => {

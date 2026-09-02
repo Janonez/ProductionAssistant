@@ -50,6 +50,8 @@ public sealed class DailyReportSourceBinding
     public string PeriodKind { get; set; } = "day";
     public string DatePropertyId { get; set; } = string.Empty;
     public string DatePropertyName { get; set; } = string.Empty;
+    public string ViewId { get; set; } = string.Empty;
+    public string ViewName { get; set; } = string.Empty;
 }
 
 public sealed class DailyReportFieldDefinition
@@ -64,7 +66,10 @@ public sealed record DailyReportFieldToken(
     string PropertyId,
     string PropertyName,
     string PropertyType,
-    string Format = "");
+    string Format = "",
+    string PeriodKind = "",
+    string ViewId = "",
+    string ViewName = "");
 
 public sealed class DailyReportRunState
 {
@@ -101,6 +106,7 @@ public sealed class DailyReportRunRecord
 
 public sealed record DailyReportBuildResult(bool Succeeded, string Message, string Text);
 public sealed record DailyReportSendResult(bool Succeeded, string Message, int Attempts = 1);
+public sealed record DailyReportViewResult(bool Succeeded, string Message, string Id = "", string Name = "");
 
 public enum DailyReportExitCode
 {

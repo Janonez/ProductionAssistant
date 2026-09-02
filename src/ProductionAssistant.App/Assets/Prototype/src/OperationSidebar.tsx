@@ -8,6 +8,7 @@ export const modules: Module[] = [
   { category: '文件处理', name: '生产会资料拆分' },
   { category: '数据同步', name: '每日焊接数据模拟' },
   { category: '数据同步', name: '生产消息 Notion 入库' },
+  { category: '数据同步', name: '数据库查看' },
   { category: '自动化任务', name: '报表中心' },
   { category: '自动化任务', name: '日报推送' },
 ]
@@ -20,6 +21,7 @@ function routeFor(name: string) {
     case '生产会资料拆分': return 'production-meeting'
     case '每日焊接数据模拟': return 'daily-weld'
     case '生产消息 Notion 入库': return 'production-message'
+    case '数据库查看': return 'database-viewer'
     case '报表中心': return 'report-center'
     case '日报推送': return 'daily-report'
     default: return 'plan-pdf'
@@ -83,6 +85,12 @@ function NavIcon({ name }: { name: string }) {
       <path d="M4 14.5 6.2 6h11.6l2.2 8.5V19H4v-4.5Z" />
       <path className="inbox-tray" d="M4.3 14h4.1l1.2 2h4.8l1.2-2h4.1" />
       <path className="inbox-arrow" d="M12 5v7m-2.5-2.5L12 12l2.5-2.5" />
+    </svg>
+  }
+  if (name === '数据库查看') {
+    return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <ellipse cx="12" cy="6" rx="7" ry="3" />
+      <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
     </svg>
   }
   if (name === '报表中心') {

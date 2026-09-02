@@ -112,11 +112,25 @@ public static class DailyReportSettingsStore
 
     private static string AddOrUpdateField(List<DailyReportFieldDefinition> fields, DailyReportFieldToken token)
     {
-        var existing = fields.FirstOrDefault(field => field.Token.DataSourceId == token.DataSourceId && field.Token.PropertyId == token.PropertyId);
+        var existing = fields.FirstOrDefault(field =>
+            field.Token.DataSourceId == token.DataSourceId &&
+            field.Token.PropertyId == token.PropertyId &&
+            field.Token.ViewId == token.ViewId &&
+            field.Token.PeriodKind == token.PeriodKind);
         if (existing is not null) { existing.Token = token; return existing.Placeholder; }
         var source = token.DataSourceName.Replace('"', '\'');
         var property = token.PropertyName.Replace('"', '\'');
-        var basePlaceholder = $"prop(\"{source} · {property}\")";
+        var scope = token.PeriodKind switch
+        {
+            "day" => "日 · ",
+            "month" => "月 · ",
+            "year" => "年 · ",
+            "direct-month" => "月计划 · ",
+            "view-sum" => "累计 · ",
+            _ when !string.IsNullOrWhiteSpace(token.ViewName) => $"{token.ViewName.Replace('"', '\'')} · ",
+            _ => string.Empty
+        };
+        var basePlaceholder = $"prop(\"{scope}{source} · {property}\")";
         var placeholder = basePlaceholder;
         for (var suffix = 2; fields.Any(field => field.Placeholder == placeholder); suffix++)
             placeholder = $"prop(\"{source} · {property} {suffix}\")";

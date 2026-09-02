@@ -58,13 +58,27 @@ export default function ProductionMessagePage() {
   const [bindingError, setBindingError] = useState("");
   const [requiredMonths, setRequiredMonths] = useState<string[]>([]);
   const [monthlyPlans, setMonthlyPlans] = useState<Record<string, string>>({});
+  const [bindingOpen, setBindingOpen] = useState(false);
+  const [bindingSelections, setBindingSelections] = useState({ cutting: "", towerDaily: "" });
 
   const parsed = drafts.length > 0;
   const needsReparse = parsed && rawMessage !== parsedMessage;
   const locked = Boolean(busy);
   useEffect(() => {
-    invoke<BindingState>("production.getBindings").then(setBindings).catch((cause) => setBindingError(errorText(cause)));
+    invoke<BindingState>("production.getBindings").then((value) => {
+      setBindings(value);
+      setBindingSelections({ cutting: value.selected.cutting || "", towerDaily: value.selected.towerDaily || "" });
+    }).catch((cause) => setBindingError(errorText(cause)));
   }, []);
+
+  async function saveBindings() {
+    setBindingError("");
+    try {
+      await invoke("production.saveBindings", bindingSelections, 120000);
+      const value = await invoke<BindingState>("production.getBindings");
+      setBindings(value); setBindingOpen(false);
+    } catch (cause) { setBindingError(errorText(cause)); }
+  }
 
   async function check(nextDrafts: Draft[]) {
     setBusy("check"); setError("");
@@ -160,12 +174,12 @@ export default function ProductionMessagePage() {
     && confirmFields.every((field) => Boolean(conflictChoices[`${field.draft.index}:${field.key}`]));
 
   if (completed) return <div className="app-shell"><main className="main-content">
-    <PageTitle /><div className="production-message-scroll"><StepIndicator current={3} />
+    <PageTitle configure={() => setBindingOpen(true)} /><div className="production-message-scroll"><StepIndicator current={3} />
     <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入 Notion`}</p><button className="primary-button" onClick={handleNext}>录入下一条</button></section></div>
-  </main></div>;
+  </main>{bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} close={() => setBindingOpen(false)} save={saveBindings} />}</div>;
 
   return <div className="app-shell"><main className="main-content">
-    <PageTitle /><div className="production-message-scroll"><StepIndicator current={parsed ? 2 : 1} />
+    <PageTitle configure={() => setBindingOpen(true)} /><div className="production-message-scroll"><StepIndicator current={parsed ? 2 : 1} />
     <div className="workspace-panel">
       <section className="message-pane">
         <div className="pane-title"><h2>原始消息</h2><p>输入生产消息，系统将自动解析并检查已有数据。</p></div>
@@ -175,7 +189,7 @@ export default function ProductionMessagePage() {
 
       <section className="review-pane">
         {!parsed ? <div className="review-empty"><h2>解析结果</h2><p>解析消息后，Notion 数据检查结果将在这里显示。</p>
-          {(bindingError || bindings?.configured === false) && <div className="pm-notice" role="alert">{bindingError || "Notion 数据源尚未配置，请先完成数据源绑定。"}</div>}
+          {(bindingError || bindings?.configured === false || bindings && (!bindings.cutting.bound || !bindings.towerDaily.bound)) && <div className="pm-notice" role="alert">{bindingError || (bindings?.configured === false ? "Notion 连接尚未配置。" : "数据库已变更，请点击右上角“数据库绑定”重新选择下料和塔筒主数据库。")}</div>}
         </div> : <>
           <div className="review-header"><h2>解析结果</h2><div className="review-summary"><span>新增<strong>{summary.newFields}</strong></span><i>·</i><span>一致<strong>{summary.same}</strong></span><i>·</i><span>待确认<strong>{summary.confirm}</strong></span><i>·</i><span>异常<strong>{summary.exception}</strong></span></div></div>
           <div className="date-groups">
@@ -227,6 +241,7 @@ export default function ProductionMessagePage() {
     </div>
   </main>
   {requiredMonths.length > 0 && <MonthlyPlanDialog months={requiredMonths} values={monthlyPlans} setValues={setMonthlyPlans} close={() => setRequiredMonths([])} submit={(plans) => { setRequiredMonths([]); write(plans); }} />}
+  {bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} close={() => setBindingOpen(false)} save={saveBindings} />}
   </div>;
 }
 
@@ -259,10 +274,24 @@ function MatchStatus({ busy, result, error, needsReparse, invalidCount, fieldSta
 function MonthlyPlanDialog({ months, values, setValues, close, submit }: { months: string[]; values: Record<string, string>; setValues: (value: Record<string, string>) => void; close: () => void; submit: (value: Record<string, number>) => void }) {
   const parsed = Object.fromEntries(months.map((month) => [month, Number(values[month])]));
   const valid = months.every((month) => values[month]?.trim() && Number.isFinite(parsed[month]) && parsed[month] >= 0);
-  return <div className="pm-dialog-overlay"><section className="pm-dialog" role="dialog" aria-modal="true" aria-labelledby="monthly-plan-title"><h2 id="monthly-plan-title">补充月预计产量</h2><p>创建下料月数据前需要补充预计产量（吨）。</p>{months.map((month) => <label key={month}>{month}<input type="number" min="0" value={values[month] || ""} onChange={(event) => setValues({ ...values, [month]: event.target.value })} /></label>)}<div className="pm-dialog-actions"><button onClick={close}>取消</button><button className="primary-button" disabled={!valid} onClick={() => submit(parsed)}>创建并继续</button></div></section></div>;
+  return <div className="pm-dialog-overlay"><section className="pm-dialog" role="dialog" aria-modal="true" aria-labelledby="monthly-plan-title"><h2 id="monthly-plan-title">补充下料月计划</h2><p>独立月计划库中没有该月份记录，请填写计划下料（吨）。</p>{months.map((month) => <label key={month}>{month}<input type="number" min="0" value={values[month] || ""} onChange={(event) => setValues({ ...values, [month]: event.target.value })} /></label>)}<div className="pm-dialog-actions"><button onClick={close}>取消</button><button className="primary-button" disabled={!valid} onClick={() => submit(parsed)}>创建并继续</button></div></section></div>;
 }
 
-function PageTitle() { return <header className="content-header"><div><h1>生产消息入库</h1><p>解析生产消息，检查已有数据并确认入库</p></div><button type="button" className="template-config-button" disabled title="解析消息模板配置将在后续接入">模板配置</button></header>; }
+function BindingDialog({ state, selections, setSelections, error, close, save }: { state: BindingState; selections: { cutting: string; towerDaily: string }; setSelections: (value: { cutting: string; towerDaily: string }) => void; error: string; close: () => void; save: () => void }) {
+  const [cuttingBusiness, setCuttingBusiness] = useState(state.sources.find(source => source.id === selections.cutting)?.businessSection || "");
+  const [towerBusiness, setTowerBusiness] = useState(state.sources.find(source => source.id === selections.towerDaily)?.businessSection || "");
+  const sourcesFor = (business: string) => state.usesBusinessSections ? state.sources.filter(source => source.businessSection === business) : state.sources;
+  return <div className="pm-dialog-overlay"><section className="pm-dialog pm-binding-dialog" role="dialog" aria-modal="true" aria-labelledby="binding-title"><h2 id="binding-title">数据库绑定</h2><p>只绑定每日主数据库。月累计和年累计由软件查询计算；下料月计划库通过主库的 Relation 自动识别。</p>
+    {state.usesBusinessSections && <label>下料业务板块<select value={cuttingBusiness} onChange={(event) => { setCuttingBusiness(event.target.value); setSelections({ ...selections, cutting: "" }) }}><option value="">不处理下料消息</option>{state.businessSections.map(section => <option value={section} key={`cutting-business-${section}`}>{section}</option>)}</select></label>}
+    <label>下料主数据库<select value={selections.cutting} disabled={state.usesBusinessSections && !cuttingBusiness} onChange={(event) => setSelections({ ...selections, cutting: event.target.value })}><option value="">不处理下料消息</option>{sourcesFor(cuttingBusiness).map((source) => <option value={source.id} key={`cutting-${source.id}`}>{source.name}</option>)}</select></label>
+    {state.usesBusinessSections && <label>塔筒业务板块<select value={towerBusiness} onChange={(event) => { setTowerBusiness(event.target.value); setSelections({ ...selections, towerDaily: "" }) }}><option value="">请选择业务板块</option>{state.businessSections.map(section => <option value={section} key={`tower-business-${section}`}>{section}</option>)}</select></label>}
+    <label>塔筒产线主数据库<select value={selections.towerDaily} disabled={state.usesBusinessSections && !towerBusiness} onChange={(event) => setSelections({ ...selections, towerDaily: event.target.value })}><option value="">请选择具体数据库</option>{sourcesFor(towerBusiness).map((source) => <option value={source.id} key={`tower-${source.id}`}>{source.name}</option>)}</select></label>
+    {error && <div className="pm-notice" role="alert">{error}</div>}
+    <div className="pm-dialog-actions"><button onClick={close}>取消</button><button className="primary-button" disabled={!selections.towerDaily} onClick={save}>保存绑定</button></div>
+  </section></div>;
+}
+
+function PageTitle({ configure }: { configure: () => void }) { return <header className="content-header"><div><h1>生产消息入库</h1><p>解析生产消息，检查已有数据并确认入库</p></div><button type="button" className="template-config-button" onClick={configure}>数据库绑定</button></header>; }
 function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
   return <ThreeStepProgress current={current} titles={["录入消息", "解析确认", "完成"]} label="生产消息入库进度" />;
 }

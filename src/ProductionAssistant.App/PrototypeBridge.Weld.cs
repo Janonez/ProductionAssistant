@@ -13,6 +13,7 @@ internal sealed partial class PrototypeBridge
     {
         var settings = NotionSettingsStore.Load();
         var binding = settings.Targets.FirstOrDefault(target => target.ModuleKey == WeldModuleKey);
+        var catalog = DatabaseSourceCatalog.Create(AppServices.DatabaseProvider.GetSources());
         return new
         {
             configured = !string.IsNullOrWhiteSpace(settings.Token),
@@ -25,7 +26,9 @@ internal sealed partial class PrototypeBridge
                 name = binding?.Name ?? string.Empty,
                 path = binding?.Path ?? string.Empty
             },
-            sources = settings.CachedDataSources.Select(source => new { source.Id, source.Name, source.Path }),
+            usesBusinessSections = catalog.UsesBusinessSections,
+            businessSections = catalog.BusinessSections,
+            sources = catalog.Sources.Select(source => new { source.Id, source.Name, source.Path, businessSection = source.BusinessSection }),
             selected = binding?.Id ?? string.Empty
         };
     }
