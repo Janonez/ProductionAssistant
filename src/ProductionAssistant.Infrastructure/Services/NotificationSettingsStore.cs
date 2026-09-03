@@ -6,8 +6,7 @@ namespace ProductionAssistant.Services;
 public static class NotificationSettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    private static string FolderPath => Environment.GetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR")
-        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ProductionAssistant");
+    private static string FolderPath => RuntimeEnvironment.DataDirectory;
     private static string SettingsPath => Path.Combine(FolderPath, "notification-settings.json");
 
     public static NotificationSettings Load()

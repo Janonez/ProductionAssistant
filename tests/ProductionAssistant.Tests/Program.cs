@@ -95,6 +95,8 @@ Directory.CreateDirectory(reportTestFolder);
 Environment.SetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR", reportTestFolder);
 try
 {
+    var isolatedReportTestFolder = Path.Combine(reportTestFolder, RuntimeEnvironment.Current.Name);
+    Directory.CreateDirectory(isolatedReportTestFolder);
     var legacySettings = new DailyReportSettings
     {
         DraftTemplate = reportSettings.DraftTemplate,
@@ -106,7 +108,7 @@ try
         Sources = reportSettings.Sources,
         Fields = reportSettings.Fields
     };
-    File.WriteAllText(Path.Combine(reportTestFolder, "daily-report-settings.json"),
+    File.WriteAllText(Path.Combine(isolatedReportTestFolder, "daily-report-settings.json"),
         System.Text.Json.JsonSerializer.Serialize(legacySettings));
     var migratedCatalog = DailyReportSettingsStore.LoadCatalog();
     Assert(migratedCatalog.Jobs.Count == 1 &&
@@ -119,7 +121,7 @@ try
            migratedNotification.EncryptedSecret == "legacy-secret",
         "旧日报的钉钉凭据没有迁移到系统通知设置。");
     DailyReportSettingsStore.SaveCatalog(migratedCatalog);
-    Assert(!File.ReadAllText(Path.Combine(reportTestFolder, "daily-report-jobs.json")).Contains("EncryptedWebhook", StringComparison.Ordinal),
+    Assert(!File.ReadAllText(Path.Combine(isolatedReportTestFolder, "daily-report-jobs.json")).Contains("EncryptedWebhook", StringComparison.Ordinal),
         "日报任务仍在保存通知渠道凭据。");
     Assert(DailyReportSettingsStore.LoadCatalog().Jobs.Count == 1,
         "重复加载迁移配置时生成了重复任务。");

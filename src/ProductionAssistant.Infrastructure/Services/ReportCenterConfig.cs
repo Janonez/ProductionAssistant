@@ -26,9 +26,7 @@ public static class ReportCenterConfigStore
 {
     private const string FileName = "report-center.yaml";
 
-    public static string DataDirectory => Environment.GetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR") is { Length: > 0 } custom
-        ? custom
-        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ProductionAssistant");
+    public static string DataDirectory => RuntimeEnvironment.DataDirectory;
     public static string ConfigPath => Path.Combine(DataDirectory, FileName);
     public static string AuthStatePath => Path.Combine(DataDirectory, "runtime", "auth", "finereport-state.json");
     public static string LogPath => Path.Combine(DataDirectory, "report-center-runs.jsonl");
@@ -36,7 +34,7 @@ public static class ReportCenterConfigStore
     public static ReportCenterConfig Load()
     {
         Directory.CreateDirectory(DataDirectory);
-        if (!File.Exists(ConfigPath)) File.WriteAllText(ConfigPath, DefaultYaml);
+        if (!File.Exists(ConfigPath)) File.WriteAllText(ConfigPath, DefaultYaml());
         var config = Parse(File.ReadAllLines(ConfigPath));
         config.Headless = true;
         Validate(config);
@@ -132,7 +130,17 @@ public static class ReportCenterConfigStore
             throw new InvalidOperationException("报表中心配置包含重复设备名称。");
     }
 
-    private const string DefaultYaml = """
+    private static string DefaultYaml()
+    {
+        if (!RuntimeEnvironment.Current.IsDevelopment) return ProductionDefaultYaml;
+        return ProductionDefaultYaml
+            .Replace(@"source_root: D:\zhang\工作\制造部\01.机加工日报",
+                $"source_root: {Path.Combine(DataDirectory, "report-center", "source")}", StringComparison.Ordinal)
+            .Replace(@"output_root: D:\zhang\工作\制造部\01.机加工日报",
+                $"output_root: {Path.Combine(DataDirectory, "report-center", "output")}", StringComparison.Ordinal);
+    }
+
+    private const string ProductionDefaultYaml = """
 name: 机加工实开台时汇总
 report_url: https://fr.tz.com.cn:8443/webroot/decision
 report_path:

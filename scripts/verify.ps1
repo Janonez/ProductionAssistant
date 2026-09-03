@@ -8,8 +8,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $editor = Join-Path $root 'src\ProductionAssistant.App\Assets\ReportEditor'
 $prototype = Join-Path $root 'src\ProductionAssistant.App\Assets\Prototype'
-$debugPublish = Join-Path $root 'publish\Debug'
-$releasePublish = Join-Path $root 'publish\Release'
+$debugPublish = Join-Path $root 'deployments\development'
+$releasePublish = Join-Path $root 'deployments\production'
 $env:npm_config_cache = Join-Path $root '.npm-cache'
 
 function Assert-NativeSuccess([string]$operation) {
@@ -55,11 +55,11 @@ try {
         -c Release -p:Platform=x64 --no-build
     Assert-NativeSuccess 'xUnit tests'
     dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj `
-        -c Debug -p:Platform=x64 --self-contained true --no-restore -o $debugPublish
+        -c Debug -p:Platform=x64 -p:RuntimeEnvironment=Development --self-contained true --no-restore -o $debugPublish
     Assert-NativeSuccess 'Debug publish'
     if ($SyncRelease) {
         dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj `
-            -c Release -p:Platform=x64 --self-contained true --no-restore -o $releasePublish
+            -c Release -p:Platform=x64 -p:RuntimeEnvironment=Production --self-contained true --no-restore -o $releasePublish
         Assert-NativeSuccess 'Release publish'
     }
 }

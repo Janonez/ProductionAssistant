@@ -5,8 +5,8 @@
 ## 验证
 
 - [ ] 已运行 `./scripts/verify.ps1`
-- [ ] 已启动 `publish/Debug/ProductionAssistant.exe`
-- [ ] 已确认 `publish/Release/ProductionAssistant.exe` 为正式版输出
+- [ ] 已启动 `deployments/development/ProductionAssistant.exe`
+- [ ] 已确认 `deployments/production/ProductionAssistant.exe` 为正式版输出
 - [ ] 已人工验收受影响模块
 - [ ] UI 改动已检查正常、悬停、按下、键盘焦点和不同窗口宽度
 

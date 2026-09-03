@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using ProductionAssistant.Pages;
+using ProductionAssistant.Services;
 
 namespace ProductionAssistant;
 
@@ -13,7 +14,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = "生产助手";
+        Title = RuntimeEnvironment.Current.IsDevelopment ? "生产助手 [Development]" : "生产助手";
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);

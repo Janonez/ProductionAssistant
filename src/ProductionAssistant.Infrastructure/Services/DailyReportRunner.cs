@@ -102,7 +102,7 @@ public sealed class DailyReportRunner
     {
         try
         {
-            var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ProductionAssistant");
+            var folder = RuntimeEnvironment.LogDirectory;
             Directory.CreateDirectory(folder);
             File.AppendAllText(Path.Combine(folder, "daily-report.log"),
                 $"[{DateTimeOffset.Now:O}] [job:{jobId}] {message}{Environment.NewLine}");

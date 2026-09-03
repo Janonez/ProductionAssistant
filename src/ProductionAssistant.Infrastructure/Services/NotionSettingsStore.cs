@@ -41,11 +41,9 @@ public sealed class NotionTargetSettings
 
 public static class NotionSettingsStore
 {
-    private static readonly string FolderPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ProductionAssistant");
-    private static readonly string FilePath = Path.Combine(FolderPath, "notion-settings.json");
-    private static readonly string BackupPath = Path.Combine(FolderPath, "notion-settings.backup.json");
+    private static string FolderPath => RuntimeEnvironment.DataDirectory;
+    private static string FilePath => Path.Combine(FolderPath, "notion-settings.json");
+    private static string BackupPath => Path.Combine(FolderPath, "notion-settings.backup.json");
 
     public static NotionSettings Load()
     {

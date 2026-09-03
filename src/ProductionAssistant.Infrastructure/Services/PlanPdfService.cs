@@ -977,8 +977,11 @@ public sealed partial class PlanPdfService
     private static PlanExportResult ExportCandidates(
         PlanWorkspace workspace, IProgress<PlanExportProgress>? progress)
     {
+        var outputRoot = RuntimeEnvironment.Current.IsDevelopment
+            ? Path.Combine(RuntimeEnvironment.ExportDirectory, "plan-pdf")
+            : workspace.RootPath;
         var outputFolder = Path.Combine(
-            workspace.RootPath, "生产助手预览", DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+            outputRoot, "生产助手预览", DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
         Directory.CreateDirectory(outputFolder);
         dynamic? excel = null;
         dynamic? workbook = null;
@@ -1020,8 +1023,11 @@ public sealed partial class PlanPdfService
 
     private static string CreateWorkbookBackup(PlanWorkspace workspace)
     {
+        var backupRoot = RuntimeEnvironment.Current.IsDevelopment
+            ? Path.Combine(RuntimeEnvironment.DataDirectory, "backups", "plan-pdf")
+            : workspace.RootPath;
         var backupFolder = Path.Combine(
-            workspace.RootPath, "生产助手备份",
+            backupRoot, "生产助手备份",
             DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture));
         Directory.CreateDirectory(backupFolder);
         var backupPath = Path.Combine(backupFolder, Path.GetFileName(workspace.WorkbookPath));

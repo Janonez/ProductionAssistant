@@ -23,7 +23,19 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 .\scripts\verify.ps1
 ```
 
-脚本依次验证前端 bundle、Release build 和 xUnit 测试，默认只生成 Windows x64 自包含测试版 `publish\Debug`。只有明确需要同步正式版时才传入 `-SyncRelease`，生成或覆盖 `publish\Release`。桌面人工验收先运行 `publish\Debug\ProductionAssistant.exe`。
+脚本依次验证前端 bundle、Release build 和 xUnit 测试，默认只生成 Windows x64 自包含测试版 `deployments\development`。只有明确需要同步正式版时才传入 `-SyncRelease`，生成或覆盖 `deployments\production`。桌面人工验收先运行 `deployments\development\ProductionAssistant.exe`。
+
+## 运行环境
+
+运行环境与 Debug/Release 编译配置相互独立。程序按以下优先级识别环境：`--environment Development|Production`、`DOTNET_ENVIRONMENT`、发布目录中的 `runtime-environment.json`，均未设置时安全回退为 `Production`。因此 Release 构建也可以使用 Development 环境：
+
+```powershell
+dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj -c Release -p:Platform=x64 -p:RuntimeEnvironment=Development --self-contained true --no-restore -o deployments\development
+```
+
+Production 继续使用现有 `%LOCALAPPDATA%\ProductionAssistant`，Development 使用 `%LOCALAPPDATA%\ProductionAssistant\Development`。任务、执行记录、Notion 配置、Webhook、FineReport 凭据、日志、缓存和默认导出目录均随该根目录隔离。Development 不会复制 Production Secret，需要在 Development 界面中单独填写测试 Notion/消息配置。
+
+Scheduler 由 [appsettings.Development.json](src/ProductionAssistant.App/appsettings.Development.json) 和 [appsettings.Production.json](src/ProductionAssistant.App/appsettings.Production.json) 控制；Development 默认关闭，Production 保持开启。当前项目没有 PostgreSQL、连接字符串或 migration，数据库功能实际连接 Notion，因此没有需要创建的 Development PostgreSQL 数据库。
 
 ## React 新版界面
 
@@ -75,7 +87,7 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 
 ## 发布
 
-`publish/` 不进入 Git。源码通过 Git 同步到 GitHub；本机保留 `publish\Debug` 测试版和 `publish\Release` 正式版。版本发布时从正式版生成 Windows x64 自包含 ZIP，并附加到对应 GitHub Release，ZIP 不提交 Git。
+`deployments/` 不进入 Git。源码通过 Git 同步到 GitHub；本机保留 `deployments\development` 测试版和 `deployments\production` 正式版。版本发布时从正式版生成 Windows x64 自包含 ZIP，并附加到对应 GitHub Release，ZIP 不提交 Git。
 
 ## 安全与许可
 
