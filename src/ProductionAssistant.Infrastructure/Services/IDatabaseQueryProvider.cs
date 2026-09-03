@@ -40,7 +40,8 @@ public static class DatabaseSourceCatalog
             usesBusinessSections
                 ? grouped.Select(source => source.BusinessSection)
                     .Distinct(StringComparer.CurrentCultureIgnoreCase)
-                    .OrderBy(section => section, StringComparer.CurrentCultureIgnoreCase)
+                    .OrderBy(section => string.Equals(section, "数据库", StringComparison.CurrentCultureIgnoreCase) ? 0 : 1)
+                    .ThenBy(section => section, StringComparer.CurrentCultureIgnoreCase)
                     .ToArray()
                 : [],
             usesBusinessSections ? grouped : all);

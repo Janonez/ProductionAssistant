@@ -12,14 +12,16 @@ public static class DailyReportPresentation
         .Select(source => BusinessSection(source.Path))
         .Where(section => !string.IsNullOrWhiteSpace(section))
         .Distinct(StringComparer.CurrentCultureIgnoreCase)
-        .OrderBy(section => section, StringComparer.CurrentCultureIgnoreCase)
+        .OrderBy(section => string.Equals(section, "数据库", StringComparison.CurrentCultureIgnoreCase) ? 0 : 1)
+        .ThenBy(section => section, StringComparer.CurrentCultureIgnoreCase)
         .ToArray();
 
     public static IReadOnlyList<string> BusinessSections(IEnumerable<DatabaseSourceInfo> sources) => sources
         .Select(source => source.BusinessSection)
         .Where(section => !string.IsNullOrWhiteSpace(section))
         .Distinct(StringComparer.CurrentCultureIgnoreCase)
-        .OrderBy(section => section, StringComparer.CurrentCultureIgnoreCase)
+        .OrderBy(section => string.Equals(section, "数据库", StringComparison.CurrentCultureIgnoreCase) ? 0 : 1)
+        .ThenBy(section => section, StringComparer.CurrentCultureIgnoreCase)
         .ToArray();
 
     public static IReadOnlyList<NotionDataSourceOption> SourcesForBusiness(
