@@ -59,7 +59,7 @@ public static class DailyReportPresentation
     public static string BusinessSection(string path)
     {
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return parts.Length >= 3 ? parts[1] : string.Empty;
+        return parts.Length >= 3 ? parts[1] : parts.Length == 2 ? parts[0] : string.Empty;
     }
 
     private static bool ContainsAny(string value, params string[] terms) =>

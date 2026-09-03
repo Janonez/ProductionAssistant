@@ -181,7 +181,7 @@ export function DailyReportPage() {
                   type="checkbox"
                   checked={job.isEnabled}
                   disabled={!job.schedulingAvailable || busy === job.id}
-                  title={job.schedulingAvailable ? undefined : "Debug 版本不支持定时发送"}
+                  title={job.schedulingAvailable ? undefined : "Development 环境默认不启用定时发送"}
                   onChange={() => toggle(job)}
                 />
                 <span />
@@ -244,15 +244,16 @@ function DailyJobEditor({
   const [noticeScope, setNoticeScope] = useState<NoticeScope>("page");
   const [businessSection, setBusinessSection] = useState("");
   const [sourceId, setSourceId] = useState("");
-  const [propertyId, setPropertyId] = useState("");
-  const [properties, setProperties] = useState<
-    Array<{ id: string; name: string; type: string }>
+  const [metricId, setMetricId] = useState("");
+  const [metrics, setMetrics] = useState<
+    Array<{ id: string; name: string; defaultAggregate: string; granularity: string; hasFixedFilter: boolean; filterDescription: string }>
   >([]);
   const [propertiesError, setPropertiesError] = useState("");
-  const [viewId, setViewId] = useState("");
-  const [views, setViews] = useState<Array<{ id: string; name: string; supportsPeriods: boolean }>>([]);
-  const [matchProperty, setMatchProperty] = useState<{ id: string; name: string; type: string }>();
-  const [periodKind, setPeriodKind] = useState("");
+  const [rangeKind, setRangeKind] = useState("");
+  const [aggregateKind, setAggregateKind] = useState("");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+  const [editingPlaceholder, setEditingPlaceholder] = useState("");
   const [insert, setInsert] = useState<{
     value: DailyField | DateInsertKind;
     key: number;
@@ -328,53 +329,57 @@ function DailyJobEditor({
   }, [template, document]);
 
   const sources = useMemo(
-    () =>
-      job?.sources.filter((source) => !job.usesBusinessSections || source.businessSection === businessSection) || [],
+    () => job?.sources.filter(source => !job.usesBusinessSections || source.businessSection === businessSection) || [],
     [job, businessSection],
   );
-  async function chooseSource(value: string) {
+  const selectedMetric = metrics.find(metric => metric.id === metricId);
+  async function chooseSource(value: string, binding?: DailyField["binding"]) {
     setSourceId(value);
-    setPropertyId("");
-    setProperties([]);
+    setMetricId("");
+    setMetrics([]);
     setPropertiesError("");
-    setViewId("");
-    setViews([]);
-    setMatchProperty(undefined);
-    setPeriodKind("");
+    setRangeKind("");
+    setAggregateKind("");
+    setCustomStartDate("");
+    setCustomEndDate("");
     if (!value) return;
     setBusy("properties");
     try {
-      const result = await invoke<{ properties: typeof properties; views: typeof views; matchProperty?: typeof matchProperty }>(
+      const result = await invoke<{ metrics: typeof metrics }>(
         "daily.getProperties",
         { id, sourceId: value },
       );
-      setProperties(result.properties);
-      setViews(result.views || []);
-      setMatchProperty(result.matchProperty);
+      setMetrics(result.metrics || []);
+      setMetricId(binding?.businessMetricId || "");
+      setRangeKind(binding?.rangeKind || "");
+      setAggregateKind(binding?.aggregateKind || "");
+      setCustomStartDate(binding?.customStartDate || "");
+      setCustomEndDate(binding?.customEndDate || "");
     } catch (error) {
       setNotice(errorNotice(error));
     } finally {
       setBusy("");
     }
   }
+  async function editField(field: DailyField) {
+    if (!field.binding) return;
+    setEditingPlaceholder(field.placeholder);
+    const source = job?.sources.find(item => item.id === field.binding?.dataSourceId);
+    if (source?.businessSection) setBusinessSection(source.businessSection);
+    await chooseSource(field.binding.dataSourceId, field.binding);
+  }
   async function addField() {
-    if (!sourceId || !propertyId) return;
-    const property = properties.find((item) => item.id === propertyId);
-    const selectedView = views.find((item) => item.id === viewId);
-    if (!property) return;
+    if (!sourceId || !metricId) return;
     try {
       const result = await invoke<{ field: DailyField }>(
         "daily.addField",
         {
-          id, sourceId, propertyId,
-          propertyName: property.name,
-          propertyType: property.type,
-          viewId: selectedView?.id || "",
-          viewName: selectedView?.name || "",
-          periodKind,
-          matchPropertyId: matchProperty?.id || "",
-          matchPropertyName: matchProperty?.name || "",
-          matchPropertyType: matchProperty?.type || "",
+          id, sourceId, metricId,
+          placeholder: editingPlaceholder,
+          rangeKind,
+          aggregateKind,
+          customStartDate: rangeKind === "specific-month" && customStartDate ? `${customStartDate.slice(0, 7)}-01` : customStartDate,
+          customEndDate: rangeKind === "specific-date" ? customStartDate : customEndDate,
         },
       );
       setJob((current) =>
@@ -392,13 +397,17 @@ function DailyJobEditor({
             }
           : current,
       );
-      setInsert({ value: result.field, key: Date.now() });
+      if (!editingPlaceholder) setInsert({ value: result.field, key: Date.now() });
+      setEditingPlaceholder("");
       setPreview("");
     } catch (error) {
       setPropertiesError(error instanceof Error ? error.message : String(error));
       setNoticeScope("template");
     }
   }
+  const canSaveField = !!metricId && !!rangeKind && !!aggregateKind && !busy &&
+    (!(rangeKind === "specific-date" || rangeKind === "specific-month" || rangeKind === "custom") || !!customStartDate) &&
+    (rangeKind !== "custom" || !!customEndDate);
   const advanceTo = (step: DailyStep) => {
     if (stepTransition && currentStep === stepTransition.from) return;
     if (stepTransitionTimer.current) window.clearTimeout(stepTransitionTimer.current);
@@ -580,14 +589,21 @@ function DailyJobEditor({
               <div className="template-workspace progressive-template">
                 <div className="editor-column"><label>消息模板</label><ReportTemplateEditor text={template} document={document} fields={job.fields} insert={insert} onInsertHandled={() => setInsert(undefined)} onChange={(nextText, nextDocument) => { setTemplate(nextText); setDocument(nextDocument); setPreview(""); setJob(current => current ? { ...current, validated: false, isEnabled: false } : current) }} /></div>
                 <aside className="field-picker progressive-field-picker">
-                  <div className="field-picker-heading"><h3><Database />数据源字段</h3><span>可跨数据库连续添加</span></div>
-                  {job.usesBusinessSections && <label><span className="field-label-title"><b>1.</b> 业务板块</span><ChoicePicker value={businessSection} placeholder="请选择业务板块" options={job.businessSections.map(section => ({ value: section, label: section }))} onChange={value => { setBusinessSection(value); chooseSource("") }} /></label>}
-                  <label><span className="field-label-title"><b>{job.usesBusinessSections ? 2 : 1}.</b> 数据库</span><ChoicePicker value={sourceId} placeholder="请选择数据库" disabled={job.usesBusinessSections && !businessSection} options={sources.map(source => ({ value: source.id, label: source.name }))} onChange={chooseSource} /></label>
-                  <label><span className="field-label-title"><b>{job.usesBusinessSections ? 3 : 2}.</b> 数据字段</span><ChoicePicker value={propertyId} placeholder={busy === "properties" ? "正在读取字段…" : "请选择数据字段"} disabled={busy === "properties"} options={properties.map(property => ({ value: property.id, label: `${property.name} · ${property.type}` }))} onChange={setPropertyId} /></label>
-                  {sourceId && <label><span className="field-label-title"><b>{job.usesBusinessSections ? 4 : 3}.</b> 统计 View</span><ChoicePicker value={viewId} placeholder={views.length ? "请选择数据库 View" : "数据库中没有可用 View"} options={views.map(view => ({ value: view.id, label: view.name }))} onChange={value => { const view = views.find(item => item.id === value); setViewId(value); setPeriodKind(view?.supportsPeriods ? "day" : "") }} /></label>}
-                  {viewId && <label><span className="field-label-title"><b>{job.usesBusinessSections ? 5 : 4}.</b> {views.find(view => view.id === viewId)?.supportsPeriods ? "累计口径" : "取数方式"}</span><ChoicePicker value={periodKind} placeholder={views.find(view => view.id === viewId)?.supportsPeriods ? "请选择累计口径" : "请选择取数方式"} options={views.find(view => view.id === viewId)?.supportsPeriods ? [{ value: "day", label: "日 · 当天值" }, { value: "month", label: "月 · 当月截至当日" }, { value: "year", label: "年 · 本年截至当日" }] : [{ value: "direct-month", label: "直接获取 · 对应业务月份" }, { value: "view-sum", label: "累计 · View 全部记录" }]} onChange={setPeriodKind} /></label>}
+                  <div className="field-picker-heading"><h3><Database />业务数据</h3><span>{editingPlaceholder ? "正在编辑字段" : "选择要写入日报的数据"}</span></div>
+                  {!!job.fields.length && <div className="binding-list" aria-label="已配置字段">{job.fields.map(field => <button type="button" key={field.placeholder} title={field.tooltip} onClick={() => editField(field)}>{field.label}</button>)}</div>}
+                  {job.usesBusinessSections && <label><span className="field-label-title"><b>1.</b> 业务</span><ChoicePicker value={businessSection} placeholder="请选择业务" options={job.businessSections.map(section => ({ value: section, label: section }))} onChange={value => { setBusinessSection(value); setEditingPlaceholder(""); chooseSource("") }} /></label>}
+                  <label><span className="field-label-title"><b>{job.usesBusinessSections ? 2 : 1}.</b> 数据库</span><ChoicePicker value={sourceId} placeholder="请选择数据库" disabled={job.usesBusinessSections && !businessSection} options={sources.map(source => ({ value: source.id, label: source.name }))} onChange={value => { setEditingPlaceholder(""); chooseSource(value) }} /></label>
+                  {sourceId && <label><span className="field-label-title"><b>{job.usesBusinessSections ? 3 : 2}.</b> 具体业务</span><ChoicePicker value={metricId} placeholder={busy === "properties" ? "正在读取可用业务…" : "请选择具体业务"} disabled={busy === "properties"} options={metrics.map(metric => ({ value: metric.id, label: metric.name }))} onChange={value => { setMetricId(value); const metric = metrics.find(item => item.id === value); setAggregateKind(metric?.defaultAggregate || ""); setRangeKind(metric?.granularity === "monthly" ? "current-month" : "") }} /></label>}
+                  {metricId && <>
+                    <label><span className="field-label-title"><b>{job.usesBusinessSections ? 4 : 3}.</b> 日期范围</span><ChoicePicker value={rangeKind} placeholder="请选择日期范围" options={[{ value: "day", label: "今日" }, { value: "current-month", label: "本月" }, { value: "month", label: "本月截至业务日" }, { value: "current-year", label: "本年" }, { value: "year", label: "本年截至业务日" }, { value: "last-year-to-date", label: "去年同期" }, { value: "last-year", label: "去年全年" }, { value: "specific-date", label: "指定日期" }, { value: "specific-month", label: "指定月份" }, { value: "custom", label: "指定日期范围" }]} onChange={setRangeKind} /></label>
+                    {(rangeKind === "specific-date" || rangeKind === "custom") && <label><span className="field-label-title">{rangeKind === "custom" ? "开始日期" : "指定日期"}</span><ReportDatePicker value={customStartDate} onChange={setCustomStartDate} /></label>}
+                    {rangeKind === "specific-month" && <label><span className="field-label-title">指定月份</span><input type="month" value={customStartDate.slice(0, 7)} onChange={event => setCustomStartDate(event.target.value)} /></label>}
+                    {rangeKind === "custom" && <label><span className="field-label-title">结束日期</span><ReportDatePicker value={customEndDate} onChange={setCustomEndDate} /></label>}
+                    <label><span className="field-label-title"><b>{job.usesBusinessSections ? 5 : 4}.</b> 取值方式</span><ChoicePicker value={aggregateKind} placeholder="请选择取值方式" options={[{ value: "sum", label: "求和" }, { value: "value", label: "取值" }]} onChange={setAggregateKind} /></label>
+                    {selectedMetric?.hasFixedFilter && <div className="daily-metric-condition"><span>固定业务条件</span><strong>{selectedMetric.filterDescription}</strong><small>已由具体业务自动应用，无需重复配置。</small></div>}
+                  </>}
                   {propertiesError && <div className="field-error" role="alert"><span>字段读取失败：{propertiesError}</span><button type="button" onClick={() => chooseSource(sourceId)}>重试</button></div>}
-                  <button className="insert-field-button" disabled={!propertyId || !!busy || !viewId || !periodKind} onClick={addField}>插入所选字段</button>
+                  <button className="insert-field-button" disabled={!canSaveField} onClick={addField}>{editingPlaceholder ? "保存字段配置" : "插入所选字段"}</button>
                   <div className="system-variable"><span>业务日期</span><div className="system-variable-actions"><button type="button" onClick={() => setInsert({ value: "year", key: Date.now() })}>年</button><button type="button" onClick={() => setInsert({ value: "month", key: Date.now() })}>月</button><button type="button" onClick={() => setInsert({ value: "day", key: Date.now() })}>日</button><button type="button" onClick={() => setInsert({ value: "date", key: Date.now() })}>完整日期</button></div></div>
                 </aside>
               </div>

@@ -65,12 +65,12 @@ public sealed class ArchitectureTests
         {
             new DatabaseSourceInfo("cutting", "下料数据库", "数据库 / 下料数据库 / 下料数据库", "下料数据库"),
             new DatabaseSourceInfo("plan", "下料每月计划数据库", "数据库 / 下料数据库 / 下料每月计划数据库", "下料数据库"),
-            new DatabaseSourceInfo("toolbox", "工具箱", "数据库 / 工具箱")
+            new DatabaseSourceInfo("toolbox", "工具箱", "数据库 / 工具箱", "数据库")
         };
 
-        Assert.Equal(["下料数据库"], DailyReportPresentation.BusinessSections(sources));
+        Assert.Equal(["数据库", "下料数据库"], DailyReportPresentation.BusinessSections(sources));
         Assert.Equal("下料数据库", DailyReportPresentation.BusinessSection(sources[0].Path));
-        Assert.Equal(string.Empty, DailyReportPresentation.BusinessSection(sources[2].Path));
+        Assert.Equal("数据库", DailyReportPresentation.BusinessSection(sources[2].Path));
     }
 
     [Fact]

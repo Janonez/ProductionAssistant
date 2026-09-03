@@ -10,7 +10,21 @@ public sealed class DatabaseQueryServiceTests
 
         Assert.Equal((date, date), Dates(DatabaseDateRanges.Resolve("day", date)));
         Assert.Equal((new DateOnly(2026, 9, 1), date), Dates(DatabaseDateRanges.Resolve("month", date)));
+        Assert.Equal((new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30)),
+            Dates(DatabaseDateRanges.Resolve("current-month", date)));
         Assert.Equal((new DateOnly(2026, 1, 1), date), Dates(DatabaseDateRanges.Resolve("year", date)));
+        Assert.Equal((new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)),
+            Dates(DatabaseDateRanges.Resolve("current-year", date)));
+        Assert.Equal((new DateOnly(2025, 1, 1), new DateOnly(2025, 9, 9)),
+            Dates(DatabaseDateRanges.Resolve("last-year-to-date", date)));
+        Assert.Equal((new DateOnly(2025, 1, 1), new DateOnly(2025, 12, 31)),
+            Dates(DatabaseDateRanges.Resolve("last-year", date)));
+        Assert.Equal((new DateOnly(2026, 9, 4), new DateOnly(2026, 9, 4)), Dates(
+            DatabaseDateRanges.Resolve("specific-date", date, new DateOnly(2026, 9, 4))));
+        Assert.Equal((new DateOnly(2026, 2, 1), new DateOnly(2026, 2, 28)), Dates(
+            DatabaseDateRanges.Resolve("specific-month", date, new DateOnly(2026, 2, 12))));
+        Assert.Equal((new DateOnly(2026, 8, 28), new DateOnly(2026, 9, 2)), Dates(
+            DatabaseDateRanges.Resolve("custom", date, new DateOnly(2026, 8, 28), new DateOnly(2026, 9, 2))));
         Assert.Equal((new DateOnly(2026, 9, 3), new DateOnly(2026, 9, 8)), Dates(
             DatabaseDateRanges.Resolve("week", date, new DateOnly(2026, 9, 3), new DateOnly(2026, 9, 8))));
     }

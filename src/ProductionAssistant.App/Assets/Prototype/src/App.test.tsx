@@ -594,7 +594,7 @@ describe('daily report workflow', () => {
     expect(container.querySelector('.daily-progress')).toBeTruthy()
     expect(container.textContent).toContain('编辑消息')
     expect(container.querySelector('.daily-focus-card')?.classList.contains('template-focus-card')).toBe(false)
-    expect([...container.querySelectorAll('.field-label-title')].map(item => item.textContent)).toEqual(['1. 数据库', '2. 数据字段'])
+    expect([...container.querySelectorAll('.field-label-title')].map(item => item.textContent)).toEqual(['1. 数据库'])
     const completedMarks = [...container.querySelectorAll('.daily-progress li.done > span')]
     expect(completedMarks.map(mark => mark.textContent)).toEqual(['✓'])
     expect(completedMarks.some(mark => mark.querySelector('svg'))).toBe(false)
@@ -617,13 +617,29 @@ describe('daily report workflow', () => {
     expect(container.textContent).toContain('先确认任务的基本信息')
   })
 
-  it('shows day month and year only for the live 本年截止今日 view', async () => {
+  it('preserves the database directory business hierarchy without reclassifying sources', async () => {
+    invoke.mockImplementation((operation: string) => {
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', usesBusinessSections: true, businessSections: ['焊接业务', '下料业务'], sources: [{ id: 'weld-total', name: '焊接总库', path: '数据库 / 焊接业务 / 焊接总库', businessSection: '焊接业务' }, { id: 'weld-plan', name: '焊接计划库', path: '数据库 / 焊接业务 / 焊接计划库', businessSection: '焊接业务' }, { id: 'cut-total', name: '下料总库', path: '数据库 / 下料业务 / 下料总库', businessSection: '下料业务' }], fields: [], runs: [] })
+      return Promise.resolve({})
+    })
+    await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click() })
+    const business = container.querySelector<HTMLButtonElement>('.progressive-field-picker .picker-trigger')!
+    await act(async () => { business.click() })
+    const weld = [...container.querySelectorAll<HTMLButtonElement>('.choice-popover [role="option"]')]
+      .find(item => item.textContent === '焊接业务')!
+    await act(async () => { weld.click() })
+    await act(async () => { container.querySelectorAll<HTMLButtonElement>('.progressive-field-picker .picker-trigger')[1].click() })
+    const options = [...container.querySelectorAll<HTMLButtonElement>('.choice-popover [role="option"]')].map(item => item.textContent)
+    expect(options).toEqual(['焊接总库', '焊接计划库'])
+  })
+
+  it('saves business metric, period, and aggregation without exposing query strategy', async () => {
     Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [] })
     Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect() })
     invoke.mockImplementation((operation: string) => {
-      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', usesBusinessSections: true, businessSections: ['塔筒产线数据库'], sources: [{ id: 'tower', name: '塔筒产线数据库', path: '数据库 / 塔筒产线数据库 / 塔筒产线数据库', businessSection: '塔筒产线数据库' }], fields: [], runs: [] })
-      if (operation === 'daily.getProperties') return Promise.resolve({ views: [{ id: 'current-view', name: '本年截止今日', supportsPeriods: true }], matchProperty: { id: 'date', name: '日期', type: 'date' }, properties: [{ id: 'weld', name: '焊接（吨）', type: 'number' }] })
-      if (operation === 'daily.addField') return Promise.resolve({ field: { placeholder: 'prop("年 · 塔筒产线数据库 · 焊接（吨）")', label: '年 · 焊接（吨）', tooltip: '塔筒产线数据库 · 本年截止今日 · 焊接（吨）' } })
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '塔筒日报', businessId: 'tower.daily', businessName: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', usesBusinessSections: false, businessSections: [], sources: [{ id: 'tower', name: '塔筒产线数据库', path: '数据库 / 塔筒产线数据库 / 塔筒产线数据库', businessSection: '塔筒产线数据库' }], fields: [], runs: [] })
+      if (operation === 'daily.getProperties') return Promise.resolve({ metrics: [{ id: 'tower.welding', name: '焊接量', defaultAggregate: 'sum', granularity: 'daily', hasFixedFilter: false, filterDescription: '' }] })
+      if (operation === 'daily.addField') return Promise.resolve({ field: { placeholder: 'prop("去年同期 · 塔筒产线数据库 · 焊接（吨）")', label: '去年同期 · 焊接（吨）', tooltip: '塔筒产线数据库 · 业务日期 · 去年同期 · Sum(焊接（吨）)' } })
       return Promise.resolve({})
     })
     await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click() })
@@ -636,34 +652,50 @@ describe('daily report workflow', () => {
       await act(async () => { option.click() })
     }
     await choose(0, '塔筒产线数据库')
-    await choose(1, '塔筒产线数据库')
-    expect(container.textContent).not.toContain('固定数据范围')
-    expect([...container.querySelectorAll('.field-label-title')].map(item => item.textContent)).toEqual(['1. 业务板块', '2. 数据库', '3. 数据字段', '4. 统计 View'])
+    await choose(1, '焊接量')
+    expect(container.textContent).not.toContain('QueryMode')
+    expect(container.textContent).not.toContain('精确匹配')
     expect([...container.querySelectorAll('.system-variable button')].map(item => item.textContent)).toEqual(['年', '月', '日', '完整日期'])
 
-    await choose(2, '焊接（吨）')
-    await choose(3, '本年截止今日')
-    expect([...container.querySelectorAll('.field-label-title')].map(item => item.textContent)).toEqual(['1. 业务板块', '2. 数据库', '3. 数据字段', '4. 统计 View', '5. 累计口径'])
-    await choose(4, '年 · 本年截至当日')
+    await choose(2, '去年同期')
     const insert = container.querySelector('.insert-field-button') as HTMLButtonElement
     await act(async () => { insert.click() })
     expect(invoke).toHaveBeenCalledWith('daily.addField', {
-      id: 'job-1', sourceId: 'tower', propertyId: 'weld', propertyName: '焊接（吨）', propertyType: 'number',
-      viewId: 'current-view', viewName: '本年截止今日', periodKind: 'year',
-      matchPropertyId: 'date', matchPropertyName: '日期', matchPropertyType: 'date',
+      id: 'job-1', sourceId: 'tower', metricId: 'tower.welding', placeholder: '',
+      rangeKind: 'last-year-to-date', aggregateKind: 'sum', customStartDate: '', customEndDate: '',
     })
     expect(insert.querySelector('.spin')).toBeNull()
   })
 
-  it('uses every material receipt view name exactly as returned by the database', async () => {
+  it('reopens and saves a monthly plan binding without showing ExactMatch', async () => {
     invoke.mockImplementation((operation: string) => {
-      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '原材料日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', usesBusinessSections: true, businessSections: ['原材料入库数据库'], sources: [{ id: 'material', name: '原材料入库数据库', path: '数据库 / 原材料入库数据库 / 原材料入库数据库', businessSection: '原材料入库数据库' }], fields: [], runs: [] })
-      if (operation === 'daily.getProperties') return Promise.resolve({ views: [{ id: 'last-view', name: '去年全年-数据库决定', supportsPeriods: false }], matchProperty: { id: 'date', name: '日期', type: 'date' }, properties: [{ id: 'weight', name: '入库重量', type: 'number' }] })
-      if (operation === 'daily.addField') return Promise.resolve({ field: { placeholder: 'prop("去年同期 · 原材料入库数据库 · 入库重量")', label: '去年同期 · 入库重量', tooltip: '原材料入库数据库 · 入库重量' } })
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '月计划日报', businessId: 'tower.daily', businessName: '塔筒日报', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', usesBusinessSections: false, businessSections: [], sources: [{ id: 'cut-month', name: '下料月计划数据库', path: '数据库 / 下料月计划数据库', businessSection: '下料月计划' }], fields: [{ placeholder: '{plan}', label: '本月 · 计划下料量', tooltip: '月计划', binding: { dataSourceId: 'cut-month', queryMode: 'exact-match', propertyId: 'plan', businessMetricId: 'cut.plan', businessMetricName: '计划下料量', dataGranularity: 'monthly', exactMatchPropertyId: 'month', exactMatchValueKind: 'business-month', rangeKind: 'current-month', aggregateKind: 'value', filterPropertyId: '', filterOperator: '', filterValue: '', customStartDate: '', customEndDate: '' } }], runs: [] })
+      if (operation === 'daily.getProperties') return Promise.resolve({ metrics: [{ id: 'cut.plan', name: '计划下料量', defaultAggregate: 'value', granularity: 'monthly', hasFixedFilter: false, filterDescription: '' }] })
+      if (operation === 'daily.addField') return Promise.resolve({ field: { placeholder: '{plan}', label: '业务月份 · 月总计划', tooltip: '下料月计划数据库 · 计划月份 = 业务月份 · 月总计划' } })
       return Promise.resolve({})
     })
     await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click() })
+    const configured = container.querySelector<HTMLButtonElement>('.binding-list button')!
+    await act(async () => { configured.click() })
+    expect(container.textContent).toContain('正在编辑字段')
+    expect([...container.querySelectorAll<HTMLButtonElement>('.picker-trigger')].map(item => item.textContent)).toEqual(expect.arrayContaining(['下料月计划数据库', '计划下料量', '本月', '取值']))
+    expect(container.textContent).not.toContain('精确匹配')
+    await act(async () => { (container.querySelector('.insert-field-button') as HTMLButtonElement).click() })
 
+    expect(invoke).toHaveBeenCalledWith('daily.addField', {
+      id: 'job-1', sourceId: 'cut-month', metricId: 'cut.plan', placeholder: '{plan}',
+      rangeKind: 'current-month', aggregateKind: 'value', customStartDate: '', customEndDate: '',
+    })
+  })
+
+  it('reloads business metrics after the database changes', async () => {
+    invoke.mockImplementation((operation: string, payload?: { sourceId?: string }) => {
+      if (operation === 'daily.get') return Promise.resolve({ id: 'job-1', name: '联动测试', sendTime: '17:30', isEnabled: false, validated: false, draftTemplate: '', draftTemplateDocument: '', notificationConfigured: true, notificationConnected: true, notificationStatus: '全局通知正常', usesBusinessSections: false, businessSections: [], sources: [{ id: 'a', name: '数据源 A', path: 'A' }, { id: 'b', name: '数据源 B', path: 'B' }], fields: [], runs: [] })
+      if (operation === 'daily.getProperties' && payload?.sourceId === 'a') return Promise.resolve({ metrics: [{ id: 'metric-a', name: '指标 A', defaultAggregate: 'sum', granularity: 'daily', hasFixedFilter: false, filterDescription: '' }] })
+      if (operation === 'daily.getProperties' && payload?.sourceId === 'b') return Promise.resolve({ metrics: [{ id: 'metric-b', name: '指标 B', defaultAggregate: 'sum', granularity: 'daily', hasFixedFilter: false, filterDescription: '' }] })
+      return Promise.resolve({})
+    })
+    await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click() })
     const choose = async (triggerIndex: number, label: string) => {
       const trigger = container.querySelectorAll<HTMLButtonElement>('.progressive-field-picker .picker-trigger')[triggerIndex]
       await act(async () => { trigger.click() })
@@ -671,20 +703,20 @@ describe('daily report workflow', () => {
         .find(item => item.textContent?.includes(label)) as HTMLButtonElement
       await act(async () => { option.click() })
     }
-    await choose(0, '原材料入库数据库')
-    await choose(1, '原材料入库数据库')
-    expect([...container.querySelectorAll('.field-label-title')].map(item => item.textContent)).toEqual(['1. 业务板块', '2. 数据库', '3. 数据字段', '4. 统计 View'])
-    await choose(2, '入库重量')
-    await choose(3, '去年全年-数据库决定')
-    expect([...container.querySelectorAll('.field-label-title')].map(item => item.textContent)).toEqual(['1. 业务板块', '2. 数据库', '3. 数据字段', '4. 统计 View', '5. 取数方式'])
-    await choose(4, '累计 · View 全部记录')
-    await act(async () => { (container.querySelector('.insert-field-button') as HTMLButtonElement).click() })
 
-    expect(invoke).toHaveBeenCalledWith('daily.addField', {
-      id: 'job-1', sourceId: 'material', propertyId: 'weight', propertyName: '入库重量', propertyType: 'number',
-      viewId: 'last-view', viewName: '去年全年-数据库决定', periodKind: 'view-sum',
-      matchPropertyId: 'date', matchPropertyName: '日期', matchPropertyType: 'date',
-    })
+    await choose(0, '数据源 A')
+    await choose(0, '数据源 B')
+    expect(invoke).toHaveBeenCalledWith('daily.getProperties', { id: 'job-1', sourceId: 'a' })
+    expect(invoke).toHaveBeenCalledWith('daily.getProperties', { id: 'job-1', sourceId: 'b' })
+    await act(async () => { container.querySelectorAll<HTMLButtonElement>('.progressive-field-picker .picker-trigger')[1].click() })
+    expect(container.textContent).toContain('指标 B')
+    expect(container.textContent).not.toContain('指标 A')
+    const metricB = [...container.querySelectorAll<HTMLButtonElement>('.choice-popover [role="option"]')]
+      .find(item => item.textContent?.includes('指标 B'))!
+    await act(async () => { metricB.click() })
+    expect(container.textContent).toContain('日期范围')
+    expect(container.textContent).toContain('取值方式')
+    expect(container.textContent).not.toContain('查询方式')
   })
 
   it('consumes a template insertion once when returning from preview', async () => {

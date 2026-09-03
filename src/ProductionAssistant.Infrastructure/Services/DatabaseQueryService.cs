@@ -68,7 +68,17 @@ public static class DatabaseDateRanges
             "week" or "custom" when customStart is not null && customEnd is not null =>
                 (customStart.Value, customEnd.Value),
             "month" => (new DateOnly(businessDate.Year, businessDate.Month, 1), businessDate),
+            "current-month" => (new DateOnly(businessDate.Year, businessDate.Month, 1),
+                new DateOnly(businessDate.Year, businessDate.Month, DateTime.DaysInMonth(businessDate.Year, businessDate.Month))),
             "year" => (new DateOnly(businessDate.Year, 1, 1), businessDate),
+            "current-year" => (new DateOnly(businessDate.Year, 1, 1), new DateOnly(businessDate.Year, 12, 31)),
+            "last-year-to-date" => (new DateOnly(businessDate.Year - 1, 1, 1), businessDate.AddYears(-1)),
+            "last-year" => (new DateOnly(businessDate.Year - 1, 1, 1), new DateOnly(businessDate.Year - 1, 12, 31)),
+            "specific-date" when customStart is not null => (customStart.Value, customStart.Value),
+            "specific-month" when customStart is not null =>
+                (new DateOnly(customStart.Value.Year, customStart.Value.Month, 1),
+                    new DateOnly(customStart.Value.Year, customStart.Value.Month,
+                        DateTime.DaysInMonth(customStart.Value.Year, customStart.Value.Month))),
             _ => (DateOnly.MinValue, DateOnly.MinValue)
         };
         if (range.Item1 == DateOnly.MinValue && kind != "all")

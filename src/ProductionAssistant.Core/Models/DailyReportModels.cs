@@ -69,7 +69,25 @@ public sealed record DailyReportFieldToken(
     string Format = "",
     string PeriodKind = "",
     string ViewId = "",
-    string ViewName = "");
+    string ViewName = "",
+    string QueryMode = "",
+    string DatePropertyId = "",
+    string DatePropertyName = "",
+    string QueryRangeKind = "",
+    string AggregateKind = "sum",
+    string FilterPropertyId = "",
+    string FilterPropertyName = "",
+    string FilterOperator = "",
+    string FilterValue = "",
+    string ExactMatchPropertyId = "",
+    string ExactMatchPropertyName = "",
+    string ExactMatchPropertyType = "",
+    string ExactMatchValueKind = "",
+    string CustomStartDate = "",
+    string CustomEndDate = "",
+    string BusinessMetricId = "",
+    string BusinessMetricName = "",
+    string DataGranularity = "");
 
 public sealed class DailyReportRunState
 {
@@ -104,7 +122,14 @@ public sealed class DailyReportRunRecord
     public string TextSummary { get; set; } = string.Empty;
 }
 
-public sealed record DailyReportBuildResult(bool Succeeded, string Message, string Text);
+public sealed record DailyReportBuildResult(
+    bool Succeeded,
+    string Message,
+    string Text,
+    int QueryCount = 0,
+    int RequestCount = 0,
+    int CacheHits = 0,
+    long ElapsedMilliseconds = 0);
 public sealed record DailyReportSendResult(bool Succeeded, string Message, int Attempts = 1);
 public sealed record DailyReportViewResult(bool Succeeded, string Message, string Id = "", string Name = "");
 

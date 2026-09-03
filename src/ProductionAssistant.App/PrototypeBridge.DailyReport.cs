@@ -98,20 +98,17 @@ internal sealed partial class PrototypeBridge
             ?? throw new InvalidOperationException("找不到所选数据源。");
         var schema = await AppServices.DatabaseProvider.GetSchemaAsync(source.Id, cancellationToken);
         if (!schema.Succeeded) throw new InvalidOperationException(schema.Message);
-        var match = ResolveDailyDateProperty(job, source, schema.Fields);
-        var views = await AppServices.DatabaseProvider.GetDatasetsAsync(source.Id, cancellationToken);
+        var metrics = BuildDailyBusinessMetrics(job, source, schema.Fields);
         return new
         {
-            views = views.Select(view => new
+            metrics = metrics.Select(metric => new
             {
-                id = view.Id,
-                name = view.Name,
-                supportsPeriods = SupportsDailyPeriods(view.Name)
-            }),
-            matchProperty = match is null ? null : new { match.Id, match.Name, match.Type },
-            properties = schema.Fields
-                .Where(IsDailySupportedValue)
-                .Select(item => new { item.Id, item.Name, item.Type })
+                metric.Id, metric.Name, metric.DefaultAggregate, metric.Granularity,
+                hasFixedFilter = !string.IsNullOrWhiteSpace(metric.FilterPropertyId),
+                filterDescription = string.IsNullOrWhiteSpace(metric.FilterPropertyId)
+                    ? string.Empty
+                    : $"{metric.FilterPropertyName} = {metric.FilterValue}"
+            })
         };
     }
 
@@ -119,40 +116,65 @@ internal sealed partial class PrototypeBridge
     {
         var job = FindDailyJob(payload);
         var sourceId = ReadString(payload, "sourceId");
-        var propertyId = ReadString(payload, "propertyId");
-        var propertyName = ReadString(payload, "propertyName");
-        var propertyType = ReadString(payload, "propertyType");
+        var metricId = ReadString(payload, "metricId");
         var source = AppServices.DatabaseProvider.GetSources().FirstOrDefault(item => item.Id == sourceId)
             ?? throw new InvalidOperationException("找不到所选数据源。");
-        if (string.IsNullOrWhiteSpace(propertyId) || string.IsNullOrWhiteSpace(propertyName) || string.IsNullOrWhiteSpace(propertyType))
-            throw new InvalidOperationException("请选择要插入的字段。");
-        var viewId = ReadString(payload, "viewId");
-        var viewName = ReadString(payload, "viewName");
-        var period = ReadString(payload, "periodKind");
-        if (string.IsNullOrWhiteSpace(viewId))
-            throw new InvalidOperationException("请选择统计 View。");
-        if (SupportsDailyPeriods(viewName) && period is not ("day" or "month" or "year"))
-            throw new InvalidOperationException("请选择日、月或年统计口径。");
-        if (!SupportsDailyPeriods(viewName) && period is not ("direct-month" or "view-sum"))
-            throw new InvalidOperationException("请选择直接获取业务月份或累计 View 全部记录。");
-        if (SupportsDailyPeriods(viewName) &&
-            (ReadString(payload, "matchPropertyType") != "date" ||
-             string.IsNullOrWhiteSpace(ReadString(payload, "matchPropertyName"))))
-            throw new InvalidOperationException("“本年截止今日”View 需要数据库中存在可用的日期字段。");
+        var schema = await AppServices.DatabaseProvider.GetSchemaAsync(source.Id, cancellationToken);
+        if (!schema.Succeeded) throw new InvalidOperationException(schema.Message);
+        var metric = BuildDailyBusinessMetrics(job, source, schema.Fields)
+            .FirstOrDefault(item => item.Id == metricId)
+            ?? throw new InvalidOperationException("请选择当前数据库支持的具体业务。");
+        var rangeKind = ReadString(payload, "rangeKind");
+        if (rangeKind is not ("day" or "current-month" or "month" or "current-year" or "year" or
+            "last-year-to-date" or "last-year" or "specific-date" or "specific-month" or "custom"))
+            throw new InvalidOperationException("请选择日期范围。");
+        var aggregateKind = ReadString(payload, "aggregateKind");
+        if (aggregateKind is not ("sum" or "value"))
+            throw new InvalidOperationException("请选择取值方式。");
+        var customStartDate = ReadString(payload, "customStartDate");
+        var customEndDate = ReadString(payload, "customEndDate");
+        if (rangeKind is "specific-date" or "specific-month" && string.IsNullOrWhiteSpace(customStartDate))
+            throw new InvalidOperationException("请选择指定日期或月份。");
+        if (rangeKind == "custom" &&
+            (string.IsNullOrWhiteSpace(customStartDate) || string.IsNullOrWhiteSpace(customEndDate)))
+            throw new InvalidOperationException("请选择开始和结束日期。");
+        var useExactMonth = metric.Granularity == "monthly" && rangeKind is "current-month" or "specific-month";
+        var queryMode = useExactMonth ? "exact-match" : "date-range";
         await InvalidateDailyJobAsync(job);
         var binding = job.Sources.FirstOrDefault(item => item.DataSourceId == source.Id);
         if (binding is null) { binding = new() { DataSourceId = source.Id }; job.Sources.Add(binding); }
         binding.DataSourceName = source.Name;
-        binding.PeriodKind = period;
-        binding.MatchPropertyId = ReadString(payload, "matchPropertyId");
-        binding.MatchPropertyName = ReadString(payload, "matchPropertyName");
-        binding.MatchPropertyType = ReadString(payload, "matchPropertyType");
-        binding.ViewId = string.Empty;
-        binding.ViewName = viewName;
-        var placeholder = DailyReportSettingsStore.AddOrUpdateField(job,
-            new(source.Id, source.Name, propertyId, propertyName, propertyType,
-                PeriodKind: period,
-                ViewId: viewId, ViewName: viewName));
+        binding.MatchPropertyId = metric.DatePropertyId;
+        binding.MatchPropertyName = metric.DatePropertyName;
+        binding.MatchPropertyType = "date";
+        var token = new DailyReportFieldToken(source.Id, source.Name,
+            metric.PropertyId, metric.PropertyName, metric.PropertyType,
+            QueryMode: queryMode,
+            DatePropertyId: queryMode == "date-range" ? metric.DatePropertyId : "",
+            DatePropertyName: queryMode == "date-range" ? metric.DatePropertyName : "",
+            QueryRangeKind: rangeKind,
+            AggregateKind: aggregateKind,
+            FilterPropertyId: metric.FilterPropertyId,
+            FilterPropertyName: metric.FilterPropertyName,
+            FilterOperator: string.IsNullOrWhiteSpace(metric.FilterPropertyId) ? "" : "equals",
+            FilterValue: metric.FilterValue,
+            ExactMatchPropertyId: useExactMonth ? metric.DatePropertyId : "",
+            ExactMatchPropertyName: useExactMonth ? metric.DatePropertyName : "",
+            ExactMatchPropertyType: useExactMonth ? "date" : "",
+            ExactMatchValueKind: useExactMonth
+                ? rangeKind == "specific-month" ? "specific-month" : "business-month"
+                : "",
+            CustomStartDate: customStartDate,
+            CustomEndDate: customEndDate,
+            BusinessMetricId: metric.Id,
+            BusinessMetricName: metric.Name,
+            DataGranularity: metric.Granularity);
+        var editedPlaceholder = ReadString(payload, "placeholder");
+        var edited = job.Fields.FirstOrDefault(field => field.Placeholder == editedPlaceholder);
+        var placeholder = edited is null
+            ? DailyReportSettingsStore.AddOrUpdateField(job, token)
+            : edited.Placeholder;
+        if (edited is not null) edited.Token = token;
         DailyReportSettingsStore.SaveJob(job);
         return new { field = DailyFieldDto(job.Fields.First(field => field.Placeholder == placeholder)) };
     }
@@ -197,7 +219,7 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> SetDailyEnabledAsync(JsonElement payload)
     {
         if (!DailyReportTaskScheduler.IsSchedulingAvailable)
-            throw new InvalidOperationException("Debug 版本不支持定时发送，请使用 Release 版本。");
+            throw new InvalidOperationException("Development 环境默认不启用定时发送。");
         var job = FindDailyJob(payload);
         var enabled = payload.TryGetProperty("enabled", out var value) && value.GetBoolean();
         if (!enabled)
@@ -299,26 +321,59 @@ internal sealed partial class PrototypeBridge
 
     private static object DailyFieldDto(DailyReportFieldDefinition field)
     {
-        var invalidViewField = string.IsNullOrWhiteSpace(field.Token.ViewId);
-        var periodLabel = field.Token.PeriodKind switch
+        var invalidField = field.Token.QueryMode switch
         {
-            "day" => "日",
-            "month" => "月",
-            "year" => "年",
+            "date-range" => string.IsNullOrWhiteSpace(field.Token.DatePropertyId),
+            "exact-match" => string.IsNullOrWhiteSpace(field.Token.ExactMatchPropertyId),
+            _ => string.IsNullOrWhiteSpace(field.Token.ViewId)
+        };
+        var rangeKind = !string.IsNullOrWhiteSpace(field.Token.QueryRangeKind)
+            ? field.Token.QueryRangeKind
+            : field.Token.QueryMode == "exact-match" && field.Token.ExactMatchValueKind == "business-month"
+                ? "current-month"
+                : field.Token.PeriodKind switch
+                {
+                    "direct-month" => "current-month",
+                    _ => field.Token.PeriodKind
+                };
+        var periodLabel = rangeKind switch
+        {
+            "day" => "今日",
+            "current-month" => "本月",
+            "month" => "本月截至业务日",
+            "current-year" => "本年",
+            "year" => "本年截至业务日",
+            "last-year-to-date" => "去年同期",
+            "last-year" => "去年全年",
+            "specific-date" => "指定日期",
+            "specific-month" => "指定月份",
+            "custom" => "指定日期范围",
             _ => string.Empty
         };
-        var label = !string.IsNullOrWhiteSpace(field.Token.ViewId)
-            ? $"{(string.IsNullOrWhiteSpace(periodLabel) ? field.Token.ViewName : periodLabel)} · {field.Token.PropertyName}"
-            : field.Token.PropertyName;
+        var metricId = ResolveBusinessMetricId(field.Token);
+        var metricName = ResolveBusinessMetricName(field.Token);
+        var aggregateLabel = field.Token.AggregateKind == "value" ? "取值" : "求和";
+        var label = $"{periodLabel} · {metricName}";
         return new
         {
             field.Placeholder,
-            label = invalidViewField ? $"已失效 · {field.Token.PropertyName}" : label,
-            tooltip = invalidViewField
-                ? "旧版字段没有绑定 View，请删除后重新插入"
-                : !string.IsNullOrWhiteSpace(field.Token.ViewId)
-                    ? $"{field.Token.DataSourceName} · {field.Token.ViewName} · {field.Token.PropertyName}"
-                    : $"{field.Token.DataSourceName} · {field.Token.PropertyName}"
+            label = invalidField ? $"待迁移 · {field.Token.PropertyName}" : label,
+            tooltip = invalidField
+                ? "字段绑定不完整，请重新编辑"
+                : $"{field.Token.DataSourceName} · {metricName} · {periodLabel} · {aggregateLabel}",
+            binding = new
+            {
+                field.Token.DataSourceId,
+                businessMetricId = metricId,
+                businessMetricName = metricName,
+                dataGranularity = string.IsNullOrWhiteSpace(field.Token.DataGranularity)
+                    ? ResolveDailyGranularity(field.Token.DataSourceName)
+                    : field.Token.DataGranularity,
+                rangeKind,
+                field.Token.AggregateKind,
+                field.Token.CustomStartDate,
+                field.Token.CustomEndDate
+            }
         };
     }
 
@@ -344,7 +399,130 @@ internal sealed partial class PrototypeBridge
             ?? properties.FirstOrDefault(property => property.Type == "date");
     }
 
-    private static bool SupportsDailyPeriods(string viewName) =>
-        string.Equals(viewName.Trim(), "本年截止今日", StringComparison.CurrentCultureIgnoreCase);
+    private static IReadOnlyList<DailyBusinessMetric> BuildDailyBusinessMetrics(
+        DailyReportJob job,
+        DatabaseSourceInfo source,
+        IReadOnlyList<DatabaseFieldInfo> properties)
+    {
+        var date = ResolveDailyDateProperty(job, source, properties);
+        if (date is null) return [];
+        var metrics = new List<DailyBusinessMetric>();
+
+        void Add(string id, string name, DatabaseFieldInfo? property, string aggregate, string granularity,
+            DatabaseFieldInfo? filterProperty = null, string filterValue = "")
+        {
+            if (property is null || metrics.Any(item => item.Id == id)) return;
+            metrics.Add(new(id, name, property.Id, property.Name, property.Type, date.Id, date.Name,
+                aggregate, granularity, filterProperty?.Id ?? "", filterProperty?.Name ?? "", filterValue));
+        }
+
+        if (source.Name.Contains("焊接", StringComparison.CurrentCultureIgnoreCase) &&
+            source.Name.Contains("月计划", StringComparison.CurrentCultureIgnoreCase))
+        {
+            Add("weld.plan", "计划焊接量", FindMetricProperty(properties, "计划焊接", "焊接", "计划"), "value", "monthly");
+        }
+        else if (source.Name.Contains("下料", StringComparison.CurrentCultureIgnoreCase) &&
+                 (source.Name.Contains("月计划", StringComparison.CurrentCultureIgnoreCase) ||
+                  source.Name.Contains("每月计划", StringComparison.CurrentCultureIgnoreCase)))
+        {
+            Add("cut.plan", "计划下料量", FindMetricProperty(properties, "计划下料", "下料", "计划"), "value", "monthly");
+        }
+        else if (source.Name.Contains("原材料", StringComparison.CurrentCultureIgnoreCase))
+        {
+            var plate = FindMetricProperty(properties, "板材", "钢板");
+            var section = FindMetricProperty(properties, "型材");
+            var weight = FindMetricProperty(properties, "重量", "入库量", "吨数");
+            var kind = properties.FirstOrDefault(item =>
+                item.Type is "select" or "status" or "title" or "rich_text" &&
+                (item.Name.Contains("类型") || item.Name.Contains("类别") || item.Name.Contains("材料")));
+            Add("material.plate", "板材入库量", plate ?? weight, "sum", "daily",
+                plate is null ? kind : null, plate is null ? "钢板" : "");
+            Add("material.section", "型材入库量", section ?? weight, "sum", "daily",
+                section is null ? kind : null, section is null ? "型材" : "");
+        }
+        else
+        {
+            Add("tower.material.plate", "板材入库量", FindMetricProperty(properties, "板材", "钢板"), "sum", "daily");
+            Add("tower.material.section", "型材入库量", FindMetricProperty(properties, "型材"), "sum", "daily");
+            Add("tower.cutting", "下料量", FindMetricProperty(properties, "下料"), "sum", "daily");
+            Add("tower.welding", "焊接量", FindMetricProperty(properties, "焊接"), "sum", "daily");
+            Add("tower.output.sets", "产出量（套）", FindMetricProperty(properties, "产出（套", "产出套", "套数"), "sum", "daily");
+            Add("tower.output.sections", "产出量（节）", FindMetricProperty(properties, "产出（节", "产出节", "节数"), "sum", "daily");
+        }
+        if (metrics.Count == 0)
+        {
+            var granularity = ResolveDailyGranularity(source.Name);
+            foreach (var property in properties.Where(item => item.Type is "number" or "formula" or "rollup"))
+                Add($"property:{property.Id}", property.Name, property,
+                    granularity == "monthly" ? "value" : "sum", granularity);
+        }
+        return metrics;
+    }
+
+    private static DatabaseFieldInfo? FindMetricProperty(
+        IReadOnlyList<DatabaseFieldInfo> properties,
+        params string[] names)
+    {
+        var candidates = properties.Where(item => item.Type is "number" or "formula" or "rollup").ToArray();
+        return candidates.FirstOrDefault(item => names.Any(name =>
+                   string.Equals(item.Name, name, StringComparison.CurrentCultureIgnoreCase)))
+               ?? candidates.FirstOrDefault(item => names.Any(name =>
+                   item.Name.Contains(name, StringComparison.CurrentCultureIgnoreCase)));
+    }
+
+    private static string ResolveBusinessMetricId(DailyReportFieldToken token)
+    {
+        if (!string.IsNullOrWhiteSpace(token.BusinessMetricId)) return token.BusinessMetricId;
+        if (token.DataSourceName.Contains("焊接") && token.DataSourceName.Contains("月计划")) return "weld.plan";
+        if (token.DataSourceName.Contains("下料") &&
+            (token.DataSourceName.Contains("月计划") || token.DataSourceName.Contains("每月计划"))) return "cut.plan";
+        if (token.DataSourceName.Contains("原材料") &&
+            (token.FilterValue.Contains("钢板") || token.PropertyName.Contains("板材"))) return "material.plate";
+        if (token.DataSourceName.Contains("原材料") &&
+            (token.FilterValue.Contains("型材") || token.PropertyName.Contains("型材"))) return "material.section";
+        if (token.PropertyName.Contains("板材")) return "tower.material.plate";
+        if (token.PropertyName.Contains("型材")) return "tower.material.section";
+        if (token.PropertyName.Contains("下料")) return "tower.cutting";
+        if (token.PropertyName.Contains("焊接")) return "tower.welding";
+        if (token.PropertyName.Contains("套")) return "tower.output.sets";
+        if (token.PropertyName.Contains("节")) return "tower.output.sections";
+        return string.Empty;
+    }
+
+    private static string ResolveBusinessMetricName(DailyReportFieldToken token)
+    {
+        if (!string.IsNullOrWhiteSpace(token.BusinessMetricName)) return token.BusinessMetricName;
+        return ResolveBusinessMetricId(token) switch
+        {
+            "weld.plan" => "计划焊接量",
+            "cut.plan" => "计划下料量",
+            "material.plate" => "板材入库量",
+            "material.section" => "型材入库量",
+            "tower.material.plate" => "板材入库量",
+            "tower.material.section" => "型材入库量",
+            "tower.cutting" => "下料量",
+            "tower.welding" => "焊接量",
+            "tower.output.sets" => "产出量（套）",
+            "tower.output.sections" => "产出量（节）",
+            _ => token.PropertyName
+        };
+    }
+
+    private static string ResolveDailyGranularity(string sourceName) =>
+        sourceName.Contains("月计划") || sourceName.Contains("每月计划") ? "monthly" : "daily";
+
+    private sealed record DailyBusinessMetric(
+        string Id,
+        string Name,
+        string PropertyId,
+        string PropertyName,
+        string PropertyType,
+        string DatePropertyId,
+        string DatePropertyName,
+        string DefaultAggregate,
+        string Granularity,
+        string FilterPropertyId,
+        string FilterPropertyName,
+        string FilterValue);
 
 }

@@ -98,8 +98,78 @@ public sealed class NotionImportService : INotionImportService
                 : null;
         } while (!string.IsNullOrWhiteSpace(cursor));
 
+        var pageCache = new Dictionary<string, (string Title, string ParentPageId)>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < sources.Count; index++)
+        {
+            var source = sources[index];
+            if (string.IsNullOrWhiteSpace(source.DatabaseId)) continue;
+            try
+            {
+                var path = await ResolveAuthorizedSourcePathAsync(
+                    token, source.DatabaseId, source.Name, pageCache, cancellationToken);
+                sources[index] = source with { Path = path };
+            }
+            catch
+            {
+                // The source stays selectable even when Notion denies one of its parent pages.
+            }
+        }
+
         sources.Sort((left, right) =>
-            StringComparer.CurrentCultureIgnoreCase.Compare(left.Name, right.Name));
+        {
+            var path = StringComparer.CurrentCultureIgnoreCase.Compare(left.Path, right.Path);
+            return path != 0 ? path : StringComparer.CurrentCultureIgnoreCase.Compare(left.Name, right.Name);
+        });
+    }
+
+    private async Task<string> ResolveAuthorizedSourcePathAsync(
+        string token,
+        string databaseId,
+        string sourceName,
+        Dictionary<string, (string Title, string ParentPageId)> pageCache,
+        CancellationToken cancellationToken)
+    {
+        using var databaseResponse = await SendWithRetryAsync(
+            () => CreateRequest(HttpMethod.Get, $"databases/{databaseId}", token), cancellationToken);
+        databaseResponse.EnsureSuccessStatusCode();
+        using var databaseDocument = JsonDocument.Parse(
+            await databaseResponse.Content.ReadAsStringAsync(cancellationToken));
+        var parentPageId = ReadParentPageId(databaseDocument.RootElement);
+        var path = new List<string> { sourceName };
+        while (!string.IsNullOrWhiteSpace(parentPageId))
+        {
+            if (!pageCache.TryGetValue(parentPageId, out var page))
+            {
+                using var pageResponse = await SendWithRetryAsync(
+                    () => CreateRequest(HttpMethod.Get, $"pages/{parentPageId}", token), cancellationToken);
+                pageResponse.EnsureSuccessStatusCode();
+                using var pageDocument = JsonDocument.Parse(
+                    await pageResponse.Content.ReadAsStringAsync(cancellationToken));
+                page = (ReadPageTitle(pageDocument.RootElement), ReadParentPageId(pageDocument.RootElement));
+                pageCache[parentPageId] = page;
+            }
+            if (!string.IsNullOrWhiteSpace(page.Title)) path.Insert(0, page.Title);
+            parentPageId = page.ParentPageId;
+        }
+        return string.Join("  /  ", path);
+    }
+
+    private static string ReadParentPageId(JsonElement owner) =>
+        owner.TryGetProperty("parent", out var parent) &&
+        parent.TryGetProperty("type", out var type) && type.GetString() == "page_id" &&
+        parent.TryGetProperty("page_id", out var pageId)
+            ? pageId.GetString() ?? string.Empty
+            : string.Empty;
+
+    private static string ReadPageTitle(JsonElement page)
+    {
+        if (!page.TryGetProperty("properties", out var properties)) return string.Empty;
+        foreach (var property in properties.EnumerateObject())
+            if (property.Value.TryGetProperty("type", out var type) && type.GetString() == "title" &&
+                property.Value.TryGetProperty("title", out var title))
+                return string.Concat(title.EnumerateArray().Select(item =>
+                    item.TryGetProperty("plain_text", out var text) ? text.GetString() : string.Empty));
+        return string.Empty;
     }
 
     private static string ReadRichTextTitle(JsonElement owner, string fallback)
@@ -233,18 +303,7 @@ public sealed class NotionImportService : INotionImportService
         response.EnsureSuccessStatusCode();
         using var document = JsonDocument.Parse(
             await response.Content.ReadAsStringAsync(cancellationToken));
-        if (!document.RootElement.TryGetProperty("properties", out var properties))
-            return string.Empty;
-        foreach (var property in properties.EnumerateObject())
-        {
-            if (!property.Value.TryGetProperty("type", out var type) ||
-                type.GetString() != "title" ||
-                !property.Value.TryGetProperty("title", out var title))
-                continue;
-            return string.Concat(title.EnumerateArray().Select(item =>
-                item.TryGetProperty("plain_text", out var text) ? text.GetString() : string.Empty));
-        }
-        return string.Empty;
+        return ReadPageTitle(document.RootElement);
     }
 
     public async Task<NotionSchemaResult> GetSchemaAsync(
