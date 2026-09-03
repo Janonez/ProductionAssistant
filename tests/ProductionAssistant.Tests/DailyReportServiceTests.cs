@@ -8,6 +8,18 @@ using Xunit;
 public sealed class DailyReportServiceTests
 {
     [Fact]
+    public void Legacy_token_json_keeps_the_View_compatibility_mode()
+    {
+        var token = JsonSerializer.Deserialize<DailyReportFieldToken>(
+            """{"DataSourceId":"source","DataSourceName":"数据库","PropertyId":"value","PropertyName":"产量","PropertyType":"number","PeriodKind":"year","ViewId":"view","ViewName":"本年截止今日"}""");
+
+        Assert.NotNull(token);
+        Assert.Equal("", token.QueryMode);
+        Assert.Equal("", token.QueryRangeKind);
+        Assert.Equal("view", token.ViewId);
+    }
+
+    [Fact]
     public async Task CheckConnectionAsync_uses_head_without_sending_a_message()
     {
         var handler = new CaptureHandler();
@@ -293,6 +305,219 @@ public sealed class DailyReportServiceTests
         Assert.Equal("2026年 8月 31日 2026年8月31日", result.Text);
     }
 
+    [Fact]
+    public async Task Date_range_fields_share_one_largest_query_and_aggregate_locally()
+    {
+        var provider = new DateRangeProvider(
+        [
+            RangePage("jan", "2026-01-01", 1, 10),
+            RangePage("aug", "2026-08-01", 2, 20),
+            RangePage("today", "2026-08-31", 3, 30)
+        ]);
+        var service = new DailyReportService(database: provider);
+        var periods = new[] { "day", "month", "year" };
+        var fields = periods.SelectMany(period => new[]
+        {
+            RangeField($"{{weld-{period}}}", "weld", "焊接（吨）", period),
+            RangeField($"{{output-{period}}}", "output", "产出（吨）", period)
+        }).ToList();
+        var job = ViewJob("source", "生产数据库", fields);
+
+        var result = await service.BuildAsync(job,
+            "{weld-day}/{weld-month}/{weld-year};{output-day}/{output-month}/{output-year}",
+            new DateTime(2026, 8, 31));
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("3/5/6;30/50/60", result.Text);
+        Assert.Equal(1, provider.QueryCount);
+        Assert.Equal(1, result.QueryCount);
+        Assert.Equal(1, result.RequestCount);
+        Assert.Equal(5, result.CacheHits);
+        Assert.Equal(new DateOnly(2026, 1, 1), provider.StartDate);
+        Assert.Equal(new DateOnly(2026, 8, 31), provider.EndDate);
+    }
+
+    [Fact]
+    public async Task Previous_year_fields_query_once_and_keep_their_existing_period_tokens()
+    {
+        var provider = new DateRangeProvider(
+        [
+            RangePage("jan", "2025-01-01", 1, 10),
+            RangePage("cutoff", "2025-09-02", 2, 20),
+            RangePage("after", "2025-09-03", 4, 40),
+            RangePage("dec", "2025-12-31", 8, 80)
+        ]);
+        var service = new DailyReportService(database: provider);
+        var fields = new List<DailyReportFieldDefinition>
+        {
+            RangeField("{same-weld}", "weld", "焊接（吨）", "lastYear", "last-year-to-date"),
+            RangeField("{same-output}", "output", "产出（吨）", "lastYear", "last-year-to-date"),
+            RangeField("{full-weld}", "weld", "焊接（吨）", "year", "last-year"),
+            RangeField("{full-output}", "output", "产出（吨）", "year", "last-year")
+        };
+        var job = ViewJob("source", "生产数据库", fields);
+
+        var result = await service.BuildAsync(job,
+            "{same-weld}/{same-output};{full-weld}/{full-output}",
+            new DateTime(2026, 9, 2));
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("3/30;15/150", result.Text);
+        Assert.Equal("lastYear", fields[0].Token.PeriodKind);
+        Assert.Equal("year", fields[2].Token.PeriodKind);
+        Assert.Equal(1, provider.QueryCount);
+        Assert.Equal(1, result.QueryCount);
+        Assert.Equal(1, result.RequestCount);
+        Assert.Equal(3, result.CacheHits);
+        Assert.Equal(new DateOnly(2025, 1, 1), provider.StartDate);
+        Assert.Equal(new DateOnly(2025, 12, 31), provider.EndDate);
+    }
+
+    [Fact]
+    public async Task Date_range_Equals_filters_share_the_query_and_aggregate_by_stable_property_id()
+    {
+        var provider = new DateRangeProvider(
+        [
+            FilteredRangePage("steel", "2026-09-01", 10, "钢板"),
+            FilteredRangePage("profile", "2026-09-02", 20, "型材"),
+            FilteredRangePage("steel-2", "2026-09-03", 30, "钢板")
+        ]);
+        var steel = RangeField("{steel}", "weld", "焊接（吨）", "month");
+        steel.Token = steel.Token with
+        {
+            FilterPropertyId = "kind", FilterPropertyName = "钢材类型",
+            FilterOperator = "equals", FilterValue = "钢板"
+        };
+        var profile = RangeField("{profile}", "weld", "焊接（吨）", "month");
+        profile.Token = profile.Token with
+        {
+            FilterPropertyId = "kind", FilterPropertyName = "钢材类型",
+            FilterOperator = "equals", FilterValue = "型材"
+        };
+        var service = new DailyReportService(database: provider);
+
+        var result = await service.BuildAsync(
+            ViewJob("source", "生产数据库", [steel, profile]),
+            "钢板={steel};型材={profile}", new DateTime(2026, 9, 3));
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("钢板=40;型材=20", result.Text);
+        Assert.Equal(1, provider.QueryCount);
+        Assert.Equal(1, result.RequestCount);
+        Assert.Equal(1, result.CacheHits);
+    }
+
+    [Fact]
+    public async Task Exact_match_reads_one_business_month_record_without_querying_a_View()
+    {
+        var provider = new DateRangeProvider(
+        [new DatabaseRecord("sep", [
+            new("month", "计划月份", "date", new DateTime(2026, 9, 1)),
+            new("plan", "月总计划", "number", 2150d)
+        ])]);
+        var field = new DailyReportFieldDefinition
+        {
+            Placeholder = "{plan}",
+            Token = new("source", "下料月计划数据库", "plan", "月总计划", "number",
+                QueryMode: "exact-match", AggregateKind: "value",
+                ExactMatchPropertyId: "month", ExactMatchPropertyName: "计划月份",
+                ExactMatchPropertyType: "date", ExactMatchValueKind: "business-month")
+        };
+        var service = new DailyReportService(database: provider);
+
+        var result = await service.BuildAsync(
+            ViewJob("source", "下料月计划数据库", [field]),
+            "月计划={plan}", new DateTime(2026, 9, 18));
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("月计划=2150", result.Text);
+        Assert.Equal(1, provider.ExactQueryCount);
+        Assert.Equal(new DateOnly(2026, 9, 1), provider.ExactValue);
+        Assert.Equal(0, provider.QueryCount);
+        Assert.Equal(1, result.RequestCount);
+    }
+
+    [Fact]
+    public async Task Exact_match_can_read_one_specified_month_record()
+    {
+        var provider = new DateRangeProvider(
+        [new DatabaseRecord("feb", [
+            new("month", "计划月份", "date", new DateTime(2026, 2, 1)),
+            new("plan", "月总计划", "number", 1900d)
+        ])]);
+        var field = new DailyReportFieldDefinition
+        {
+            Placeholder = "{plan}",
+            Token = new("source", "下料月计划数据库", "plan", "月总计划", "number",
+                QueryMode: "exact-match", QueryRangeKind: "specific-month", AggregateKind: "value",
+                ExactMatchPropertyId: "month", ExactMatchPropertyName: "计划月份",
+                ExactMatchPropertyType: "date", ExactMatchValueKind: "specific-month",
+                CustomStartDate: "2026-02-01")
+        };
+
+        var result = await new DailyReportService(database: provider).BuildAsync(
+            ViewJob("source", "下料月计划数据库", [field]),
+            "月计划={plan}", new DateTime(2026, 9, 18));
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("月计划=1900", result.Text);
+        Assert.Equal(new DateOnly(2026, 2, 1), provider.ExactValue);
+        Assert.Equal(1, provider.ExactQueryCount);
+        Assert.Equal(0, provider.QueryCount);
+    }
+
+    [Fact]
+    public async Task Monthly_total_sources_query_only_the_business_month_and_ignore_unused_daily_source()
+    {
+        var queriedSources = new List<string>();
+        var handler = new RouteHandler(request =>
+        {
+            var source = request.RequestUri!.Segments[^2].TrimEnd('/');
+            queriedSources.Add(source);
+            return source switch
+            {
+                "weld-month" => Json(JsonSerializer.Serialize(new
+                {
+                    results = new[] { PlanPage("weld-sep", "2026-09-01", 780) },
+                    has_more = false,
+                    next_cursor = (string?)null
+                })),
+                "cut-month" => Json(JsonSerializer.Serialize(new
+                {
+                    results = new[] { PlanPage("cut-sep", "2026-09-01", 2150) },
+                    has_more = false,
+                    next_cursor = (string?)null
+                })),
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+            };
+        });
+        var service = new DailyReportService(
+            new HttpClient(handler) { BaseAddress = new Uri("https://api.notion.com/v1/") },
+            notionSettings: () => new NotionSettings { Token = "token" });
+        var job = new DailyReportJob
+        {
+            Sources =
+            [
+                MonthBinding("weld-month", "焊接月计划数据库"),
+                MonthBinding("cut-month", "下料每月计划数据库"),
+                MonthBinding("cut-daily", "下料每日计划数据库")
+            ],
+            Fields =
+            [
+                MonthRangeField("{weld}", "weld-month", "焊接月计划数据库", "焊接（吨）"),
+                MonthRangeField("{cut}", "cut-month", "下料每月计划数据库", "计划下料（吨）"),
+                MonthRangeField("{unused-daily}", "cut-daily", "下料每日计划数据库", "今日计划")
+            ]
+        };
+
+        var result = await service.BuildAsync(job, "焊接={weld};下料={cut}", new DateTime(2026, 9, 2));
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal("焊接=780;下料=2150", result.Text);
+        Assert.Equal(["weld-month", "cut-month"], queriedSources);
+        Assert.Equal(2, result.RequestCount);
+    }
+
     private static DailyReportJob ViewJob(
         string sourceId,
         string sourceName,
@@ -317,6 +542,56 @@ public sealed class DailyReportServiceTests
         Placeholder = placeholder,
         Token = new(sourceId, sourceName, "weld", "焊接（吨）", "number",
             PeriodKind: periodKind, ViewId: viewId, ViewName: viewName)
+    };
+
+    private static DailyReportFieldDefinition RangeField(
+        string placeholder,
+        string propertyId,
+        string propertyName,
+        string periodKind,
+        string queryRangeKind = "") => new()
+    {
+        Placeholder = placeholder,
+        Token = new("source", "生产数据库", propertyId, propertyName, "number",
+            PeriodKind: periodKind, QueryMode: "date-range",
+            DatePropertyId: "date", DatePropertyName: "日期",
+            QueryRangeKind: queryRangeKind)
+    };
+
+    private static DatabaseRecord RangePage(string id, string date, double weld, double output) => new(id,
+    [
+        new("date", "日期", "date", DateTime.Parse(date)),
+        new("weld", "焊接（吨）", "number", weld),
+        new("output", "产出（吨）", "number", output)
+    ]);
+
+    private static DatabaseRecord FilteredRangePage(string id, string date, double weld, string kind) => new(id,
+    [
+        new("date", "日期", "date", DateTime.Parse(date)),
+        new("weld", "焊接（吨）", "number", weld),
+        new("kind", "钢材类型", "select", kind)
+    ]);
+
+    private static DailyReportSourceBinding MonthBinding(string sourceId, string sourceName) => new()
+    {
+        DataSourceId = sourceId,
+        DataSourceName = sourceName,
+        MatchPropertyId = "date",
+        MatchPropertyName = "日期",
+        MatchPropertyType = "date"
+    };
+
+    private static DailyReportFieldDefinition MonthRangeField(
+        string placeholder,
+        string sourceId,
+        string sourceName,
+        string propertyName) => new()
+    {
+        Placeholder = placeholder,
+        Token = new(sourceId, sourceName, "TXxy", propertyName, "number",
+            PeriodKind: "direct-month", ViewId: "legacy-view", ViewName: "所有数据",
+            QueryMode: "date-range", DatePropertyId: "date", DatePropertyName: "日期",
+            QueryRangeKind: "month")
     };
 
     private static Dictionary<string, object> Page(string id, string date, double value) => new()
@@ -370,5 +645,37 @@ public sealed class DailyReportServiceTests
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken) => Task.FromResult(responseFactory(request));
+    }
+
+    private sealed class DateRangeProvider(IReadOnlyList<DatabaseRecord> records) : IDatabaseQueryProvider
+    {
+        public int QueryCount { get; private set; }
+        public DateOnly StartDate { get; private set; }
+        public DateOnly EndDate { get; private set; }
+        public int ExactQueryCount { get; private set; }
+        public DateOnly ExactValue { get; private set; }
+        public string Name => "测试适配器";
+        public IReadOnlyList<DatabaseSourceInfo> GetSources() => [new("source", "生产数据库", "生产数据库")];
+        public Task<DatabaseSchemaResult> GetSchemaAsync(string sourceId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new DatabaseSchemaResult(true, "", []));
+        public Task<IReadOnlyList<DatabaseDatasetInfo>> GetDatasetsAsync(string sourceId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<DatabaseDatasetInfo>>([]);
+        public Task<DatabaseRecordSet> QueryDatasetAsync(string sourceId, string datasetId, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("新字段不应查询 View。");
+        public Task<DatabaseRecordSet> QueryDateRangeAsync(string sourceId, string dateFieldId,
+            DateOnly startDate, DateOnly endDate, CancellationToken cancellationToken = default)
+        {
+            QueryCount++;
+            StartDate = startDate;
+            EndDate = endDate;
+            return Task.FromResult(new DatabaseRecordSet(true, "", "生产数据库", "日期范围", records, 1));
+        }
+        public Task<DatabaseRecordSet> QueryExactMatchAsync(string sourceId, string propertyId,
+            DateOnly value, CancellationToken cancellationToken = default)
+        {
+            ExactQueryCount++;
+            ExactValue = value;
+            return Task.FromResult(new DatabaseRecordSet(true, "", "生产数据库", "精确匹配", records, 1));
+        }
     }
 }

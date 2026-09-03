@@ -1002,11 +1002,30 @@
 }
 .field-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 10px; }
 .field-picker-heading h3 { flex: none; margin: 0; white-space: nowrap; }
-.field-picker-heading span { min-width: 0; overflow: hidden; color: #78716c; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.progressive-field-picker label { gap: 7px; margin-bottom: 10px; color: #57534e; font-size: 13px; font-weight: 600; }
+.field-picker-heading span { min-width: 0; overflow: hidden; color: #78716c; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.binding-list { display: flex; gap: 6px; margin: 0 0 10px; overflow-x: auto; padding-bottom: 2px; }
+.binding-list button {
+  min-height: 44px;
+  flex: none;
+  padding: 0 14px;
+  border: 1px solid #e7e5e4;
+  border-radius: 14px;
+  color: #57534e;
+  background: #fff;
+  font-size: 14px;
+}
+.progressive-field-picker label { gap: 7px; margin-bottom: 10px; color: #57534e; font-size: 14px; font-weight: 600; }
 .field-label-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .progressive-field-picker label b { color: #c2703d; }
-.progressive-field-picker .picker-trigger { min-height: 38px; padding-block: 8px; background: #fff; }
+.progressive-field-picker .picker-trigger { min-height: 44px; padding-block: 8px; background: #fff; }
+.progressive-field-picker input {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #e7e5e4;
+  border-radius: 14px;
+  background: #fafaf9;
+  font-size: 15px;
+}
 .fixed-view-scope {
   display: grid;
   gap: 3px;
@@ -1020,15 +1039,28 @@
 .fixed-view-scope span,
 .fixed-view-scope small { color: #78716c; font-size: 14px; font-weight: 400; line-height: 1.45; }
 .fixed-view-scope strong { font-size: 14px; font-weight: 600; }
+.daily-metric-condition {
+  display: grid;
+  gap: 3px;
+  margin: 2px 0 12px;
+  padding: 11px 12px;
+  border: 1px solid #e7e5e4;
+  border-radius: 14px;
+  color: #292524;
+  background: #fff;
+}
+.daily-metric-condition span,
+.daily-metric-condition small { color: #78716c; font-size: 14px; font-weight: 400; line-height: 1.45; }
+.daily-metric-condition strong { font-size: 14px; font-weight: 600; }
 .insert-field-button {
   width: 100%;
-  min-height: 38px;
+  min-height: 44px;
   margin-top: 0;
   border: 0;
   border-radius: 10px;
   color: #c2703d;
   background: #f5ebe3;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--fw-bold);
 }
 .insert-field-button:hover:not(:disabled) { background: #f5ebe3; box-shadow: 0 8px 20px #c2703d1a; }

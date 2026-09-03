@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -84,6 +85,9 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
         string datasetId,
         CancellationToken cancellationToken = default)
     {
+        var operation = Stopwatch.StartNew();
+        var requestCount = 0;
+        var recordCount = 0;
         var settings = _settings();
         if (string.IsNullOrWhiteSpace(settings.Token))
             return new(false, "尚未配置数据库连接。", "", "", []);
@@ -94,9 +98,9 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
         {
             var databaseId = source is null
                 ? string.Empty
-                : await ResolveDatabaseIdAsync(settings.Token, sourceId, cancellationToken);
+                : await ResolveDatabaseIdAsync(settings.Token, sourceId, cancellationToken, () => requestCount++);
             using (var viewResponse = await SendAsync(
-                       HttpMethod.Get, $"views/{datasetId}", settings.Token, null, cancellationToken))
+                       HttpMethod.Get, $"views/{datasetId}", settings.Token, null, cancellationToken, () => requestCount++))
             {
                 if (!viewResponse.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(databaseId))
                     return new(false, $"读取 View 失败：HTTP {(int)viewResponse.StatusCode}。",
@@ -114,28 +118,121 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
                 }
             }
 
-            var viewIds = await QueryViewPageIdsAsync(settings.Token, datasetId, cancellationToken);
+            var viewIds = await QueryViewPageIdsAsync(settings.Token, datasetId, cancellationToken, () => requestCount++);
             if (!viewIds.Succeeded)
                 return new(false, viewIds.Message, sourceName, datasetName, []);
-            var pages = await QuerySourcePagesAsync(settings.Token, sourceId, cancellationToken);
+            var pages = await QuerySourcePagesAsync(settings.Token, sourceId, null, cancellationToken, () => requestCount++);
             if (!pages.Succeeded)
                 return new(false, pages.Message, sourceName, datasetName, []);
             var records = pages.Pages
                 .Where(page => viewIds.PageIds.Contains(NormalizeId(ReadObjectId(page, "page"))))
                 .Select(ToRecord)
                 .ToArray();
-            return new(true, "数据库查询成功。", sourceName, datasetName, records);
+            recordCount = records.Length;
+            return new(true, "数据库查询成功。", sourceName, datasetName, records,
+                requestCount, operation.ElapsedMilliseconds);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
             return new(false, $"读取数据库失败：{ex.Message}", sourceName, datasetName, []);
+        }
+        finally
+        {
+            WritePerformanceLog($"[Notion] View query complete: source={sourceName}, view={datasetName}, requests={requestCount}, elapsed={operation.ElapsedMilliseconds} ms, records={recordCount}");
+        }
+    }
+
+    public async Task<DatabaseRecordSet> QueryDateRangeAsync(
+        string sourceId,
+        string dateFieldId,
+        DateOnly startDate,
+        DateOnly endDate,
+        CancellationToken cancellationToken = default)
+    {
+        var operation = Stopwatch.StartNew();
+        var requestCount = 0;
+        var recordCount = 0;
+        var settings = _settings();
+        var sourceName = settings.CachedDataSources.FirstOrDefault(item => item.Id == sourceId)?.Name ?? sourceId;
+        if (string.IsNullOrWhiteSpace(settings.Token))
+            return new(false, "尚未配置数据库连接。", sourceName, "日期范围", []);
+        if (string.IsNullOrWhiteSpace(dateFieldId))
+            return new(false, "日期范围查询缺少日期字段。", sourceName, "日期范围", []);
+        if (startDate > endDate)
+            return new(false, "日期范围的开始日期不能晚于结束日期。", sourceName, "日期范围", []);
+
+        try
+        {
+            var filter = new
+            {
+                and = new object[]
+                {
+                    new { property = dateFieldId, date = new { on_or_after = startDate.ToString("yyyy-MM-dd") } },
+                    new { property = dateFieldId, date = new { on_or_before = endDate.ToString("yyyy-MM-dd") } }
+                }
+            };
+            var pages = await QuerySourcePagesAsync(
+                settings.Token, sourceId, filter, cancellationToken, () => requestCount++);
+            if (!pages.Succeeded)
+                return new(false, pages.Message, sourceName, "日期范围", []);
+            var records = pages.Pages.Select(ToRecord).ToArray();
+            recordCount = records.Length;
+            return new(true, "数据库查询成功。", sourceName, "日期范围", records,
+                requestCount, operation.ElapsedMilliseconds);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return new(false, $"读取数据库失败：{ex.Message}", sourceName, "日期范围", []);
+        }
+        finally
+        {
+            WritePerformanceLog($"[Notion] Date range query complete: source={sourceName}, dateField={dateFieldId}, range={startDate:yyyy-MM-dd}..{endDate:yyyy-MM-dd}, requests={requestCount}, elapsed={operation.ElapsedMilliseconds} ms, records={recordCount}");
+        }
+    }
+
+    public async Task<DatabaseRecordSet> QueryExactMatchAsync(
+        string sourceId,
+        string propertyId,
+        DateOnly value,
+        CancellationToken cancellationToken = default)
+    {
+        var operation = Stopwatch.StartNew();
+        var requestCount = 0;
+        var recordCount = 0;
+        var settings = _settings();
+        var sourceName = settings.CachedDataSources.FirstOrDefault(item => item.Id == sourceId)?.Name ?? sourceId;
+        if (string.IsNullOrWhiteSpace(settings.Token))
+            return new(false, "尚未配置数据库连接。", sourceName, "精确匹配", []);
+        if (string.IsNullOrWhiteSpace(propertyId))
+            return new(false, "精确匹配查询缺少匹配字段。", sourceName, "精确匹配", []);
+
+        try
+        {
+            var filter = new { property = propertyId, date = new { equals = value.ToString("yyyy-MM-dd") } };
+            var pages = await QuerySourcePagesAsync(
+                settings.Token, sourceId, filter, cancellationToken, () => requestCount++);
+            if (!pages.Succeeded)
+                return new(false, pages.Message, sourceName, "精确匹配", []);
+            var records = pages.Pages.Select(ToRecord).ToArray();
+            recordCount = records.Length;
+            return new(true, "数据库查询成功。", sourceName, "精确匹配", records,
+                requestCount, operation.ElapsedMilliseconds);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return new(false, $"读取数据库失败：{ex.Message}", sourceName, "精确匹配", []);
+        }
+        finally
+        {
+            WritePerformanceLog($"[Notion] Exact match query complete: source={sourceName}, field={propertyId}, value={value:yyyy-MM-dd}, requests={requestCount}, elapsed={operation.ElapsedMilliseconds} ms, records={recordCount}");
         }
     }
 
     private async Task<(bool Succeeded, string Message, HashSet<string> PageIds)> QueryViewPageIdsAsync(
         string token,
         string viewId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action onRequest)
     {
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string queryId = string.Empty;
@@ -143,7 +240,7 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
         {
             using var firstResponse = await SendAsync(
                 HttpMethod.Post, $"views/{viewId}/queries", token,
-                JsonSerializer.Serialize(new { page_size = 100 }), cancellationToken);
+                JsonSerializer.Serialize(new { page_size = 100 }), cancellationToken, onRequest);
             if (!firstResponse.IsSuccessStatusCode)
                 return (false, $"执行 View 失败：HTTP {(int)firstResponse.StatusCode}。", ids);
             using var firstDocument = JsonDocument.Parse(
@@ -159,7 +256,7 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
             {
                 using var response = await SendAsync(HttpMethod.Get,
                     $"views/{viewId}/queries/{queryId}?page_size=100&start_cursor={Uri.EscapeDataString(cursor)}",
-                    token, null, cancellationToken);
+                    token, null, cancellationToken, onRequest);
                 if (!response.IsSuccessStatusCode)
                     return (false, $"读取 View 分页失败：HTTP {(int)response.StatusCode}。", ids);
                 using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -179,7 +276,7 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
                 try
                 {
                     using var _ = await SendAsync(
-                        HttpMethod.Delete, $"views/{viewId}/queries/{queryId}", token, null, cancellationToken);
+                        HttpMethod.Delete, $"views/{viewId}/queries/{queryId}", token, null, cancellationToken, onRequest);
                 }
                 catch (Exception) { }
             }
@@ -189,16 +286,19 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
     private async Task<(bool Succeeded, string Message, IReadOnlyList<JsonElement> Pages)> QuerySourcePagesAsync(
         string token,
         string sourceId,
-        CancellationToken cancellationToken)
+        object? filter,
+        CancellationToken cancellationToken,
+        Action onRequest)
     {
         var pages = new List<JsonElement>();
         string? cursor = null;
         do
         {
             var values = new Dictionary<string, object> { ["page_size"] = 100 };
+            if (filter is not null) values["filter"] = filter;
             if (!string.IsNullOrWhiteSpace(cursor)) values["start_cursor"] = cursor;
             using var response = await SendAsync(HttpMethod.Post, $"data_sources/{sourceId}/query", token,
-                JsonSerializer.Serialize(values), cancellationToken);
+                JsonSerializer.Serialize(values), cancellationToken, onRequest);
             if (!response.IsSuccessStatusCode)
                 return (false, $"读取数据库失败：HTTP {(int)response.StatusCode}。", []);
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -296,12 +396,13 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
     private async Task<string> ResolveDatabaseIdAsync(
         string token,
         string sourceId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? onRequest = null)
     {
         var cached = _settings().CachedDataSources.FirstOrDefault(source => source.Id == sourceId)?.DatabaseId;
         if (!string.IsNullOrWhiteSpace(cached)) return cached;
         using var response = await SendAsync(
-            HttpMethod.Get, $"data_sources/{sourceId}", token, null, cancellationToken);
+            HttpMethod.Get, $"data_sources/{sourceId}", token, null, cancellationToken, onRequest);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"读取数据库归属失败：HTTP {(int)response.StatusCode}。");
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -326,13 +427,32 @@ public sealed class NotionDatabaseQueryProvider : IDatabaseQueryProvider
         string path,
         string token,
         string? json,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action? onRequest = null)
     {
         using var request = new HttpRequestMessage(method, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Trim());
         request.Headers.Add("Notion-Version", ApiVersion);
         if (json is not null) request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-        return await _client.SendAsync(request, cancellationToken);
+        onRequest?.Invoke();
+        var stopwatch = Stopwatch.StartNew();
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await _client.SendAsync(request, cancellationToken);
+            return response;
+        }
+        finally
+        {
+            var status = response is null ? "failed" : ((int)response.StatusCode).ToString();
+            WritePerformanceLog($"[Notion] {method.Method} {path} -> {status} ({stopwatch.ElapsedMilliseconds} ms)");
+        }
+    }
+
+    private static void WritePerformanceLog(string message)
+    {
+        Debug.WriteLine(message);
+        RuntimeEnvironment.WritePerformanceLog(message);
     }
 
     private static void AddPageIds(JsonElement root, ISet<string> ids)

@@ -33,6 +33,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="appsettings.Development.json;appsettings.Production.json"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
     <Content Remove="Assets\ReportEditor\editor-source.js;Assets\ReportEditor\package.json;Assets\ReportEditor\package-lock.json;Assets\ReportEditor\node_modules\**;Assets\Prototype\src\**;Assets\Prototype\node_modules\**;Assets\Prototype\package.json;Assets\Prototype\package-lock.json;Assets\Prototype\tsconfig*.json;Assets\Prototype\vite.config.ts;Assets\Prototype\vitest.config.ts" />
     <Content Include="Assets\production-assistant-logo.png"
              CopyToOutputDirectory="PreserveNewest" />
@@ -48,6 +51,22 @@
     <Content Include="Assets\ReportCenter\finereport-runner.cjs"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <RuntimeEnvironment Condition="'$(RuntimeEnvironment)' == ''">Production</RuntimeEnvironment>
+  </PropertyGroup>
+
+  <Target Name="ValidateRuntimeEnvironment" BeforeTargets="Publish">
+    <Error Condition="'$(RuntimeEnvironment)' != 'Development' and '$(RuntimeEnvironment)' != 'Production'"
+           Text="RuntimeEnvironment must be Development or Production." />
+  </Target>
+
+  <Target Name="WriteRuntimeEnvironmentMarker" AfterTargets="Publish">
+    <WriteLinesToFile File="$(PublishDir)runtime-environment.json"
+                      Lines="{ &quot;environment&quot;: &quot;$(RuntimeEnvironment)&quot; }"
+                      Overwrite="true"
+                      Encoding="UTF-8" />
+  </Target>
 
   <Target Name="CopyWinUIResourcesToPublish" AfterTargets="Publish">
     <ItemGroup>

@@ -6,20 +6,16 @@ namespace ProductionAssistant.Services;
 public static class DailyReportTaskScheduler
 {
     private const string TaskPrefix = "ProductionAssistant-DailyReport-";
-#if DEBUG
-    public static bool IsSchedulingAvailable { get; } = false;
-#else
-    public static bool IsSchedulingAvailable { get; } = true;
-#endif
+    public static bool IsSchedulingAvailable => RuntimeEnvironment.Current.SchedulerEnabled;
     public static string TaskName(string jobId) => TaskPrefix + jobId;
 
     public static async Task<(bool Succeeded, string Message)> InstallAsync(string jobId, TimeSpan sendTime)
     {
-        if (!IsSchedulingAvailable) return (false, "Debug 版本不支持定时发送，请使用 Release 版本。");
+        if (!IsSchedulingAvailable) return (false, "Development 环境默认不启用定时发送。");
         var executable = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
             return (false, "无法确定生产助手程序路径。");
-        var command = $"\"{executable}\" --send-daily-report --job-id {jobId}";
+        var command = $"\"{executable}\" --environment {RuntimeEnvironment.Current.Name} --send-daily-report --job-id {jobId}";
         var result = await RunSchtasksAsync([
             "/Create", "/TN", TaskName(jobId), "/TR", command,
             "/SC", "DAILY", "/ST", sendTime.ToString(@"hh\:mm"), "/F", "/IT", "/RL", "LIMITED",
@@ -32,11 +28,11 @@ public static class DailyReportTaskScheduler
     public static Task<(bool Succeeded, string Message)> RemoveAsync(string jobId) =>
         IsSchedulingAvailable
             ? RunSchtasksAsync(["/Delete", "/TN", TaskName(jobId), "/F"], "定时任务已停用。")
-            : Task.FromResult((false, "Debug 版本不支持定时发送，请使用 Release 版本。"));
+            : Task.FromResult((false, "Development 环境默认不启用定时发送。"));
 
     public static async Task<(bool Installed, string Message)> GetStatusAsync(string jobId, string configuredTime)
     {
-        if (!IsSchedulingAvailable) return (false, "Debug 版本不启用定时发送");
+        if (!IsSchedulingAvailable) return (false, "Development 环境不启用定时发送");
         var result = await RunSchtasksAsync(["/Query", "/TN", TaskName(jobId), "/XML"], string.Empty);
         if (!result.Succeeded) return (false, "未安装");
         var executable = ExecutableFromTaskXml(result.Message);

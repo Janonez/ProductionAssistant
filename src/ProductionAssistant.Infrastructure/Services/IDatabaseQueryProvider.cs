@@ -7,6 +7,19 @@ public interface IDatabaseQueryProvider
     Task<DatabaseSchemaResult> GetSchemaAsync(string sourceId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DatabaseDatasetInfo>> GetDatasetsAsync(string sourceId, CancellationToken cancellationToken = default);
     Task<DatabaseRecordSet> QueryDatasetAsync(string sourceId, string datasetId, CancellationToken cancellationToken = default);
+    Task<DatabaseRecordSet> QueryDateRangeAsync(
+        string sourceId,
+        string dateFieldId,
+        DateOnly startDate,
+        DateOnly endDate,
+        CancellationToken cancellationToken = default) => Task.FromResult(
+            new DatabaseRecordSet(false, "当前数据库适配器不支持日期范围查询。", "", "", []));
+    Task<DatabaseRecordSet> QueryExactMatchAsync(
+        string sourceId,
+        string propertyId,
+        DateOnly value,
+        CancellationToken cancellationToken = default) => Task.FromResult(
+            new DatabaseRecordSet(false, "当前数据库适配器不支持精确匹配查询。", "", "", []));
 }
 
 public sealed record DatabaseSourceInfo(string Id, string Name, string Path, string BusinessSection = "");
@@ -27,7 +40,8 @@ public static class DatabaseSourceCatalog
             usesBusinessSections
                 ? grouped.Select(source => source.BusinessSection)
                     .Distinct(StringComparer.CurrentCultureIgnoreCase)
-                    .OrderBy(section => section, StringComparer.CurrentCultureIgnoreCase)
+                    .OrderBy(section => string.Equals(section, "数据库", StringComparison.CurrentCultureIgnoreCase) ? 0 : 1)
+                    .ThenBy(section => section, StringComparer.CurrentCultureIgnoreCase)
                     .ToArray()
                 : [],
             usesBusinessSections ? grouped : all);
@@ -43,7 +57,9 @@ public sealed record DatabaseRecordSet(
     string Message,
     string SourceName,
     string DatasetName,
-    IReadOnlyList<DatabaseRecord> Records);
+    IReadOnlyList<DatabaseRecord> Records,
+    int RequestCount = 0,
+    long ElapsedMilliseconds = 0);
 
 public sealed record DatabaseInspectionRequest(
     string SourceId,

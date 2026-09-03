@@ -4,7 +4,7 @@ import postcss from 'postcss'
 
 const prototypeRoot = path.resolve(import.meta.dirname)
 const repositoryRoot = path.resolve(prototypeRoot, '../../../..')
-const demoRoot = path.join(repositoryRoot, 'my_tests/productio_nmessage/production-message-demo/src')
+const demoRoot = path.join(repositoryRoot, 'tools/experiments/production_message/production_assistant_demo/src')
 const formalSource = path.join(prototypeRoot, 'src')
 const scope = '.production-message-demo'
 
@@ -34,7 +34,7 @@ root.walkRules(rule => {
   rule.selector = scopedSelector(rule.selector)
 })
 
-const generated = `/* Generated from my_tests/productio_nmessage/production-message-demo/src/index.css and App.css.
+const generated = `/* Generated from tools/experiments/production_message/production_assistant_demo/src/index.css and App.css.
    Do not redesign this file; run npm run sync:production-message-demo after Demo changes. */
 ${scope}, ${scope} :where(*:not(svg):not(svg *)) { all: revert; box-sizing: border-box; }
 ${scope} svg, ${scope} svg * { box-sizing: border-box; }

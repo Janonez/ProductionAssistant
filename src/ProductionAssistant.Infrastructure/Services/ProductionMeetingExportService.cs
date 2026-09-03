@@ -493,8 +493,11 @@ public sealed class ProductionMeetingExportService
 
     private static string GetAvailableOutputPath(string workbookPath, DateTime meetingDate)
     {
-        var folder = Path.GetDirectoryName(workbookPath)
-                     ?? throw new InvalidOperationException("无法确定源文件所在目录。");
+        var folder = RuntimeEnvironment.Current.IsDevelopment
+            ? Path.Combine(RuntimeEnvironment.ExportDirectory, "production-meeting")
+            : Path.GetDirectoryName(workbookPath)
+              ?? throw new InvalidOperationException("无法确定源文件所在目录。");
+        Directory.CreateDirectory(folder);
         var baseName = Path.GetFileNameWithoutExtension(workbookPath);
         var stem = $"{baseName}_{meetingDate:yyyy年M月d日}";
         var candidate = Path.Combine(folder, $"{stem}.xlsx");

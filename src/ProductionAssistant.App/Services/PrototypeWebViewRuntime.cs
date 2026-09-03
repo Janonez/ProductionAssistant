@@ -16,9 +16,7 @@ internal static class PrototypeWebViewRuntime
     {
         try
         {
-            var folder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ProductionAssistant");
+            var folder = RuntimeEnvironment.LogDirectory;
             Directory.CreateDirectory(folder);
             var elapsed = Stopwatch.GetElapsedTime(StartedAt).TotalMilliseconds;
             File.AppendAllText(
@@ -33,6 +31,8 @@ internal static class PrototypeWebViewRuntime
 
     private static async Task<CoreWebView2Environment> CreateEnvironmentAsync()
     {
+        if (RuntimeEnvironment.Current.IsDevelopment)
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", RuntimeEnvironment.CacheDirectory);
         var environment = await CoreWebView2Environment.CreateAsync();
         Mark("environment-ready");
         return environment;

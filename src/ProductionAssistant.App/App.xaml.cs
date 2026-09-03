@@ -13,9 +13,7 @@ public partial class App : Application
         {
             try
             {
-                var logFolder = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "ProductionAssistant");
+                var logFolder = Services.RuntimeEnvironment.LogDirectory;
                 Directory.CreateDirectory(logFolder);
                 var exception = args.Exception;
                 var log = $"[{DateTimeOffset.Now:O}] {exception.GetType().FullName}: {exception.Message}{Environment.NewLine}" +
@@ -31,6 +29,7 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        Services.RuntimeEnvironment.WriteStartupSummary();
         if (Environment.GetCommandLineArgs().Any(argument =>
                 string.Equals(argument, "--send-daily-report", StringComparison.OrdinalIgnoreCase)))
         {

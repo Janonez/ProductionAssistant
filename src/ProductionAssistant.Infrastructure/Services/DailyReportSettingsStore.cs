@@ -7,9 +7,9 @@ namespace ProductionAssistant.Services;
 public static class DailyReportSettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    private static readonly Mutex RunsMutex = new(false, "Local\\ProductionAssistant-DailyReportRuns");
-    private static string FolderPath => Environment.GetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR")
-        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ProductionAssistant");
+    private static readonly Mutex RunsMutex = new(false,
+        $"Local\\ProductionAssistant-{RuntimeEnvironment.Current.Name}-DailyReportRuns");
+    private static string FolderPath => RuntimeEnvironment.DataDirectory;
     private static string LegacySettingsPath => Path.Combine(FolderPath, "daily-report-settings.json");
     private static string JobsPath => Path.Combine(FolderPath, "daily-report-jobs.json");
     private static string RunsPath => Path.Combine(FolderPath, "daily-report-runs.json");
@@ -116,7 +116,13 @@ public static class DailyReportSettingsStore
             field.Token.DataSourceId == token.DataSourceId &&
             field.Token.PropertyId == token.PropertyId &&
             field.Token.ViewId == token.ViewId &&
-            field.Token.PeriodKind == token.PeriodKind);
+            field.Token.PeriodKind == token.PeriodKind &&
+            field.Token.QueryMode == token.QueryMode &&
+            field.Token.DatePropertyId == token.DatePropertyId &&
+            field.Token.QueryRangeKind == token.QueryRangeKind &&
+            field.Token.FilterPropertyId == token.FilterPropertyId &&
+            field.Token.FilterValue == token.FilterValue &&
+            field.Token.ExactMatchPropertyId == token.ExactMatchPropertyId);
         if (existing is not null) { existing.Token = token; return existing.Placeholder; }
         var source = token.DataSourceName.Replace('"', '\'');
         var property = token.PropertyName.Replace('"', '\'');
