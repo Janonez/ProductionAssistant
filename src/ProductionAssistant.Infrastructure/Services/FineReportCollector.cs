@@ -104,7 +104,7 @@ public sealed class FineReportCollector
         var candidates = new[]
         {
             Path.Combine(AppContext.BaseDirectory, "Assets", "ReportCenter", "node_modules"),
-            root is null ? string.Empty : Path.Combine(root, "my_tests", "playwright_test", "FineReportTest", "node_modules")
+            root is null ? string.Empty : Path.Combine(root, "tools", "experiments", "machining_summary", "playwright_test", "FineReportTest", "node_modules")
         };
         return candidates.FirstOrDefault(path => Directory.Exists(Path.Combine(path, "playwright")))
             ?? throw new InvalidOperationException("未找到 Playwright Node 依赖，请在报表中心自动化目录执行 npm install。");

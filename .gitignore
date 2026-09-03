@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-**/node_modules/
+node_modules/
 /.pnp
 /.nuget/
 /.npm-cache/
@@ -38,7 +38,9 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
-/dist/
+dist/
+!/src/ProductionAssistant.App/Assets/Prototype/dist/
+!/src/ProductionAssistant.App/Assets/Prototype/dist/**
 /.wrangler/
 /outputs/
 /work/
@@ -49,8 +51,9 @@ next-env.d.ts
 .vs/
 .dotnet/
 *.user
-/publish/
 /artifacts/
+/deployments/
+/tools/experiments/
 /.codex/
 /ProductionAssistant-v1.4.1-win-x64.zip
-/my_tests/
+*.log
