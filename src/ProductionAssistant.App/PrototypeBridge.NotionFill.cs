@@ -55,7 +55,6 @@ internal sealed partial class PrototypeBridge
         {
             job.Id,
             job.Name,
-            job.BaseUrl,
             job.SourcePageUrl,
             job.Username,
             passwordConfigured = !string.IsNullOrWhiteSpace(job.EncryptedPassword),
