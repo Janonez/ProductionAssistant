@@ -10,20 +10,25 @@ internal sealed partial class PrototypeBridge
 
     private static async Task<object> ListDailyJobsAsync()
     {
-        var jobs = DailyReportSettingsStore.LoadCatalog().Jobs;
-        var items = new List<object>();
-        foreach (var job in jobs)
+        var jobs = (await AppServices.DailyReportTasks.ListTasksAsync()).Select(task => new
         {
-            var scheduler = await DailyReportTaskScheduler.GetStatusAsync(job.Id, job.SendTime);
-            items.Add(ToDailyJobSummary(job, scheduler.Installed, scheduler.Message));
-        }
-        return new { jobs = items };
+            task.Id, task.Name, sendTime = task.Schedule, task.IsEnabled, task.SchedulingAvailable,
+            task.Status, task.SchedulerMessage,
+            dingTalkStatus = task.ConnectionStatus,
+            task.LastRun, task.MissingStep, task.MissingMessage
+        });
+        return new { jobs };
     }
 
-    private static object CreateDailyJob()
+    private static object CreateDailyJob(JsonElement payload)
     {
         var catalog = DailyReportSettingsStore.LoadCatalog();
-        var job = new DailyReportJob { Name = $"日报任务 {catalog.Jobs.Count + 1}" };
+        var name = ReadString(payload, "name").Trim();
+        var sendTime = ReadString(payload, "sendTime");
+        if (string.IsNullOrWhiteSpace(name)) name = $"日报任务 {catalog.Jobs.Count + 1}";
+        if (string.IsNullOrWhiteSpace(sendTime)) sendTime = "17:30";
+        if (!TimeSpan.TryParse(sendTime, out var time)) throw new InvalidOperationException("发送时间无效。");
+        var job = new DailyReportJob { Name = name, SendTime = time.ToString(@"hh\:mm") };
         DailyReportSettingsStore.SaveJob(job);
         return new { job.Id };
     }
@@ -39,7 +44,7 @@ internal sealed partial class PrototypeBridge
             job.Id, job.Name, job.SendTime,
             isEnabled = DailyReportTaskScheduler.IsSchedulingAvailable && job.IsEnabled,
             schedulingAvailable = DailyReportTaskScheduler.IsSchedulingAvailable,
-            validated = IsDailyValidated(job),
+            validated = DailyReportTaskHandler.IsValidated(job),
             job.DraftTemplate, job.DraftTemplateDocument,
             notificationConfigured = notification.DingTalkEnabled &&
                 !string.IsNullOrWhiteSpace(notification.EncryptedWebhook) &&
@@ -206,7 +211,7 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> SendDailyReportTodayAsync(JsonElement payload, CancellationToken cancellationToken)
     {
         var job = FindDailyJob(payload);
-        if (!IsDailyValidated(job)) throw new InvalidOperationException("请先完成测试发送，再发送今日消息。");
+        if (!DailyReportTaskHandler.IsValidated(job)) throw new InvalidOperationException("请先完成测试发送，再发送今日消息。");
         var result = await new DailyReportRunner().SendTodayAsync(job.Id, cancellationToken);
         return new
         {
@@ -218,39 +223,22 @@ internal sealed partial class PrototypeBridge
 
     private static async Task<object> SetDailyEnabledAsync(JsonElement payload)
     {
-        if (!DailyReportTaskScheduler.IsSchedulingAvailable)
-            throw new InvalidOperationException("Development 环境默认不启用定时发送。");
-        var job = FindDailyJob(payload);
-        var enabled = payload.TryGetProperty("enabled", out var value) && value.GetBoolean();
-        if (!enabled)
+        var id = ReadString(payload, "id");
+        var result = await AppServices.DailyReportTasks.SetEnabledAsync(
+            id,
+            payload.TryGetProperty("enabled", out var value) && value.GetBoolean());
+        return new
         {
-            var removed = await DailyReportTaskScheduler.RemoveAsync(job.Id);
-            if (!removed.Succeeded) throw new InvalidOperationException(removed.Message);
-            job.IsEnabled = false;
-            DailyReportSettingsStore.SaveJob(job);
-            return new { enabled = false };
-        }
-        var missing = DailyMissingStep(job);
-        if (missing is not null) return new { enabled = false, missingStep = missing.Value.Step, message = missing.Value.Message };
-        var installed = await DailyReportTaskScheduler.InstallAsync(job.Id, TimeSpan.Parse(job.SendTime));
-        if (!installed.Succeeded) throw new InvalidOperationException(installed.Message);
-        job.IsEnabled = true;
-        DailyReportSettingsStore.SaveJob(job);
-        var catchUp = DateTime.Now.TimeOfDay >= TimeSpan.Parse(job.SendTime) &&
-            !DailyReportSettingsStore.LoadRunRecords(job.Id).Any(record =>
-                record.Source != "test" && record.Succeeded &&
-                record.BusinessDate == DateTime.Today.ToString("yyyy-MM-dd") &&
-                record.TemplateVersion == job.ActiveTemplateVersion);
-        var sentToday = catchUp && await new DailyReportRunner().RunAsync(job.Id) == DailyReportExitCode.Success;
-        return new { enabled = true, sentToday };
+            result.Enabled,
+            sentToday = result.RanImmediately,
+            result.MissingStep,
+            result.Message
+        };
     }
 
     private static async Task<object> DeleteDailyJobAsync(JsonElement payload)
     {
-        var job = FindDailyJob(payload);
-        if (job.IsEnabled) throw new InvalidOperationException("请先停用任务，再删除配置和运行记录。");
-        await DailyReportTaskScheduler.RemoveAsync(job.Id);
-        if (!DailyReportSettingsStore.DeleteJob(job.Id)) throw new InvalidOperationException("没有找到要删除的任务。");
+        await AppServices.DailyReportTasks.DeleteAsync(ReadString(payload, "id"));
         return new { deleted = true };
     }
 
@@ -279,41 +267,6 @@ internal sealed partial class PrototypeBridge
             job.IsEnabled = false;
         }
         job.ConfigurationValidated = false;
-    }
-
-    private static bool IsDailyValidated(DailyReportJob job) =>
-        job.ConfigurationValidated ?? (job.ActiveTemplateVersion > 0 && !string.IsNullOrWhiteSpace(job.ActiveTemplate));
-
-    private static (string Step, string Message)? DailyMissingStep(DailyReportJob job)
-    {
-        if (string.IsNullOrWhiteSpace(job.Name)) return ("basics", "请先填写任务名称。");
-        var notification = NotificationSettingsStore.Load();
-        if (!notification.DingTalkEnabled || string.IsNullOrWhiteSpace(notification.EncryptedWebhook) ||
-            string.IsNullOrWhiteSpace(notification.EncryptedSecret))
-            return ("notification", "请先在系统设置中完成通知渠道配置。");
-        if (notification.DingTalkConnected != true)
-            return ("notification", "请先在系统设置中测试钉钉通知。");
-        if (!IsDailyValidated(job)) return ("template", "请先生成预览并完成测试发送。");
-        return null;
-    }
-
-    private static object ToDailyJobSummary(DailyReportJob job, bool schedulerInstalled, string schedulerMessage)
-    {
-        var last = DailyReportSettingsStore.LoadRunRecords(job.Id).FirstOrDefault();
-        var missing = DailyMissingStep(job);
-        var enabled = DailyReportTaskScheduler.IsSchedulingAvailable && job.IsEnabled;
-        var status = enabled && !schedulerInstalled ? "schedule-error" : enabled ? "enabled" :
-            missing?.Step is "basics" or "notification" ? "incomplete" : !IsDailyValidated(job) ? "pending-test" : "ready";
-        var notification = NotificationSettingsStore.Load();
-        return new
-        {
-            job.Id, job.Name, job.SendTime, isEnabled = enabled, status, schedulerMessage,
-            schedulingAvailable = DailyReportTaskScheduler.IsSchedulingAvailable,
-            dingTalkStatus = notification.DingTalkConnected == true ? "全局通知正常" :
-                string.IsNullOrWhiteSpace(notification.EncryptedWebhook) ? "全局通知未配置" : "全局通知待检测",
-            lastRun = last is null ? "暂无运行记录" : $"{last.StartedAt:MM-dd HH:mm} · {(last.Succeeded ? "成功" : "失败")}",
-            missingStep = missing?.Step, missingMessage = missing?.Message
-        };
     }
 
     private static IEnumerable<object> DailyFieldDtos(DailyReportJob job) =>

@@ -124,6 +124,10 @@ public sealed class ArchitectureTests
         Assert.True(PrototypeBridgeProtocol.IsAllowed("weld.generate"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("weld.write"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("app.navigateNative"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("automation.list"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("automation.setEnabled"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("notionFill.testSource"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("notionFill.runNow"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.list"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.test"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("daily.sendToday"));

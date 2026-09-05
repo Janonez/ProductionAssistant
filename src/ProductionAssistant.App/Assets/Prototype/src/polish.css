@@ -57,9 +57,8 @@ nav button, .native-link { min-height: var(--control-height); font-size: 15px; }
 .field-icon { font-size: 10px; }
 .report-editor, .report-editor .ProseMirror { font-size: 16px; }
 .report-preview h3 { font-size: 18px; }
-.report-preview p, .run-list details > div { font-size: var(--font-supporting); line-height: 1.55; }
+.report-preview p { font-size: var(--font-supporting); line-height: 1.55; }
 .report-preview pre { font-size: 15px; }
-.run-list summary { font-size: 14px; }
 
 @media (max-width: 1050px) {
   .page { padding-bottom: 64px; }

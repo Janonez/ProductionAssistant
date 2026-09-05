@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { invoke, notifyReady } from './bridge'
 import type { Route } from './types'
-import { DailyReportPage } from './DailyReportPage'
+import { AutomationPage } from './AutomationPage'
 import { DailyWeldPage } from './DailyWeldPage'
 import { OperationSidebar } from './OperationSidebar'
 import ProductionMessagePage from './ProductionMessagePage'
@@ -65,7 +65,7 @@ export function App() {
               exit={reduced ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: .2 }}
             >
-              {route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <DailyReportPage /> : <ReportCenterPage />}
+              {route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage /> : <ReportCenterPage />}
             </motion.div>
           </AnimatePresence></main></div>}
     </div>

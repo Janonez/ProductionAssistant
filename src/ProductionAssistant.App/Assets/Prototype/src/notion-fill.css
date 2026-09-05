@@ -1,0 +1,32 @@
+.notion-fill-page { display: grid; gap: 18px; }
+.notion-fill-page > header { margin-bottom: 0; }
+.notion-fill-card { padding: 22px; border: 1px solid #e7e5e4; border-radius: 17px; }
+.notion-fill-heading { display: flex; gap: 12px; align-items: flex-start; }
+.notion-fill-heading > svg { width: 21px; color: #a85c2e; margin-top: 2px; }
+.notion-fill-heading h2 { margin: 0; font-size: 16px; }
+.notion-fill-heading p { margin: 5px 0 0; color: #78716c; font-size: 14px; }
+.notion-fill-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+.notion-fill-fields label, .notion-fill-testbar label { display: grid; gap: 7px; color: #78716c; font-size: 14px; }
+.notion-fill-fields input { min-height: 44px; border: 1px solid #e7e5e4; border-radius: 14px; background: #fafaf9; padding: 0 14px; outline: none; }
+.notion-fill-fields input:focus { border-color: #c2703d; box-shadow: 0 0 0 3px #c2703d1c; }
+.notion-fill-fields input:disabled { color: #78716c; }
+.notion-fill-fields .notion-fill-wide-field { grid-column: 1 / -1; }
+.notion-fill-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+.notion-fill-subsection { margin-top: 22px; padding-top: 20px; border-top: 1px solid #e7e5e4; }
+.notion-fill-contract { display: grid; gap: 0; margin: 18px 0 0; }
+.notion-fill-contract > div { display: grid; grid-template-columns: 110px 1fr; gap: 14px; padding: 12px 0; border-top: 1px solid #e7e5e4; }
+.notion-fill-contract dt { color: #78716c; }
+.notion-fill-contract dd { margin: 0; font-weight: 500; }
+.notion-fill-testbar { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-top: 20px; }
+.notion-fill-testbar label { width: 240px; }
+.notion-fill-test-actions { display: flex; gap: 10px; }
+.notion-fill-write-action { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.notion-fill-write-action span { color: #78716c; font-size: 14px; }
+.notion-fill-confirm { margin-top: 14px; align-items: center; justify-content: space-between; }
+.notion-fill-confirm-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.notion-fill-result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+.notion-fill-result > div { display: grid; gap: 6px; padding: 16px; border-radius: 14px; background: #fafaf9; border: 1px solid #e7e5e4; }
+.notion-fill-result span { color: #78716c; font-size: 14px; }
+.notion-fill-result strong { font-size: 16px; }
+.notion-fill-result p { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin: 0; color: #57534e; }
+.notion-fill-result p svg { width: 18px; }
