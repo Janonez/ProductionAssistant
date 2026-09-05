@@ -30,17 +30,28 @@ public partial class App : Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         Services.RuntimeEnvironment.WriteStartupSummary();
-        if (Environment.GetCommandLineArgs().Any(argument =>
-                string.Equals(argument, "--send-daily-report", StringComparison.OrdinalIgnoreCase)))
+        var arguments = Environment.GetCommandLineArgs();
+        var legacyDailyReport = HasArgument(arguments, "--send-daily-report");
+        var automationTask = HasArgument(arguments, "--run-automation-task");
+        if (legacyDailyReport || automationTask)
         {
-            var arguments = Environment.GetCommandLineArgs();
-            var jobIdIndex = Array.FindIndex(arguments,
-                argument => string.Equals(argument, "--job-id", StringComparison.OrdinalIgnoreCase));
-            var jobId = jobIdIndex >= 0 && jobIdIndex + 1 < arguments.Length ? arguments[jobIdIndex + 1] : string.Empty;
-            var exitCode = string.IsNullOrWhiteSpace(jobId)
-                ? Models.DailyReportExitCode.JobNotFound
-                : await new Services.DailyReportRunner().RunAsync(jobId);
-            Environment.ExitCode = (int)exitCode;
+            var taskType = legacyDailyReport
+                ? Services.DailyReportTaskHandler.Type
+                : ReadArgument(arguments, "--task-type");
+            var taskId = legacyDailyReport
+                ? ReadArgument(arguments, "--job-id")
+                : ReadArgument(arguments, "--task-id");
+            try
+            {
+                if (string.IsNullOrWhiteSpace(taskType) || string.IsNullOrWhiteSpace(taskId))
+                    Environment.ExitCode = (int)Models.DailyReportExitCode.JobNotFound;
+                else
+                    Environment.ExitCode = (await AppServices.AutomationTasks.RunAsync(taskType, taskId)).Result.ExitCode;
+            }
+            catch
+            {
+                Environment.ExitCode = (int)Models.DailyReportExitCode.JobNotFound;
+            }
             Exit();
             return;
         }
@@ -50,5 +61,15 @@ public partial class App : Application
         Services.PrototypeWebViewRuntime.Mark("window-activated");
         Services.PrototypeWebViewRuntime.Prewarm();
         MainWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32(1400, 860));
+    }
+
+    private static bool HasArgument(string[] arguments, string name) =>
+        arguments.Any(argument => string.Equals(argument, name, StringComparison.OrdinalIgnoreCase));
+
+    private static string ReadArgument(string[] arguments, string name)
+    {
+        var index = Array.FindIndex(arguments,
+            argument => string.Equals(argument, name, StringComparison.OrdinalIgnoreCase));
+        return index >= 0 && index + 1 < arguments.Length ? arguments[index + 1] : string.Empty;
     }
 }

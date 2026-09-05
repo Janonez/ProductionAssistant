@@ -1,5 +1,13 @@
 export type Route = 'daily-weld' | 'production-message' | 'database-viewer' | 'daily-report' | 'report-center' | `navigation:${string}`
 
+export interface AutomationTaskSummary { taskType: string; taskTypeName: string; id: string; name: string; schedule: string; isEnabled: boolean; schedulingAvailable: boolean; status: string; schedulerMessage: string; connectionStatus: string; lastRun: string; missingStep?: string; missingMessage?: string }
+
+export interface NotionFillRun { id: string; time: string; source: string; status: 'created' | 'checked' | 'failed'; businessDate: string; plateWeight: number; sectionWeight: number; message: string; error: string }
+export interface NotionFillJobDetail { id: string; name: string; sourcePageUrl: string; username: string; passwordConfigured: boolean; notionConfigured: boolean; targetDataSourceName: string; validated: boolean; isEnabled: boolean; schedulingAvailable: boolean; schedule: string; schedulerInstalled: boolean; schedulerMessage: string; runs: NotionFillRun[] }
+export interface NotionFillTestResult { succeeded: boolean; businessDate: string; plateWeight: number; sectionWeight: number; totalWeight: number; targetRecordExists: boolean; message: string }
+export interface NotionFillSourceTestResult { succeeded: boolean; businessDate: string; plateWeight: number; sectionWeight: number; totalWeight: number; message: string }
+export interface NotionFillRunNowResult { succeeded: boolean; exitCode: number; created: boolean; skipped: boolean; message: string }
+
 export interface ReportCenterState { name: string; authenticated: boolean; credentialsConfigured: boolean; configPath: string; sourceRoot: string; outputRoot: string; reportUrl: string; username: string; devices: number }
 export interface ReportRunSummary { runId: string; startedAt: string; finishedAt: string; period: { startDate: string; endDate: string }; plannedReports: number; exportedReports: number; parsedReports: number; deviceCount: number; actualDataPoints: number; expectedDataPoints: number; summaryPath: string; warnings: string[] }
 export interface ReportRunProgress { stage: 'prepare' | 'collect' | 'parse' | 'summary' | 'complete'; current: number; total: number; message: string }
