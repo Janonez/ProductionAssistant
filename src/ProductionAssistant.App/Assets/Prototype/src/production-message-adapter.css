@@ -248,3 +248,6 @@
 .production-message-demo .field-name,
 .production-message-demo .database-value,
 .production-message-demo .template-config-button { font-weight: var(--fw-regular); }
+
+/* Keep the approved page on the same application-wide font stack. */
+.production-message-demo, body:has(.production-message-demo) { font-family: var(--font-ui); }

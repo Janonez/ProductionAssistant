@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { invoke } from "./bridge";
-import { DailyReportTaskEditor } from "./DailyReportPage";
+import { MessageTemplatePage } from "./MessageTemplatePage";
 import { NotionFillTaskEditor } from "./NotionFillPage";
 import { DailyReportCreateWizard } from "./DailyReportCreateWizard";
 import { NotionFillCreateWizard } from "./NotionFillCreateWizard";
 import type { DailyRun, NotionFillRun } from "./types";
 
 export type AutomationTaskEditorProps = {
+  openSettings?: () => void;
   id: string;
   section: string;
   navigate: (section: string) => void;
@@ -50,7 +51,7 @@ export const automationTaskTypes: AutomationTaskTypeDefinition[] = [
     taskTabs: [{ id: "configuration", label: "任务配置" }, { id: "execution", label: "运行与测试" }],
     resolveSection: (missingStep) => missingStep === "basics" ? "basics" : missingStep === "template" ? "configuration" : "execution",
     issueTitle: (missingStep) => missingStep === "notification" ? "通知渠道未就绪" : missingStep === "template" ? "日报配置尚未验证" : "基本信息不完整",
-    renderEditor: (props) => <DailyReportTaskEditor {...props} />,
+    renderEditor: (props) => <MessageTemplatePage id={props.id} back={() => props.navigate("list")} changed={props.changed} openSettings={props.openSettings} />,
     loadRuns: (id) => invoke<{ runs: DailyRun[] }>("daily.runs", { id }).then(({ runs }) => runs.map(run => ({
       id: run.id,
       time: run.time,

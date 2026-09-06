@@ -14,7 +14,7 @@ export interface ReportRunProgress { stage: 'prepare' | 'collect' | 'parse' | 's
 
 export interface DailyJobSummary { id: string; name: string; sendTime: string; isEnabled: boolean; schedulingAvailable: boolean; status: string; schedulerMessage: string; dingTalkStatus: string; lastRun: string; missingStep?: string; missingMessage?: string }
 export interface DailyFieldBinding { dataSourceId: string; businessMetricId: string; businessMetricName: string; dataGranularity: string; rangeKind: string; aggregateKind: string; customStartDate: string; customEndDate: string }
-export interface DailyField { placeholder: string; label: string; tooltip: string; binding?: DailyFieldBinding }
+export interface DailyField { businessId?: string; databaseId?: string; fieldId?: string; category?: string; name?: string; dateRangeSpec?: import("./dateRangeSpec").DateRangeSpec; placeholder: string; label: string; tooltip: string; binding?: DailyFieldBinding }
 export interface DailyRun { id: string; time: string; source: string; status: string; businessDate: string; templateVersion: number; stage: string; attempts: number; response: string; error: string; textSummary: string }
 export interface DailyJobDetail { id: string; name: string; sendTime: string; isEnabled: boolean; schedulingAvailable: boolean; validated: boolean; draftTemplate: string; draftTemplateDocument: string; notificationConfigured: boolean; notificationConnected?: boolean; notificationStatus: string; schedulerInstalled: boolean; schedulerMessage: string; usesBusinessSections: boolean; businessSections: string[]; sources: Array<{ id: string; name: string; path: string; businessSection: string }>; fields: DailyField[]; runs: DailyRun[] }
 

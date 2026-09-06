@@ -7,6 +7,73 @@ using Xunit;
 
 public sealed class DailyReportServiceTests
 {
+    [Theory]
+    [InlineData("day", -1, "2024-02-29", "2023-02-28", "2023-02-28")]
+    [InlineData("mtd", -1, "2026-09-05", "2025-09-01", "2025-09-05")]
+    [InlineData("ytd", -2, "2026-09-05", "2024-01-01", "2024-09-05")]
+    [InlineData("fullyear", -1, "2026-01-01", "2025-01-01", "2025-12-31")]
+    [InlineData("fullyear", 0, "2026-09-05", "2026-01-01", "2026-12-31")]
+    public void Spec_resolves_at_business_date(string granularity, int offset, string business, string start, string end)
+    {
+        var range = DatabaseDateRanges.Resolve(new DateRangeSpec(granularity, offset), DateOnly.Parse(business));
+        Assert.True(range.Succeeded);
+        Assert.Equal(DateOnly.Parse(start), range.Start);
+        Assert.Equal(DateOnly.Parse(end), range.End);
+    }
+
+    [Fact]
+    public async Task Atomic_document_spec_is_read_at_execution_and_active_document_can_be_selected()
+    {
+        var service = new DailyReportService(database: new DateRangeProvider([RangePage("past", "2025-09-01", 7,0), RangePage("now", "2026-09-01", 9,0)]));
+        var field = RangeField("{spec}", "weld", "焊接（吨）", "day");
+        field.Token = field.Token with { DateRangeSpec = new("day",0) };
+        var job = ViewJob("source", "生产数据库", [field]);
+        job.DraftTemplate = "{spec}";
+        job.DraftTemplateDocument = """{"type":"doc","content":[{"type":"paragraph","content":[{"type":"fieldToken","attrs":{"placeholder":"{spec}","dateRangeSpec":{"granularity":"day","yearOffset":-1}}}]}]}""";
+        var draft = await service.BuildAsync(job, "{spec}", new DateTime(2026,9,1));
+        Assert.True(draft.Succeeded, draft.Message);
+        Assert.Equal("7", draft.Text);
+        Assert.Equal("7", draft.FieldValues!["{spec}"]);
+        var active = await service.BuildAsync(job, "{spec}", new DateTime(2026,9,1), templateDocument: "");
+        Assert.Equal("9", active.Text);
+    }
+
+    [Fact]
+    public async Task Saved_spec_moves_with_run_date_and_distinguishes_year_offsets()
+    {
+        var provider = new DateRangeProvider([RangePage("a", "2025-09-01", 2, 0), RangePage("b", "2025-09-02", 3, 0)]);
+        var service = new DailyReportService(database: provider);
+        var field = RangeField("{spec}", "weld", "焊接（吨）", "month");
+        field.Token = field.Token with { DateRangeSpec = new("mtd", -1) };
+        var job = ViewJob("source", "生产数据库", [field]);
+        job = JsonSerializer.Deserialize<DailyReportJob>(JsonSerializer.Serialize(job))!;
+        var first = await service.BuildAsync(job, "{spec}", new DateTime(2026,9,1));
+        var second = await service.BuildAsync(job, "{spec}", new DateTime(2026,9,2));
+        Assert.True(first.Succeeded, first.Message);
+        Assert.Equal("2", first.Text); Assert.Equal("5", second.Text);
+        Assert.Equal(new DateOnly(2025,9,2), provider.EndDate);
+        var old = DailyReportSettingsStore.AddOrUpdateField(job, field.Token);
+        var current = DailyReportSettingsStore.AddOrUpdateField(job, field.Token with { DateRangeSpec = new("mtd",0) });
+        Assert.NotEqual(old, current);
+    }
+
+    [Fact]
+    public async Task Preview_reports_deleted_field_without_losing_valid_values()
+    {
+        var provider = new DateRangeProvider([RangePage("a", "2026-09-01", 2, 0)]);
+        var service = new DailyReportService(database: provider);
+        var good = RangeField("{good}", "weld", "焊接（吨）", "day");
+        good.Token = good.Token with { DateRangeSpec = new("day",0) };
+        var bad = RangeField("{bad}", "deleted-id", "焊接（吨）", "day");
+        bad.Token = bad.Token with { DateRangeSpec = new("day",0) };
+        var job = ViewJob("source", "生产数据库", [good,bad]);
+        var result = await service.PreviewAsync(job, "有效={good};失效={bad}", new DateTime(2026,9,1));
+        Assert.False(result.Succeeded);
+        Assert.Contains("有效=2", result.Text);
+        Assert.Equal("{bad}", Assert.Single(result.FieldErrors!).Placeholder);
+        Assert.False((await service.BuildAsync(job, "{good}{bad}", new DateTime(2026,9,1))).Succeeded);
+    }
+
     [Fact]
     public void Legacy_token_json_keeps_the_View_compatibility_mode()
     {

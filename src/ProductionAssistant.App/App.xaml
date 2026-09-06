@@ -7,6 +7,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <FontFamily x:Key="ContentControlThemeFontFamily">ms-appx:///Assets/Fonts/Inter.ttf#Inter, ms-appx:///Assets/Fonts/NotoSansSC.ttf#Noto Sans SC</FontFamily>
             <Color x:Key="BrandAccent">#C2703D</Color>
             <SolidColorBrush x:Key="BrandAccentBrush" Color="{StaticResource BrandAccent}" />
             <SolidColorBrush x:Key="PageBackgroundBrush" Color="#FAFAF9" />

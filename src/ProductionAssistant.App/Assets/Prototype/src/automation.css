@@ -62,3 +62,66 @@
   .automation-run-list summary span:nth-child(2), .automation-run-list summary b { grid-column: 2; grid-row: 1; }
   .automation-run-list details > div { padding-left: 0; }
 }
+
+/* Independent task cards: one attention signal, neutral metadata and status. */
+.automation-list-page > header { align-items: center; margin-bottom: 28px; }
+.automation-list-page .daily-job-list { display: grid; gap: 12px; padding: 0; border: 0; background: transparent; }
+.automation-list-page .daily-job-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-card); corner-shape: squircle; box-shadow: none; background: var(--surface); align-items: start; }
+.automation-list-page .daily-job-card.needs-attention { border-left: 2px solid var(--primary); }
+.automation-list-page .daily-job-card:hover { box-shadow: none; background: var(--canvas); }
+.automation-list-page .job-copy { min-width: 0; }
+.automation-list-page .job-copy h2 { margin: 0; font-size: 14px; }
+.automation-task-name { padding: 0; border: 0; background: transparent; text-align: left; font-size: 14px; font-weight: 500; line-height: 1.6; color: var(--text); }
+.automation-task-name:hover { text-decoration: underline; text-underline-offset: 4px; }
+.automation-list-page .job-copy p { display: block; margin: 4px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.automation-list-page .job-actions { display: flex; align-items: center; gap: 12px; }
+.automation-list-page .job-status { padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 400; white-space: nowrap; }
+.automation-list-page .switch input:checked + span { background: #57534e; }
+.automation-list-page .switch input:disabled + span { opacity: .4; }
+.automation-task-more { display: inline-flex; align-items: center; justify-content: center; padding: 0; width: 24px; min-height: 28px; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--text-muted); }
+.automation-task-more:hover { background: var(--surface-muted); }
+.automation-task-more svg { width: 16px; height: 16px; }
+.automation-card-footer { grid-column: 1 / -1; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.automation-list-help { margin: 18px 0 0; color: var(--text-muted); font-size: 14px; }
+@media (max-width: 1100px) {
+  .automation-list-page .daily-job-card { gap: 8px 16px; }
+  .automation-list-page .job-actions { gap: 8px; }
+}
+
+/* Daily report workbench: primary editor and supporting tools in one surface. */
+.daily-workbench-detail .automation-tabs[hidden] { display: none; }
+.daily-workbench-detail > header { border-bottom: 1px solid var(--border); padding-bottom: 18px; }
+.daily-workbench-detail .automation-issues { border: 0; border-left: 2px solid var(--primary); border-radius: 0; background: transparent; }
+.daily-workbench-detail .automation-issues-heading { display: none; }
+.daily-workbench-detail .automation-issues li { border: 0; padding: 10px 0; }
+.daily-workbench-detail .automation-issues li button { color: var(--text); text-decoration: underline; }
+.daily-workbench.daily-detail > .daily-focus-card { padding: 0; border: 0; background: transparent; }
+.daily-workbench .daily-split-workspace { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 0; border: 1px solid var(--border); border-radius: var(--radius-panel); corner-shape: squircle; background: var(--surface); overflow: hidden; }
+.daily-workbench .editor-column { min-width: 0; padding: 24px; border-right: 1px solid var(--border); }
+.daily-workbench .editor-column h2, .daily-workbench .field-picker-heading h3 { margin: 0; font-size: 16px; font-weight: 500; }
+.daily-column-intro { margin: 6px 0 16px; color: var(--text-muted); font-size: 14px; }
+.daily-workbench .progressive-field-picker { display: flex; flex-direction: column; min-width: 0; height: auto; max-height: none; margin: 0; padding: 24px; border-radius: 0; background: transparent; overflow: visible; }
+.daily-workbench .field-picker-heading { display: block; margin-bottom: 18px; }
+.daily-workbench .field-picker-heading span { display: block; white-space: normal; margin-top: 6px; }
+.daily-workbench .field-label-title b { display: none; }
+.daily-workbench .report-editor { height: 360px; min-height: 240px; border-radius: var(--radius-control); corner-shape: squircle; }
+.daily-workbench .preview-action-group { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.daily-workbench .preview-action-group > label { flex-basis: 100%; margin-bottom: 6px; }
+.daily-workbench .focus-actions { margin-top: 16px; padding: 0; }
+.daily-workbench button.primary, .daily-workbench .insert-field-button, .daily-workbench .system-variable button { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.daily-workbench button.primary:hover, .daily-workbench .insert-field-button:hover { background: var(--surface-muted); }
+.daily-workbench .system-variable { border: 0; padding: 10px 0; }
+.daily-workbench .system-variable button { border: 0; text-decoration: underline; padding: 4px 6px; }
+.daily-inline-preview { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px; color: var(--text-muted); font-size: 14px; }
+.daily-inline-preview p, .daily-inline-preview h3 { margin: 0; font-size: 14px; }
+.daily-inline-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: var(--text); max-height: 360px; overflow-y: auto; }
+.daily-runs-toggle { border: 0; background: transparent; padding: 18px 0; color: var(--text); text-decoration: underline; }
+.daily-task-settings { width: min(620px,calc(100vw - 48px)); }
+.daily-task-settings .daily-focus-card { padding: 0; border: 0; }
+.daily-task-settings .surface-title { display: none; }
+.daily-task-settings .page { padding: 0; }
+.daily-notification-warning { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-left: 2px solid var(--primary); padding: 12px 16px; margin-bottom: 16px; font-size: 14px; }
+.daily-notification-warning button { border: 0; background: transparent; text-decoration: underline; color: var(--text); }
+.daily-workbench .field-token, .daily-workbench .date-token { background: transparent; color: var(--text); text-decoration: underline; }
+.daily-workbench .notice { background: transparent; color: var(--text); }
+.daily-workbench .notice > svg { display: none; }

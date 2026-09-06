@@ -6,7 +6,7 @@
   --font-supporting: 14px;
   --font-label: 14px;
   --control-height: 44px;
-  font-family: "Inter Variable", "Noto Sans SC Variable", "Microsoft YaHei UI", sans-serif;
+  font-family: var(--font-ui);
   font-size: var(--font-body);
 }
 body { min-width: 0; line-height: 1.5; }

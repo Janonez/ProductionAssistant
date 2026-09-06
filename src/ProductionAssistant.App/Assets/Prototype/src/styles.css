@@ -16,7 +16,7 @@
   --radius-panel: 20px;
   color: var(--text);
   background: var(--canvas);
-  font-family: "Inter Variable", "Noto Sans SC Variable", "Microsoft YaHei UI", sans-serif;
+  font-family: var(--font-ui);
   font-synthesis: none;
 }
 
@@ -73,3 +73,12 @@ button { cursor: pointer; }
 
 @media (max-width: 1050px) { .page { padding: 34px 28px 64px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Rectangular controls and working surfaces use continuous corners.
+   Circular icons, switches and status pills retain their existing shapes. */
+:where(button, input:not([type="checkbox"]):not([type="radio"]), select, textarea,
+  .surface, .dialog, .daily-job-list, .daily-job-card, .automation-tabs,
+  .automation-issues, .automation-create-dialog, .job-context-menu,
+  .field-picker, .report-editor, .settings-dialog) {
+  corner-shape: squircle;
+}

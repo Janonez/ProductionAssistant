@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Editor, Extension, Node, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
+import { createFieldPill } from './FieldPill'
 import type { DailyField } from './types'
 
 export type DateInsertKind = 'date' | 'year' | 'month' | 'day'
@@ -19,13 +20,22 @@ const dateTokenLabel = (placeholder: string) => placeholder === datePlaceholders
 
 const FieldToken = Node.create({
   name: 'fieldToken', group: 'inline', inline: true, atom: true, selectable: true,
-  addAttributes: () => ({ placeholder: { default: '' }, label: { default: '' }, tooltip: { default: '' } }),
+  addAttributes: () => ({ placeholder: { default: '' }, label: { default: '' }, tooltip: { default: '' }, category: { default: '' }, name: { default: '' }, dateRangeSpec: { default: null }, businessId: { default: '' }, databaseId: { default: '' }, fieldId: { default: '' }, invalid: { default: false }, error: { default: '' } }),
+  addNodeView: () => ({node}) => {
+    const parts = String(node.attrs.label || '').split(' · ')
+    return createFieldPill({category:node.attrs.category || (parts.length>1?parts.shift():''),name:node.attrs.name || parts.join(' · '),title:node.attrs.error || node.attrs.tooltip,invalid:node.attrs.invalid})
+  },
   parseHTML: () => [{ tag: 'span[data-field-token]' }],
   renderHTML: ({ HTMLAttributes }) => ['span', mergeAttributes(HTMLAttributes, { 'data-field-token': '', class: 'field-token', contenteditable: 'false', title: HTMLAttributes.tooltip }), ['span', { class: 'field-icon' }, '◆'], ['span', { class: 'field-label' }, HTMLAttributes.label]]
 })
 const DateToken = Node.create({
   name: 'dateToken', group: 'inline', inline: true, atom: true, selectable: true,
   addAttributes: () => ({ placeholder: { default: datePlaceholders.date } }),
+  addNodeView: () => ({node}) => {
+    const view = createFieldPill({name:dateTokenLabel(node.attrs.placeholder)})
+    view.dom.classList.add('date-token')
+    return view
+  },
   parseHTML: () => [{ tag: 'span[data-date-token]' }],
   renderHTML: ({ HTMLAttributes }) => ['span', mergeAttributes(HTMLAttributes, { 'data-date-token': '', class: 'field-token date-token', contenteditable: 'false' }), ['span', { class: 'field-icon' }, '◆'], ['span', { class: 'field-label' }, dateTokenLabel(HTMLAttributes.placeholder)]]
 })
@@ -72,7 +82,7 @@ function textContent(text: string, fields: DailyField[]) {
   }) }
 }
 
-export function ReportTemplateEditor({ text, document, fields, insert, onChange, onInsertHandled }: { text: string; document: string; fields: DailyField[]; insert?: { value: DailyField | DateInsertKind; key: number }; onChange: (text: string, document: string) => void; onInsertHandled: () => void }) {
+export function ReportTemplateEditor({ text, document, fields, fieldErrors = [], insert, onChange, onInsertHandled }: { text: string; document: string; fields: DailyField[]; fieldErrors?: Array<{placeholder:string;message:string}>; insert?: { value: DailyField | DateInsertKind; key: number }; onChange: (text: string, document: string) => void; onInsertHandled: () => void }) {
   const host = useRef<HTMLDivElement>(null); const editor = useRef<Editor | undefined>(undefined); const initialized = useRef(false)
   useEffect(() => {
     let content
@@ -90,5 +100,17 @@ export function ReportTemplateEditor({ text, document, fields, insert, onChange,
     onChange(documentText(json), JSON.stringify(json))
     onInsertHandled()
   }, [insert?.key])
+  useEffect(() => {
+    const instance = editor.current
+    if (!instance) return
+    const transaction = instance.state.tr
+    instance.state.doc.descendants((node,pos) => {
+      if (node.type.name !== 'fieldToken') return
+      const error = fieldErrors.find(item => item.placeholder === node.attrs.placeholder)
+      if (node.attrs.invalid !== !!error || node.attrs.error !== (error?.message || ''))
+        transaction.setNodeMarkup(pos, undefined, {...node.attrs, invalid:!!error, error:error?.message || ''})
+    })
+    if (transaction.docChanged) instance.view.dispatch(transaction.setMeta('preventUpdate', true))
+  }, [fieldErrors])
   return <div className="report-editor" ref={host} />
 }
