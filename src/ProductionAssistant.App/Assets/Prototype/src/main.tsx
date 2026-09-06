@@ -19,5 +19,7 @@ import './settings-modal.css'
 import './report-center.css'
 import './database-viewer.css'
 import './polish.css'
+import './field-pill.css'
+import './control-refinements.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

@@ -22,6 +22,7 @@ public sealed class DailyReportJob
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "未命名日报";
+    public List<string> MetricSourceIds { get; set; } = [];
     public bool IsEnabled { get; set; }
     public string DraftTemplate { get; set; } = string.Empty;
     public string DraftTemplateDocument { get; set; } = string.Empty;
@@ -56,6 +57,7 @@ public sealed class DailyReportSourceBinding
 
 public sealed class DailyReportFieldDefinition
 {
+    public string DisplayName { get; set; } = string.Empty;
     public string Placeholder { get; set; } = string.Empty;
     public DailyReportFieldToken Token { get; set; } = new("", "", "", "", "");
 }
@@ -87,7 +89,8 @@ public sealed record DailyReportFieldToken(
     string CustomEndDate = "",
     string BusinessMetricId = "",
     string BusinessMetricName = "",
-    string DataGranularity = "");
+    string DataGranularity = "",
+    DateRangeSpec? DateRangeSpec = null);
 
 public sealed class DailyReportRunState
 {
@@ -129,7 +132,9 @@ public sealed record DailyReportBuildResult(
     int QueryCount = 0,
     int RequestCount = 0,
     int CacheHits = 0,
-    long ElapsedMilliseconds = 0);
+    long ElapsedMilliseconds = 0,
+    IReadOnlyList<DailyReportFieldError>? FieldErrors = null,
+    IReadOnlyDictionary<string, string>? FieldValues = null);
 public sealed record DailyReportSendResult(bool Succeeded, string Message, int Attempts = 1);
 public sealed record DailyReportViewResult(bool Succeeded, string Message, string Id = "", string Name = "");
 
@@ -142,3 +147,8 @@ public enum DailyReportExitCode
     NetworkFailure = 30,
     JobNotFound = 40
 }
+
+// Persist intent, never dates evaluated when a field was inserted.
+public sealed record DateRangeSpec(string Granularity, int YearOffset = 0);
+
+public sealed record DailyReportFieldError(string Placeholder, string Message);

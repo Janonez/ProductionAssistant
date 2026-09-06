@@ -980,17 +980,6 @@
 .field-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 10px; }
 .field-picker-heading h3 { flex: none; margin: 0; white-space: nowrap; }
 .field-picker-heading span { min-width: 0; overflow: hidden; color: #78716c; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.binding-list { display: flex; gap: 6px; margin: 0 0 10px; overflow-x: auto; padding-bottom: 2px; }
-.binding-list button {
-  min-height: 44px;
-  flex: none;
-  padding: 0 14px;
-  border: 1px solid #e7e5e4;
-  border-radius: 14px;
-  color: #57534e;
-  background: #fff;
-  font-size: 14px;
-}
 .progressive-field-picker label { gap: 7px; margin-bottom: 10px; color: #57534e; font-size: 14px; font-weight: 600; }
 .field-label-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .progressive-field-picker label b { color: #c2703d; }

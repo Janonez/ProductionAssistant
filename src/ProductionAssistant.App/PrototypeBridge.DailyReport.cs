@@ -41,7 +41,7 @@ internal sealed partial class PrototypeBridge
         var catalog = DatabaseSourceCatalog.Create(AppServices.DatabaseProvider.GetSources());
         return new
         {
-            job.Id, job.Name, job.SendTime,
+            job.Id, job.Name, job.SendTime, job.MetricSourceIds,
             isEnabled = DailyReportTaskScheduler.IsSchedulingAvailable && job.IsEnabled,
             schedulingAvailable = DailyReportTaskScheduler.IsSchedulingAvailable,
             validated = DailyReportTaskHandler.IsValidated(job),
@@ -70,6 +70,11 @@ internal sealed partial class PrototypeBridge
         var timeChanged = job.SendTime != sendTime;
         if (job.IsEnabled && timeChanged && !DailyReportTaskScheduler.IsSchedulingAvailable)
             job.IsEnabled = false;
+        if (payload.TryGetProperty("metricSourceIds", out var metricSources) && metricSources.ValueKind == JsonValueKind.Array)
+        {
+            var allowed = AppServices.DatabaseProvider.GetSources().Select(source => source.Id).ToHashSet(StringComparer.Ordinal);
+            job.MetricSourceIds = metricSources.EnumerateArray().Select(item => item.GetString() ?? "").Where(allowed.Contains).Distinct().ToList();
+        }
         job.Name = name;
         job.SendTime = time.ToString(@"hh\:mm");
         DailyReportSettingsStore.SaveJob(job);
@@ -129,13 +134,24 @@ internal sealed partial class PrototypeBridge
         var metric = BuildDailyBusinessMetrics(job, source, schema.Fields)
             .FirstOrDefault(item => item.Id == metricId)
             ?? throw new InvalidOperationException("请选择当前数据库支持的具体业务。");
-        var rangeKind = ReadString(payload, "rangeKind");
+        DateRangeSpec? dateRangeSpec = null;
+        if (payload.TryGetProperty("dateRangeSpec", out var spec) && spec.ValueKind == JsonValueKind.Object)
+        {
+            var granularity = ReadString(spec, "granularity");
+            if (!spec.TryGetProperty("yearOffset", out var offset) || !offset.TryGetInt32(out var yearOffset))
+                throw new InvalidOperationException("请选择年份。");
+            dateRangeSpec = new(granularity, yearOffset);
+            var validation = DatabaseDateRanges.Resolve(dateRangeSpec, DateOnly.FromDateTime(DateTime.Today));
+            if (!validation.Succeeded) throw new InvalidOperationException(validation.Message);
+        }
+        var rangeKind = dateRangeSpec?.Granularity switch
+        {
+            "day" => "day", "mtd" => "month", "ytd" => "year", "fullyear" => "current-year",
+            _ => ReadString(payload, "rangeKind")
+        };
         if (rangeKind is not ("day" or "current-month" or "month" or "current-year" or "year" or
             "last-year-to-date" or "last-year" or "specific-date" or "specific-month" or "custom"))
             throw new InvalidOperationException("请选择日期范围。");
-        var aggregateKind = ReadString(payload, "aggregateKind");
-        if (aggregateKind is not ("sum" or "value"))
-            throw new InvalidOperationException("请选择取值方式。");
         var customStartDate = ReadString(payload, "customStartDate");
         var customEndDate = ReadString(payload, "customEndDate");
         if (rangeKind is "specific-date" or "specific-month" && string.IsNullOrWhiteSpace(customStartDate))
@@ -143,7 +159,7 @@ internal sealed partial class PrototypeBridge
         if (rangeKind == "custom" &&
             (string.IsNullOrWhiteSpace(customStartDate) || string.IsNullOrWhiteSpace(customEndDate)))
             throw new InvalidOperationException("请选择开始和结束日期。");
-        var useExactMonth = metric.Granularity == "monthly" && rangeKind is "current-month" or "specific-month";
+        var useExactMonth = dateRangeSpec is null && metric.Granularity == "monthly" && rangeKind is "current-month" or "specific-month";
         var queryMode = useExactMonth ? "exact-match" : "date-range";
         await InvalidateDailyJobAsync(job);
         var binding = job.Sources.FirstOrDefault(item => item.DataSourceId == source.Id);
@@ -158,7 +174,7 @@ internal sealed partial class PrototypeBridge
             DatePropertyId: queryMode == "date-range" ? metric.DatePropertyId : "",
             DatePropertyName: queryMode == "date-range" ? metric.DatePropertyName : "",
             QueryRangeKind: rangeKind,
-            AggregateKind: aggregateKind,
+            AggregateKind: metric.DefaultAggregate,
             FilterPropertyId: metric.FilterPropertyId,
             FilterPropertyName: metric.FilterPropertyName,
             FilterOperator: string.IsNullOrWhiteSpace(metric.FilterPropertyId) ? "" : "equals",
@@ -173,13 +189,16 @@ internal sealed partial class PrototypeBridge
             CustomEndDate: customEndDate,
             BusinessMetricId: metric.Id,
             BusinessMetricName: metric.Name,
-            DataGranularity: metric.Granularity);
+            DataGranularity: metric.Granularity,
+            DateRangeSpec: dateRangeSpec);
         var editedPlaceholder = ReadString(payload, "placeholder");
         var edited = job.Fields.FirstOrDefault(field => field.Placeholder == editedPlaceholder);
         var placeholder = edited is null
             ? DailyReportSettingsStore.AddOrUpdateField(job, token)
             : edited.Placeholder;
         if (edited is not null) edited.Token = token;
+        var displayName = ReadString(payload, "displayName");
+        if (!string.IsNullOrWhiteSpace(displayName)) job.Fields.First(field => field.Placeholder == placeholder).DisplayName = displayName;
         DailyReportSettingsStore.SaveJob(job);
         return new { field = DailyFieldDto(job.Fields.First(field => field.Placeholder == placeholder)) };
     }
@@ -188,8 +207,8 @@ internal sealed partial class PrototypeBridge
     {
         var job = FindDailyJob(payload);
         var date = ReadDate(payload, "businessDate");
-        var result = await DailyReports.BuildAsync(job, job.DraftTemplate, date, cancellationToken);
-        return new { result.Succeeded, result.Message, result.Text };
+        var result = await DailyReports.PreviewAsync(job, job.DraftTemplate, date, cancellationToken);
+        return new { result.Succeeded, result.Message, result.Text, fieldErrors = result.FieldErrors ?? [], fieldValues = result.FieldValues };
     }
 
     private static async Task<object> TestDailyReportAsync(JsonElement payload, CancellationToken cancellationToken)
@@ -306,11 +325,23 @@ internal sealed partial class PrototypeBridge
         var metricId = ResolveBusinessMetricId(field.Token);
         var metricName = ResolveBusinessMetricName(field.Token);
         var aggregateLabel = field.Token.AggregateKind == "value" ? "取值" : "求和";
+        if (field.Token.DateRangeSpec is { } rangeSpec)
+        {
+            var scope = rangeSpec.Granularity switch { "day" => "日", "mtd" => "月累计", "ytd" => "年累计", "fullyear" => "全年", _ => "" };
+            var year = rangeSpec.YearOffset switch { 0 => "今年", -1 => "去年", -2 => "前年", < 0 => $"{-rangeSpec.YearOffset}年前", _ => $"{rangeSpec.YearOffset}年后" };
+            periodLabel = year + (rangeSpec.YearOffset != 0 && rangeSpec.Granularity != "fullyear" ? "同期" : "") + scope;
+        }
         var label = $"{periodLabel} · {metricName}";
         return new
         {
             field.Placeholder,
-            label = invalidField ? $"待迁移 · {field.Token.PropertyName}" : label,
+            businessId = field.Token.BusinessMetricId,
+            databaseId = field.Token.DataSourceId,
+            fieldId = field.Token.PropertyId,
+            category = periodLabel,
+            name = metricName,
+            field.Token.DateRangeSpec,
+            label = !string.IsNullOrWhiteSpace(field.DisplayName) ? field.DisplayName : invalidField ? $"待迁移 · {field.Token.PropertyName}" : label,
             tooltip = invalidField
                 ? "字段绑定不完整，请重新编辑"
                 : $"{field.Token.DataSourceName} · {metricName} · {periodLabel} · {aggregateLabel}",

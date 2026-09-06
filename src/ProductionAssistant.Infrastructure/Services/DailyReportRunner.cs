@@ -47,7 +47,8 @@ public sealed class DailyReportRunner
 
         record.Stage = "读取 Notion 并生成内容";
         DailyReportSettingsStore.AddRunRecord(record);
-        var build = await _service.BuildAsync(job, template, businessDate, cancellationToken);
+        var build = await _service.BuildAsync(job, template, businessDate, cancellationToken,
+            source == "test" ? job.DraftTemplateDocument : job.ActiveTemplateDocument);
         if (!build.Succeeded)
         {
             if (alertOnFailure) await SendAlertAsync(NotificationEvents.ReportDataNotReady, job, businessDate, build.Message, cancellationToken);

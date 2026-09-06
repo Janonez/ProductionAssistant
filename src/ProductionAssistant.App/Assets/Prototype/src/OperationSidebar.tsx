@@ -4,13 +4,13 @@ type Module = {
 }
 
 export const modules: Module[] = [
-  { category: '文件处理', name: '挂网计划 PDF 导出' },
-  { category: '文件处理', name: '生产会资料拆分' },
+  { category: '数据文件处理', name: '挂网计划 PDF 导出' },
+  { category: '数据文件处理', name: '生产会资料拆分' },
+  { category: '数据文件处理', name: '文件统计汇总' },
   { category: '数据同步', name: '每日焊接数据模拟' },
   { category: '数据同步', name: '生产消息 Notion 入库' },
   { category: '数据同步', name: '数据库查看' },
-  { category: '自动化任务', name: '报表中心' },
-  { category: '自动化任务', name: '日报推送' },
+  { category: '自动化', name: '自动化任务' },
 ]
 
 const categories = [...new Set(modules.map(module => module.category))]
@@ -22,8 +22,8 @@ function routeFor(name: string) {
     case '每日焊接数据模拟': return 'daily-weld'
     case '生产消息 Notion 入库': return 'production-message'
     case '数据库查看': return 'database-viewer'
-    case '报表中心': return 'report-center'
-    case '日报推送': return 'daily-report'
+    case '文件统计汇总': return 'report-center'
+    case '自动化任务': return 'daily-report'
     default: return 'plan-pdf'
   }
 }
@@ -73,7 +73,7 @@ function NavIcon({ name }: { name: string }) {
       <path d="M4.2 7h15.6l-1.3 11H5.5L4.2 7Z" />
     </svg>
   }
-  if (name === '每日焊接数据模拟' || name === '日报推送') {
+  if (name === '每日焊接数据模拟' || name === '自动化任务') {
     return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
       <rect x="5" y="4.5" width="14" height="15" rx="2" />
       <path d="M8 3v3M16 3v3M5 9h14" />
@@ -93,7 +93,7 @@ function NavIcon({ name }: { name: string }) {
       <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
     </svg>
   }
-  if (name === '报表中心') {
+  if (name === '文件统计汇总') {
     return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4.5 19h15" />
       <rect className="report-bar report-bar-one" x="6" y="12" width="2.5" height="6" rx="0.5" />

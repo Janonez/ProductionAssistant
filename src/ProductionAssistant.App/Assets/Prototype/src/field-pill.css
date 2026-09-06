@@ -1,0 +1,21 @@
+/* Inline references are not form inputs. Geometry is shared in squircle.ts. */
+.field-pill.field-token, .field-pill { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 8px; margin: 0 2px; vertical-align: middle; line-height: 28px; border: 0; border-radius: 0; background: var(--surface-muted); color: var(--text); box-shadow: none; font-size: 14px; font-weight: 400; text-decoration: none; white-space: nowrap; }
+.field-pill span { font-size: inherit; line-height: inherit; }
+.field-pill .field-pill-category, .field-pill .field-pill-separator { color: var(--text-muted); }
+.field-pill.emphasize-category .field-pill-category { color: var(--text); }
+.field-pill.emphasize-category .field-pill-name { color: var(--text-muted); }
+.field-pill.is-invalid { box-shadow: inset 2px 0 var(--primary); }
+.daily-workbench-detail.page { max-width: none; padding: 24px 24px 40px; }
+.daily-workbench-detail .daily-workbench { max-width: none; }
+.daily-workbench-detail .daily-split-workspace { grid-template-columns: minmax(0,1.5fr) minmax(320px,1fr); }
+.daily-workbench-detail .editor-column, .daily-workbench-detail .progressive-field-picker { padding: 24px; }
+.daily-workbench-detail .report-editor { height: clamp(400px,55vh,720px); min-height: 400px; }
+.daily-workbench-detail .notice, .daily-workbench-detail .daily-notification-warning { display: flex; width: 100%; flex-direction: row; flex-wrap: wrap; gap: 8px; align-items: center; }
+.date-range-selector fieldset { margin: 0 0 12px; padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.date-range-selector legend { margin-bottom: 8px; font-size: 14px; }
+.date-range-selector button { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-control); corner-shape: squircle; padding: 7px 10px; font-size: 14px; }
+.date-range-selector button[aria-pressed="true"] { background: var(--surface-muted); border-color: var(--text-muted); }
+.date-range-selector p { color: var(--text-muted); font-size: 14px; margin: 0 0 14px; }
+.daily-workbench-detail .daily-workbench { display: block; width: 100%; }
+
+.daily-workbench .system-variable { margin-top: 8px; }

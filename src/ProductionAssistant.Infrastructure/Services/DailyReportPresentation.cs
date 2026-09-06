@@ -61,6 +61,8 @@ public static class DailyReportPresentation
     public static string BusinessSection(string path)
     {
         var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length >= 2 && string.Equals(parts[0], "数据库", StringComparison.CurrentCultureIgnoreCase))
+            return parts[1];
         return parts.Length >= 3 ? parts[1] : parts.Length == 2 ? parts[0] : string.Empty;
     }
 

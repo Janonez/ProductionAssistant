@@ -29,6 +29,16 @@ for (const file of readdirSync(source).filter(name => name.endsWith('.css') && !
   }
 }
 
+// New UI must use the shared font token rather than a page-specific system font.
+for (const file of readdirSync(source).filter(name => /\.(css|tsx)$/.test(name) && name !== 'production-message.css')) {
+  const text = readFileSync(new URL(file, source), 'utf8')
+  for (const match of text.matchAll(/font-family\s*:\s*([^;}]+)/g)) {
+    if (file !== 'typography.css' && !/^(?:inherit|var\(--font-ui\))$/.test(match[1].trim()))
+      errors.push(`${file}: font-family must inherit or use var(--font-ui)`)
+  }
+  if (/fontFamily\s*:/.test(text)) errors.push(`${file}: use the shared CSS font token instead of inline fontFamily`)
+}
+
 if (errors.length) {
   console.error(`Static UI font weights must be 400, 500, 600, or 700.\n${errors.join('\n')}`)
   process.exitCode = 1

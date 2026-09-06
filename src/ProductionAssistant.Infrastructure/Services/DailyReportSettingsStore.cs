@@ -120,6 +120,7 @@ public static class DailyReportSettingsStore
             field.Token.QueryMode == token.QueryMode &&
             field.Token.DatePropertyId == token.DatePropertyId &&
             field.Token.QueryRangeKind == token.QueryRangeKind &&
+            field.Token.DateRangeSpec == token.DateRangeSpec &&
             field.Token.FilterPropertyId == token.FilterPropertyId &&
             field.Token.FilterValue == token.FilterValue &&
             field.Token.ExactMatchPropertyId == token.ExactMatchPropertyId);

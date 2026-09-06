@@ -1,6 +1,7 @@
+import { MessageTemplatePage } from "./MessageTemplatePage";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { AlertTriangle, ArrowLeft, ArrowRight, Bot, Clock3, FileText, LoaderCircle, Plus, RotateCw, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Ellipsis, FileText, LoaderCircle, Plus, RotateCw, Trash2 } from "lucide-react";
 import { invoke } from "./bridge";
 import type { AutomationTaskSummary } from "./types";
 import { automationTaskTypes, findAutomationTaskType, type AutomationRunView, type AutomationTaskTypeDefinition } from "./automationTaskTypes";
@@ -13,7 +14,7 @@ const errorNotice = (error: unknown): NoticeValue => ({
   message: error instanceof Error ? error.message : String(error),
 });
 
-export function AutomationPage() {
+export function AutomationPage({ openSettings }: { openSettings?: () => void }) {
   const [tasks, setTasks] = useState<AutomationTaskSummary[]>([]);
   const [selected, setSelected] = useState<AutomationTaskSummary>();
   const [focusStep, setFocusStep] = useState("");
@@ -84,7 +85,7 @@ export function AutomationPage() {
 
   if (selected) {
     const definition = findAutomationTaskType(selected.taskType);
-    if (definition) return <AutomationTaskDetail task={selected} definition={definition} focusStep={focusStep} notice={notice} refresh={refresh} back={() => {
+    if (definition) return <AutomationTaskDetail openSettings={openSettings} task={selected} definition={definition} focusStep={focusStep} notice={notice} refresh={refresh} back={() => {
       setSelected(undefined);
       setFocusStep("");
       setNotice(undefined);
@@ -92,32 +93,32 @@ export function AutomationPage() {
     }} />;
   }
 
-  return <div className="page daily-page">
+  return <div className="page daily-page automation-list-page">
     <header>
-      <div><h1>自动化任务</h1><p>不同任务保留各自配置和业务逻辑，由统一外壳负责启停与进入配置。</p></div>
+      <div><h1>自动化任务</h1><p>管理定时推送与自动填报，查看任务配置和运行情况。</p></div>
       <div className="header-actions">
         <button className="primary" onClick={() => setCreateOpen(true)}><Plus />新建任务</button>
       </div>
     </header>
     {notice && <div className={`notice ${notice.tone}`} role="status"><div><strong>{notice.title}</strong><span>{notice.message}</span></div></div>}
-    <section className="daily-job-list">
-      {tasks.map((task) => <article className="daily-job-card" key={`${task.taskType}:${task.id}`}
+    <section className="daily-job-list" aria-label="任务列表">
+      {tasks.map((task) => <article className={`daily-job-card${["incomplete", "pending-test", "schedule-error"].includes(task.status) ? " needs-attention" : ""}`} key={`${task.taskType}:${task.id}`}
         onClick={() => setSelected(task)} onContextMenu={(event) => {
           event.preventDefault();
           setMenu({ task, x: Math.min(event.clientX, window.innerWidth - 176), y: Math.min(event.clientY, window.innerHeight - 58) });
         }}>
-        <div className="job-icon"><FileText /></div>
-        <div className="job-copy"><div><h2>{task.name}</h2><span className={`job-status ${task.status}`}>{statusLabel(task.status)}</span></div>
-          <p><Clock3 />{task.schedule}<span>·</span><Bot />{task.connectionStatus}</p>
-          <small>{task.taskTypeName} · {task.lastRun}</small>
+        <div className="job-copy"><h2><button type="button" className="automation-task-name" onClick={(event) => { event.stopPropagation(); setSelected(task); }}>{task.name || "未命名任务"}</button></h2>
+          <p>{task.taskTypeName} · {task.schedule} · {task.connectionStatus}</p>
         </div>
-        <div className="job-actions" onClick={(event) => event.stopPropagation()}><label className="switch"><input type="checkbox"
-          checked={task.isEnabled} disabled={!task.schedulingAvailable || busy === task.id}
+        <div className="job-actions" onClick={(event) => event.stopPropagation()}><span className={`job-status ${task.status}`}>{statusLabel(task.status)}</span><label className="switch"><input type="checkbox"
+          aria-label={`启用${task.name || "未命名任务"}`} checked={task.isEnabled} disabled={!task.schedulingAvailable || busy === task.id}
           title={task.schedulingAvailable ? undefined : "Development 环境默认不启用定时任务"}
-          onChange={() => toggle(task)} /><span /></label></div>
+          onChange={() => toggle(task)} /><span /></label><button type="button" className="automation-task-more" aria-label={`${task.name || "未命名任务"}的更多操作`} aria-haspopup="menu" onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); setMenu({ task, x: Math.min(rect.left, window.innerWidth - 176), y: Math.min(rect.bottom + 4, window.innerHeight - 58) }); }}><Ellipsis /></button></div>
+        <div className="automation-card-footer">最近运行：{task.lastRun}</div>
       </article>)}
       {!tasks.length && <div className="empty-state"><FileText /><h2>还没有自动化任务</h2><p>选择一种任务类型，新建后进入对应的专用配置界面。</p></div>}
     </section>
+    {!!tasks.length && <p className="automation-list-help">点击任务名称进入配置。配置完成后，可开启定时运行。</p>}
     {menu && <div className="job-context-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
       <button className="danger-quiet" role="menuitem" disabled={menu.task.isEnabled || busy === menu.task.id}
         onClick={() => { setDeleteTarget(menu.task); setMenu(undefined); }}><Trash2 />{menu.task.isEnabled ? "停用后可删除" : "删除任务"}</button>
@@ -134,7 +135,8 @@ export function AutomationPage() {
   </div>;
 }
 
-function AutomationTaskDetail({ task, definition, focusStep, notice, refresh, back }: {
+function AutomationTaskDetail({ openSettings, task, definition, focusStep, notice, refresh, back }: {
+  openSettings?: () => void;
   task: AutomationTaskSummary;
   definition: AutomationTaskTypeDefinition;
   focusStep: string;
@@ -143,6 +145,7 @@ function AutomationTaskDetail({ task, definition, focusStep, notice, refresh, ba
   back: () => void;
 }) {
   const [tab, setTab] = useState(focusStep ? definition.resolveSection(focusStep) : "basics");
+  const isDaily = task.taskType === "daily_report";
   const [runs, setRuns] = useState<AutomationRunView[]>();
   const [runsError, setRunsError] = useState("");
   const [loadingRuns, setLoadingRuns] = useState(false);
@@ -174,7 +177,7 @@ function AutomationTaskDetail({ task, definition, focusStep, notice, refresh, ba
     finally { setLoadingRuns(false); }
   }
 
-  useEffect(() => { if (tab === "runs" && runs === undefined) loadRuns(); }, [tab, runs]);
+  useEffect(() => { if ((tab === "runs") && runs === undefined) loadRuns(); }, [tab, runs]);
 
   function moveTab(event: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -185,9 +188,11 @@ function AutomationTaskDetail({ task, definition, focusStep, notice, refresh, ba
     document.getElementById(`automation-tab-${tabs[next].id}`)?.focus();
   }
 
+  if (isDaily) return <MessageTemplatePage id={task.id} back={back} changed={refresh} openSettings={openSettings} />;
+
   return <div className="page daily-page automation-detail">
     <header>
-      <div><button className="back-link" onClick={back}><ArrowLeft />返回任务列表</button><h1>{task.name || "未命名任务"}</h1><p>{task.taskTypeName} · {task.schedule}</p></div>
+      <div ><button className="back-link" aria-label="返回任务列表" onClick={back}><ArrowLeft />返回任务列表</button><h1 title={task.name || "未命名任务"}>{task.name || "未命名任务"}</h1><p>{task.taskTypeName} · {task.schedule}</p></div>
       <span className={`job-status ${task.status}`}>{statusLabel(task.status)}</span>
     </header>
     <div className="automation-tabs" role="tablist" aria-label="任务详情">
@@ -195,18 +200,20 @@ function AutomationTaskDetail({ task, definition, focusStep, notice, refresh, ba
         aria-selected={tab === item.id} aria-controls={`automation-panel-${item.id}`} tabIndex={tab === item.id ? 0 : -1}
         onClick={() => { setTab(item.id); if (item.id === "basics") refresh().catch(() => undefined); }} onKeyDown={event => moveTab(event, index)}>{item.label}</button>)}
     </div>
+    <div>
     {notice && <div className={`notice ${notice.tone}`} role="status"><div><strong>{notice.title}</strong><span>{notice.message}</span></div></div>}
     {!!issues.length && <section className="automation-issues" aria-labelledby="automation-issues-title">
       <div className="automation-issues-heading"><AlertTriangle /><div><h2 id="automation-issues-title">配置问题</h2><p>完成以下项目后才能安全启用任务。</p></div><span>{issues.length} 项</span></div>
-      <ul>{issues.map(issue => <li key={issue.id}><div><strong>{issue.title}</strong><span>{issue.message}</span></div><button type="button" onClick={() => setTab(issue.section)}>前往{tabs.find(item => item.id === issue.section)?.label || "处理"}<ArrowRight /></button></li>)}</ul>
+      <ul>{issues.map(issue => <li key={issue.id}><div><strong>{issue.title}</strong><span>{issue.message}</span></div><button type="button" onClick={() => { setTab(issue.section); }}>前往{tabs.find(item => item.id === issue.section)?.label || "处理"}<ArrowRight /></button></li>)}</ul>
     </section>}
     <div className="automation-tab-panel" role="tabpanel" id={`automation-panel-${tab}`} aria-labelledby={`automation-tab-${tab}`}>
-      <div hidden={tab === "runs"}>{definition.renderEditor({ id: task.id, section: tab, navigate: setTab, changed: () => { refresh().catch(() => undefined); } })}</div>
-      {tab === "runs" && <section className="surface automation-runs"><div className="automation-runs-heading"><div><h2>运行记录</h2><p>记录仍由当前任务 Handler 维护，Shell 只负责统一展示。</p></div><button className="secondary" disabled={loadingRuns} onClick={loadRuns}>{loadingRuns ? <LoaderCircle className="spin" /> : <RotateCw />}刷新</button></div>
+      <div hidden={tab === "runs"}>{definition.renderEditor({ id: task.id, section: tab, openSettings, navigate: setTab, changed: () => { refresh().catch(() => undefined); } })}</div>
+      {(tab === "runs") && <section className="surface automation-runs"><div className="automation-runs-heading"><div><h2>运行记录</h2><p>查看任务执行结果和错误详情。</p></div><button className="secondary" disabled={loadingRuns} onClick={loadRuns}>{loadingRuns ? <LoaderCircle className="spin" /> : <RotateCw />}刷新</button></div>
         {runsError && <div className="notice error" role="alert"><div><strong>运行记录读取失败</strong><span>{runsError}</span></div></div>}
         <div className="automation-run-list">{runs?.map(run => <details key={run.id}><summary><span>{run.time}</span><span>{run.source}</span><strong>{run.title}</strong><b className={run.error ? "error-text" : ""}>{run.status}</b></summary><div>{run.details.map(detail => <p key={detail}>{detail}</p>)}{run.error && <p className="run-error">错误：{run.error}</p>}</div></details>)}</div>
         {!loadingRuns && runs && !runs.length && <p className="automation-empty">暂无运行记录</p>}
       </section>}
+    </div>
     </div>
   </div>;
 }

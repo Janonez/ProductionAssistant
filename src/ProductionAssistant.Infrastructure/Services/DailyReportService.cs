@@ -26,13 +26,14 @@ public sealed partial class DailyReportService
         DailyReportJob settings,
         string template,
         DateTime businessDate,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? templateDocument = null)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var metrics = new BuildMetrics();
         try
         {
-            var result = await BuildCoreAsync(settings, template, businessDate, metrics, cancellationToken);
+            var result = await BuildCoreAsync(settings, template, businessDate, metrics, cancellationToken, templateDocument);
             return result with
             {
                 QueryCount = metrics.QueryCount,
@@ -51,20 +52,67 @@ public sealed partial class DailyReportService
         }
     }
 
+    // Preview can show the unaffected fields, but a failed build is never sendable.
+    public async Task<DailyReportBuildResult> PreviewAsync(DailyReportJob settings, string template,
+        DateTime businessDate, CancellationToken cancellationToken = default)
+    {
+        var result = await BuildAsync(settings, template, businessDate, cancellationToken);
+        if (result.Succeeded) return result;
+        var errors = new List<DailyReportFieldError>();
+        var partial = template;
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var field in settings.Fields.Where(field => !string.IsNullOrWhiteSpace(field.Placeholder) && template.Contains(field.Placeholder, StringComparison.Ordinal)))
+        {
+            var value = await BuildAsync(settings, field.Placeholder, businessDate, cancellationToken, settings.DraftTemplateDocument);
+            if (!value.Succeeded) errors.Add(new(field.Placeholder, value.Message));
+            else values[field.Placeholder] = value.Text;
+            partial = partial.Replace(field.Placeholder, value.Succeeded ? value.Text : $"[无法取数：{field.Token.PropertyName}]", StringComparison.Ordinal);
+        }
+        if (errors.Count == 0) return result;
+        var expanded = await BuildAsync(settings, partial, businessDate, cancellationToken);
+        return result with { Text = expanded.Succeeded ? expanded.Text : partial, FieldErrors = errors, FieldValues = values };
+    }
+
     private async Task<DailyReportBuildResult> BuildCoreAsync(
         DailyReportJob settings,
         string template,
         DateTime businessDate,
         BuildMetrics metrics,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? templateDocument)
     {
         if (string.IsNullOrWhiteSpace(template))
             return new(false, "日报模板为空。", string.Empty);
 
+        var documentSpecs = new Dictionary<string, DateRangeSpec>();
+        templateDocument ??= template == settings.DraftTemplate ? settings.DraftTemplateDocument
+            : template == settings.ActiveTemplate ? settings.ActiveTemplateDocument : "";
+        if (!string.IsNullOrWhiteSpace(templateDocument))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(templateDocument);
+                ReadSpecs(document.RootElement);
+            }
+            catch (JsonException) { return new(false, "消息模板中的字段配置无法读取。", ""); }
+        }
+        void ReadSpecs(JsonElement node)
+        {
+            if (node.TryGetProperty("type", out var type) && type.GetString() == "fieldToken" &&
+                node.TryGetProperty("attrs", out var attrs) && attrs.TryGetProperty("placeholder", out var marker) &&
+                attrs.TryGetProperty("dateRangeSpec", out var spec) && spec.ValueKind == JsonValueKind.Object)
+            {
+                var value = JsonSerializer.Deserialize<DateRangeSpec>(spec.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (value is not null && marker.GetString() is { } key) documentSpecs[key] = value;
+            }
+            if (node.TryGetProperty("content", out var children) && children.ValueKind == JsonValueKind.Array)
+                foreach (var child in children.EnumerateArray()) ReadSpecs(child);
+        }
         var tokens = settings.Fields
             .Where(field => !string.IsNullOrWhiteSpace(field.Placeholder) &&
                             template.Contains(field.Placeholder, StringComparison.Ordinal))
-            .Select(field => (Marker: field.Placeholder, field.Token))
+            .Select(field => (Marker: field.Placeholder, Token: documentSpecs.TryGetValue(field.Placeholder, out var spec)
+                ? field.Token with { DateRangeSpec = spec } : field.Token))
             .ToList();
         foreach (Match match in TokenRegex().Matches(template))
         {
@@ -279,7 +327,7 @@ public sealed partial class DailyReportService
         {
             return new(false, "today() 中的日期显示格式无效。", string.Empty);
         }
-        return new(true, "日报生成成功。", output);
+        return new(true, "日报生成成功。", output, FieldValues: replacements);
     }
 
     public async Task<DailyReportSendResult> SendAsync(
@@ -445,6 +493,8 @@ public sealed partial class DailyReportService
         DailyReportFieldToken token,
         DateTime businessDate)
     {
+        if (token.QueryMode == "date-range" && token.DateRangeSpec is not null)
+            return DatabaseDateRanges.Resolve(token.DateRangeSpec, DateOnly.FromDateTime(businessDate));
         var kind = token.QueryMode == "date-range" && !string.IsNullOrWhiteSpace(token.QueryRangeKind)
             ? token.QueryRangeKind
             : token.PeriodKind;
@@ -524,7 +574,7 @@ public sealed partial class DailyReportService
         DailyReportFieldToken token)
     {
         var property = page.Fields.FirstOrDefault(candidate =>
-            candidate.Id == token.PropertyId || candidate.Name == token.PropertyName);
+            candidate.Id == token.PropertyId || (token.DateRangeSpec is null && candidate.Name == token.PropertyName));
         if (property is null)
             return (false, $"字段“{token.DataSourceName}.{token.PropertyName}”已不存在。", null, string.Empty);
         var type = property.Type;

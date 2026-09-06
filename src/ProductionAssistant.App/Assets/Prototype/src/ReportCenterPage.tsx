@@ -59,7 +59,7 @@ export function ReportCenterPage() {
   const progressPercent = progress?.total ? Math.round(progress.current / progress.total * 100) : 0
 
   return <div className="page report-center-page">
-    <header><div><h1>报表中心</h1><p>手动选择统计日期，自动采集加工日报并生成设备实开台时汇总。</p></div><span className={`report-auth ${state?.authenticated ? 'ready' : ''}`}>{state?.authenticated ? <CheckCircle2 /> : <AlertCircle />}{state?.authenticated ? '登录可用' : '待验证登录'}</span></header>
+    <header><div><h1>文件统计汇总</h1><p>手动选择统计日期，自动采集加工日报并生成设备实开台时汇总。</p></div><span className={`report-auth ${state?.authenticated ? 'ready' : ''}`}>{state?.authenticated ? <CheckCircle2 /> : <AlertCircle />}{state?.authenticated ? '登录可用' : '待验证登录'}</span></header>
 
     <section className="report-workspace">
       <div className="report-period">

@@ -65,7 +65,7 @@ export function App() {
               exit={reduced ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: .2 }}
             >
-              {route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage /> : <ReportCenterPage />}
+              {route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}
             </motion.div>
           </AnimatePresence></main></div>}
     </div>

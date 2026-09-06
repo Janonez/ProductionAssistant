@@ -56,6 +56,23 @@ public sealed class DatabaseQueryService(IDatabaseQueryProvider provider)
 public static class DatabaseDateRanges
 {
     public static (bool Succeeded, string Message, DateOnly Start, DateOnly End) Resolve(
+        ProductionAssistant.Models.DateRangeSpec spec, DateOnly businessDate)
+    {
+        var year = (long)businessDate.Year + spec.YearOffset;
+        if (year is < 1 or > 9999) return (false, "年份偏移超出有效日期范围。", default, default);
+        // Feb 29 maps to Feb 28 in a non-leap target year.
+        var shifted = businessDate.AddYears(spec.YearOffset);
+        return spec.Granularity switch
+        {
+            "day" => (true, "", shifted, shifted),
+            "mtd" => (true, "", new DateOnly((int)year, shifted.Month, 1), shifted),
+            "ytd" => (true, "", new DateOnly((int)year, 1, 1), shifted),
+            "fullyear" => (true, "", new DateOnly((int)year, 1, 1), new DateOnly((int)year, 12, 31)),
+            _ => (false, "不支持的统计口径。", default, default)
+        };
+    }
+
+    public static (bool Succeeded, string Message, DateOnly Start, DateOnly End) Resolve(
         string kind,
         DateOnly businessDate,
         DateOnly? customStart = null,
