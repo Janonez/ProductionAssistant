@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from './bridge'
+import { clearDailyFieldCache } from './dailyFieldCache'
 
 type SettingsPage = 'connection' | 'notification' | 'data' | 'about'
 type SettingsRule = { eventType: string; name: string; enabled: boolean; level: string }
@@ -75,6 +76,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     setMessage('')
     try {
       const result = await invoke<SettingsResult>(operation, payload, 60000)
+      if (operation === 'settings.refreshDataSources' || operation === 'settings.saveConnection') clearDailyFieldCache(true)
       setState(result.state)
       setMessage(result.message)
       return true

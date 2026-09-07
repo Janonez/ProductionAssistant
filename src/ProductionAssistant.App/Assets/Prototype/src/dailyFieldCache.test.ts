@@ -30,3 +30,15 @@ it("reuses persisted results after the memory cache is cleared, and refreshes ex
   await getDailyMetrics("job", "a", true);
   expect(invoke).toHaveBeenCalledTimes(2);
 });
+
+it('invalidates every database field directory when settings refreshes databases', async () => {
+  invoke.mockResolvedValue({metrics: []});
+  await getDailyMetrics('job', 'a');
+  await getDailyMetrics('job', 'b');
+  localStorage.setItem('unrelated', 'keep');
+  clearDailyFieldCache(true);
+  await getDailyMetrics('job', 'a');
+  await getDailyMetrics('job', 'b');
+  expect(invoke).toHaveBeenCalledTimes(4);
+  expect(localStorage.getItem('unrelated')).toBe('keep');
+});

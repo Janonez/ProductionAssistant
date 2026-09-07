@@ -284,6 +284,7 @@ function updatePopoverPosition() {
     return;
   }
 
+  const viewport = trigger.ownerDocument.defaultView || window;
   const triggerRect =
     trigger.getBoundingClientRect();
 
@@ -300,7 +301,7 @@ function updatePopoverPosition() {
   const viewportPadding = 12;
 
   const spaceBelow =
-    window.innerHeight -
+    viewport.innerHeight -
     triggerRect.bottom -
     viewportPadding;
 
@@ -351,13 +352,13 @@ function updatePopoverPosition() {
   if (
     top +
       panelHeight >
-    window.innerHeight -
+    viewport.innerHeight -
       viewportPadding
   ) {
     top =
       Math.max(
         viewportPadding,
-        window.innerHeight -
+        viewport.innerHeight -
           panelHeight -
           viewportPadding,
       );
@@ -369,11 +370,11 @@ function updatePopoverPosition() {
   if (
     left +
       panelWidth >
-    window.innerWidth -
+    viewport.innerWidth -
       viewportPadding
   ) {
     left =
-      window.innerWidth -
+      viewport.innerWidth -
       panelWidth -
       viewportPadding;
   }
@@ -423,28 +424,29 @@ useEffect(() => {
     return;
   }
 
+  const viewport = triggerRef.current?.ownerDocument.defaultView || window;
   function handleWindowChange() {
     updatePopoverPosition();
   }
 
-  window.addEventListener(
+  viewport.addEventListener(
     "resize",
     handleWindowChange,
   );
 
-  window.addEventListener(
+  viewport.addEventListener(
     "scroll",
     handleWindowChange,
     true,
   );
 
   return () => {
-    window.removeEventListener(
+    viewport.removeEventListener(
       "resize",
       handleWindowChange,
     );
 
-    window.removeEventListener(
+    viewport.removeEventListener(
       "scroll",
       handleWindowChange,
       true,
@@ -457,6 +459,7 @@ useEffect(() => {
 
 
   useEffect(() => {
+    const ownerDocument = wrapperRef.current?.ownerDocument || document;
     function handleOutsideClick(
       event: MouseEvent,
     ) {
@@ -494,23 +497,23 @@ useEffect(() => {
       }
     }
 
-    document.addEventListener(
+    ownerDocument.addEventListener(
       "mousedown",
       handleOutsideClick,
     );
 
-    document.addEventListener(
+    ownerDocument.addEventListener(
       "keydown",
       handleKeyDown,
     );
 
     return () => {
-      document.removeEventListener(
+      ownerDocument.removeEventListener(
         "mousedown",
         handleOutsideClick,
       );
 
-      document.removeEventListener(
+      ownerDocument.removeEventListener(
         "keydown",
         handleKeyDown,
       );
@@ -1095,7 +1098,7 @@ onClick={() => {
       {popover &&
         createPortal(
           popover,
-          document.body,
+          wrapperRef.current?.ownerDocument.body || document.body,
         )}
     </>
   );

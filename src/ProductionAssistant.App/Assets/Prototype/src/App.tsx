@@ -46,6 +46,7 @@ export function App() {
 
   const closeSettings = () => {
     setSettingsOpen(false)
+    window.dispatchEvent(new Event('production-settings-updated'))
     invoke('settings.close').catch(() => undefined)
   }
 
