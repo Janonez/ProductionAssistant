@@ -71,7 +71,91 @@ public sealed class DailyReportServiceTests
         Assert.False(result.Succeeded);
         Assert.Contains("有效=2", result.Text);
         Assert.Equal("{bad}", Assert.Single(result.FieldErrors!).Placeholder);
+        Assert.Equal(1, provider.QueryCount);
+        Assert.Equal(1, result.QueryCount);
+        Assert.Equal(1, result.RequestCount);
         Assert.False((await service.BuildAsync(job, "{good}{bad}", new DateTime(2026,9,1))).Succeeded);
+    }
+
+    [Fact]
+    public async Task Empty_day_preserves_month_and_year_without_requerying_and_next_preview_is_fresh()
+    {
+        var provider = new DateRangeProvider([RangePage("yesterday", "2026-09-06", 2, 0)]);
+        var service = new DailyReportService(database: provider);
+        var fields = new[] { "day", "month", "year" }
+            .Select(period => RangeField($"{{{period}}}", "weld", "焊接（吨）", period)).ToList();
+        var job = ViewJob("source", "生产数据库", fields);
+        var result = await service.PreviewAsync(job, "{day}/{month}/{year}", new DateTime(2026, 9, 7));
+        Assert.False(result.Succeeded);
+        Assert.Equal("{day}", Assert.Single(result.FieldErrors!).Placeholder);
+        Assert.EndsWith("/2/2", result.Text);
+        Assert.Equal(2, result.FieldValues!.Count);
+        Assert.Equal(1, provider.QueryCount);
+        Assert.Equal(1, result.RequestCount);
+        Assert.Equal(2, result.CacheHits);
+
+        var next = await service.PreviewAsync(job, "{day}/{month}/{year}", new DateTime(2026, 9, 6));
+        Assert.True(next.Succeeded, next.Message);
+        Assert.Equal("2/2/2", next.Text);
+        Assert.Equal(2, provider.QueryCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Sources_run_concurrently_with_three_slots_and_release_slots_on_cancellation(bool cancel)
+    {
+        using var started = new SemaphoreSlim(0);
+        using var release = new SemaphoreSlim(0);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var provider = new DateRangeProvider([RangePage("today", "2026-09-07", 2, 0)], async token =>
+        {
+            started.Release();
+            await release.WaitAsync(token);
+        });
+        var fields = Enumerable.Range(0, 5).Select(i =>
+        {
+            var field = RangeField($"{{field{i}}}", "weld", "焊接（吨）", "day");
+            field.Token = field.Token with { DataSourceId = $"source{i}" };
+            return field;
+        }).ToList();
+        var job = ViewJob("source0", "生产数据库", fields);
+        for (var i = 1; i < 5; i++)
+            job.Sources.Add(new DailyReportSourceBinding { DataSourceId = $"source{i}", DataSourceName = "生产数据库" });
+        var service = new DailyReportService(database: provider);
+        var build = service.BuildAsync(job, string.Join("/", fields.Select(field => field.Placeholder)),
+            new DateTime(2026, 9, 7), timeout.Token);
+        try
+        {
+            for (var i = 0; i < 3; i++) await started.WaitAsync(timeout.Token);
+            Assert.Equal(3, provider.QueryCount);
+            Assert.False(build.IsCompleted);
+            if (cancel)
+            {
+                timeout.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await build);
+            }
+            else
+            {
+                release.Release(5);
+                var result = await build;
+                Assert.True(result.Succeeded, result.Message);
+                Assert.Equal("2/2/2/2/2", result.Text);
+                Assert.Equal(5, result.QueryCount);
+                Assert.Equal(5, result.RequestCount);
+            }
+        }
+        finally
+        {
+            timeout.Cancel();
+            try { await build; } catch (OperationCanceledException) { }
+        }
+        release.Release(5);
+        using var retryTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var retry = await service.PreviewAsync(job, string.Join("/", fields.Select(field => field.Placeholder)),
+            new DateTime(2026, 9, 7), retryTimeout.Token);
+        Assert.True(retry.Succeeded, retry.Message);
+        Assert.Equal(5, retry.QueryCount);
     }
 
     [Fact]
@@ -714,9 +798,11 @@ public sealed class DailyReportServiceTests
             CancellationToken cancellationToken) => Task.FromResult(responseFactory(request));
     }
 
-    private sealed class DateRangeProvider(IReadOnlyList<DatabaseRecord> records) : IDatabaseQueryProvider
+    private sealed class DateRangeProvider(IReadOnlyList<DatabaseRecord> records,
+        Func<CancellationToken, Task>? beforeQuery = null) : IDatabaseQueryProvider
     {
-        public int QueryCount { get; private set; }
+        private int _queryCount;
+        public int QueryCount => _queryCount;
         public DateOnly StartDate { get; private set; }
         public DateOnly EndDate { get; private set; }
         public int ExactQueryCount { get; private set; }
@@ -729,13 +815,14 @@ public sealed class DailyReportServiceTests
             Task.FromResult<IReadOnlyList<DatabaseDatasetInfo>>([]);
         public Task<DatabaseRecordSet> QueryDatasetAsync(string sourceId, string datasetId, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("新字段不应查询 View。");
-        public Task<DatabaseRecordSet> QueryDateRangeAsync(string sourceId, string dateFieldId,
+        public async Task<DatabaseRecordSet> QueryDateRangeAsync(string sourceId, string dateFieldId,
             DateOnly startDate, DateOnly endDate, CancellationToken cancellationToken = default)
         {
-            QueryCount++;
+            Interlocked.Increment(ref _queryCount);
+            if (beforeQuery is not null) await beforeQuery(cancellationToken);
             StartDate = startDate;
             EndDate = endDate;
-            return Task.FromResult(new DatabaseRecordSet(true, "", "生产数据库", "日期范围", records, 1));
+            return new DatabaseRecordSet(true, "", "生产数据库", "日期范围", records, 1);
         }
         public Task<DatabaseRecordSet> QueryExactMatchAsync(string sourceId, string propertyId,
             DateOnly value, CancellationToken cancellationToken = default)
