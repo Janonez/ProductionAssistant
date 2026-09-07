@@ -26,5 +26,13 @@ export function getDailyMetrics(jobId: string, sourceId: string, refresh = false
   }
   return pending;
 }
-export function clearDailyFieldCache() { fields.clear(); }
+export function clearDailyFieldCache(includePersisted = false) {
+  fields.clear();
+  if (includePersisted) {
+    try {
+      Object.keys(localStorage).filter(key => key.startsWith('daily-field-cache-v1:'))
+        .forEach(key => localStorage.removeItem(key));
+    } catch { /* A disabled local store has no reusable entries. */ }
+  }
+}
 

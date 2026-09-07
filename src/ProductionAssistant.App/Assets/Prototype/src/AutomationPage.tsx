@@ -118,7 +118,7 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
       </article>)}
       {!tasks.length && <div className="empty-state"><FileText /><h2>还没有自动化任务</h2><p>选择一种任务类型，新建后进入对应的专用配置界面。</p></div>}
     </section>
-    {!!tasks.length && <p className="automation-list-help">点击任务名称进入配置。配置完成后，可开启定时运行。</p>}
+    {!!tasks.length && <p className="automation-list-help">点击任务名称进入配置。日报配置通知后即可开启，执行结果见运行记录。</p>}
     {menu && <div className="job-context-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
       <button className="danger-quiet" role="menuitem" disabled={menu.task.isEnabled || busy === menu.task.id}
         onClick={() => { setDeleteTarget(menu.task); setMenu(undefined); }}><Trash2 />{menu.task.isEnabled ? "停用后可删除" : "删除任务"}</button>

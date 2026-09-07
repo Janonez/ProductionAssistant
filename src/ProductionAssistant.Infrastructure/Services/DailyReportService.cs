@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -9,6 +9,8 @@ namespace ProductionAssistant.Services;
 
 public sealed partial class DailyReportService
 {
+    // Bound database work across previews and sends; pagination stays sequential in the provider.
+    private static readonly SemaphoreSlim SourceQueries = new(3);
     private readonly IDatabaseQueryProvider _database;
     private readonly HttpClient _dingTalkClient;
 
@@ -22,18 +24,23 @@ public sealed partial class DailyReportService
         _dingTalkClient = dingTalkClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     }
 
-    public async Task<DailyReportBuildResult> BuildAsync(
+    public Task<DailyReportBuildResult> BuildAsync(
         DailyReportJob settings,
         string template,
         DateTime businessDate,
         CancellationToken cancellationToken = default,
         string? templateDocument = null)
+        => BuildAsync(settings, template, businessDate, cancellationToken, templateDocument, false);
+
+    private async Task<DailyReportBuildResult> BuildAsync(
+        DailyReportJob settings, string template, DateTime businessDate,
+        CancellationToken cancellationToken, string? templateDocument, bool preview)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var metrics = new BuildMetrics();
         try
         {
-            var result = await BuildCoreAsync(settings, template, businessDate, metrics, cancellationToken, templateDocument);
+            var result = await BuildCoreAsync(settings, template, businessDate, metrics, cancellationToken, templateDocument, preview);
             return result with
             {
                 QueryCount = metrics.QueryCount,
@@ -53,25 +60,9 @@ public sealed partial class DailyReportService
     }
 
     // Preview can show the unaffected fields, but a failed build is never sendable.
-    public async Task<DailyReportBuildResult> PreviewAsync(DailyReportJob settings, string template,
+    public Task<DailyReportBuildResult> PreviewAsync(DailyReportJob settings, string template,
         DateTime businessDate, CancellationToken cancellationToken = default)
-    {
-        var result = await BuildAsync(settings, template, businessDate, cancellationToken);
-        if (result.Succeeded) return result;
-        var errors = new List<DailyReportFieldError>();
-        var partial = template;
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var field in settings.Fields.Where(field => !string.IsNullOrWhiteSpace(field.Placeholder) && template.Contains(field.Placeholder, StringComparison.Ordinal)))
-        {
-            var value = await BuildAsync(settings, field.Placeholder, businessDate, cancellationToken, settings.DraftTemplateDocument);
-            if (!value.Succeeded) errors.Add(new(field.Placeholder, value.Message));
-            else values[field.Placeholder] = value.Text;
-            partial = partial.Replace(field.Placeholder, value.Succeeded ? value.Text : $"[无法取数：{field.Token.PropertyName}]", StringComparison.Ordinal);
-        }
-        if (errors.Count == 0) return result;
-        var expanded = await BuildAsync(settings, partial, businessDate, cancellationToken);
-        return result with { Text = expanded.Succeeded ? expanded.Text : partial, FieldErrors = errors, FieldValues = values };
-    }
+        => BuildAsync(settings, template, businessDate, cancellationToken, null, true);
 
     private async Task<DailyReportBuildResult> BuildCoreAsync(
         DailyReportJob settings,
@@ -79,7 +70,8 @@ public sealed partial class DailyReportService
         DateTime businessDate,
         BuildMetrics metrics,
         CancellationToken cancellationToken,
-        string? templateDocument)
+        string? templateDocument,
+        bool preview)
     {
         if (string.IsNullOrWhiteSpace(template))
             return new(false, "日报模板为空。", string.Empty);
@@ -135,187 +127,258 @@ public sealed partial class DailyReportService
             }
         }
 
-        var replacements = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var sourceGroup in tokens.GroupBy(item => item.Token.DataSourceId))
+        var replacements = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+        var failures = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+        void Fail(IEnumerable<(string Marker, DailyReportFieldToken Token)> fields, string message)
         {
-            var binding = settings.Sources.FirstOrDefault(source => source.DataSourceId == sourceGroup.Key);
-            if (binding is null)
-                return new(false, $"找不到数据源“{sourceGroup.First().Token.DataSourceName}”的绑定。", string.Empty);
-
-            foreach (var rangeGroup in sourceGroup
-                         .Where(item => item.Token.QueryMode == "date-range")
-                         .GroupBy(item => item.Token.DatePropertyId))
-            {
-                if (string.IsNullOrWhiteSpace(rangeGroup.Key))
-                    return new(false, "日期范围字段配置不完整，请删除后重新插入。", string.Empty);
-                var ranges = rangeGroup
-                    .Select(item => ResolveRange(item.Token, businessDate))
-                    .ToArray();
-                if (ranges.Any(range => !range.Succeeded))
-                    return new(false, ranges.First(range => !range.Succeeded).Message, string.Empty);
-                var data = await _database.QueryDateRangeAsync(
-                    binding.DataSourceId,
-                    rangeGroup.Key,
-                    ranges.Min(range => range.Start),
-                    ranges.Max(range => range.End),
-                    cancellationToken);
-                metrics.Add(data, rangeGroup.Count() - 1);
-                if (!data.Succeeded)
-                    return new(false, data.Message, string.Empty);
-                if (data.Records.Count == 0)
-                    return new(false, $"“{binding.DataSourceName}”在所选日期范围内没有数据。", string.Empty);
-
-                foreach (var item in rangeGroup)
-                {
-                    IReadOnlyList<DatabaseRecord> selectedPages;
-                    if (item.Token.PeriodKind == "direct-month")
-                    {
-                        var monthPage = SelectBusinessMonthPage(data.Records, binding, businessDate);
-                        if (!monthPage.Succeeded)
-                            return new(false, monthPage.Message, string.Empty);
-                        selectedPages = [monthPage.Page!];
-                    }
-                    else
-                    {
-                        var periodPages = SelectPeriodPages(data.Records, binding, item.Token, businessDate);
-                        if (!periodPages.Succeeded)
-                            return new(false, periodPages.Message, string.Empty);
-                        selectedPages = periodPages.Pages;
-                    }
-                    var filteredPages = ApplyFilter(selectedPages, item.Token);
-                    if (!filteredPages.Succeeded)
-                        return new(false, filteredPages.Message, string.Empty);
-                    var value = ReadAggregateValue(filteredPages.Pages, item.Token);
-                    if (!value.Succeeded)
-                        return new(false, value.Message, string.Empty);
-                    try
-                    {
-                        replacements[item.Marker] = FormatValue(value.Value, value.Kind, item.Token.Format);
-                    }
-                    catch (FormatException)
-                    {
-                        return new(false,
-                            $"字段“{item.Token.DataSourceName}.{item.Token.PropertyName}”的显示格式无效。",
-                            string.Empty);
-                    }
-                }
-            }
-
-            foreach (var exactGroup in sourceGroup
-                         .Where(item => item.Token.QueryMode == "exact-match")
-                         .GroupBy(item => new
-                         {
-                             item.Token.ExactMatchPropertyId,
-                             item.Token.ExactMatchValueKind,
-                             item.Token.CustomStartDate
-                         }))
-            {
-                if (string.IsNullOrWhiteSpace(exactGroup.Key.ExactMatchPropertyId) ||
-                    exactGroup.Any(item => item.Token.ExactMatchPropertyType != "date" ||
-                                           item.Token.ExactMatchValueKind is not ("business-month" or "specific-month")))
-                    return new(false, "精确匹配字段配置不完整，请重新编辑。", string.Empty);
-                var matchValue = exactGroup.Key.ExactMatchValueKind == "specific-month" &&
-                                 DateOnly.TryParseExact(exactGroup.Key.CustomStartDate, "yyyy-MM-dd",
-                                     CultureInfo.InvariantCulture, DateTimeStyles.None, out var selectedMonth)
-                    ? new DateOnly(selectedMonth.Year, selectedMonth.Month, 1)
-                    : new DateOnly(businessDate.Year, businessDate.Month, 1);
-                var data = await _database.QueryExactMatchAsync(
-                    binding.DataSourceId, exactGroup.Key.ExactMatchPropertyId, matchValue, cancellationToken);
-                metrics.Add(data, exactGroup.Count() - 1);
-                if (!data.Succeeded)
-                    return new(false, data.Message, string.Empty);
-                if (data.Records.Count != 1)
-                    return new(false,
-                        $"“{binding.DataSourceName}”中与 {matchValue:yyyy-MM} 匹配的记录数为 {data.Records.Count}，需要恰好 1 条。",
-                        string.Empty);
-
-                foreach (var item in exactGroup)
-                {
-                    var filteredPages = ApplyFilter(data.Records, item.Token);
-                    if (!filteredPages.Succeeded)
-                        return new(false, filteredPages.Message, string.Empty);
-                    if (filteredPages.Pages.Count != 1)
-                        return new(false, $"字段“{item.Token.PropertyName}”的附加条件没有匹配到唯一记录。", string.Empty);
-                    var value = ReadAggregateValue(filteredPages.Pages, item.Token);
-                    if (!value.Succeeded)
-                        return new(false, value.Message, string.Empty);
-                    try
-                    {
-                        replacements[item.Marker] = FormatValue(value.Value, value.Kind, item.Token.Format);
-                    }
-                    catch (FormatException)
-                    {
-                        return new(false,
-                            $"字段“{item.Token.DataSourceName}.{item.Token.PropertyName}”的显示格式无效。",
-                            string.Empty);
-                    }
-                }
-            }
-
-            var legacyTokens = sourceGroup.Where(item => item.Token.QueryMode is not ("date-range" or "exact-match")).ToArray();
-            if (legacyTokens.Any(item => string.IsNullOrWhiteSpace(item.Token.ViewId)))
-                return new(false, "模板中存在没有绑定 View 的旧字段，请删除后重新插入。", string.Empty);
-            foreach (var viewGroup in legacyTokens.GroupBy(item => new
-                     {
-                         item.Token.ViewId,
-                         item.Token.ViewName
-                     }))
-            {
-                var data = await _database.QueryDatasetAsync(
-                    binding.DataSourceId, viewGroup.Key.ViewId, cancellationToken);
-                metrics.Add(data, viewGroup.Count() - 1);
-                if (!data.Succeeded)
-                    return new(false, data.Message, string.Empty);
-                var pages = data.Records;
-                if (pages.Count == 0)
-                    return new(false,
-                        $"“{binding.DataSourceName}”的“{viewGroup.Key.ViewName}”View 没有数据。",
-                        string.Empty);
-
-                foreach (var item in viewGroup)
-                {
-                    IReadOnlyList<DatabaseRecord> selectedPages = pages;
-                    if (SupportsPeriods(item.Token.ViewName))
-                    {
-                        var periodPages = SelectPeriodPages(pages, binding, item.Token, businessDate);
-                        if (!periodPages.Succeeded)
-                            return new(false, periodPages.Message, string.Empty);
-                        selectedPages = periodPages.Pages;
-                    }
-                    else if (item.Token.PeriodKind == "direct-month")
-                    {
-                        var monthPage = SelectBusinessMonthPage(pages, binding, businessDate);
-                        if (!monthPage.Succeeded)
-                            return new(false, monthPage.Message, string.Empty);
-                        selectedPages = [monthPage.Page!];
-                    }
-                    else if (string.IsNullOrWhiteSpace(item.Token.PeriodKind) &&
-                             TrySelectLegacyBusinessMonthPage(pages, binding, businessDate, out var monthPage))
-                    {
-                        if (monthPage is null)
-                            return new(false,
-                                $"“{binding.DataSourceName}”的“{item.Token.ViewName}”View 中没有 {businessDate:yyyy-MM} 月记录。",
-                                string.Empty);
-                        selectedPages = [monthPage];
-                    }
-                    var value = ReadAggregateValue(selectedPages, item.Token);
-                    if (!value.Succeeded)
-                        return new(false, value.Message, string.Empty);
-                    try
-                    {
-                        replacements[item.Marker] = FormatValue(value.Value, value.Kind, item.Token.Format);
-                    }
-                    catch (FormatException)
-                    {
-                        return new(false,
-                            $"字段“{item.Token.DataSourceName}.{item.Token.PropertyName}”的显示格式无效。",
-                            string.Empty);
-                    }
-                }
-            }
+            foreach (var field in fields) failures.TryAdd(field.Marker, message);
         }
+        await Task.WhenAll(tokens.GroupBy(item => item.Token.DataSourceId).Select(async sourceGroup =>
+        {
+            await SourceQueries.WaitAsync(cancellationToken);
+            try
+            {
+                var binding = settings.Sources.FirstOrDefault(source => source.DataSourceId == sourceGroup.Key);
+                if (binding is null)
+                {
+                    Fail(sourceGroup, $"找不到数据源“{sourceGroup.First().Token.DataSourceName}”的绑定。");
+                    return;
+                }
 
-        var output = replacements.Aggregate(template,
+                foreach (var rangeGroup in sourceGroup
+                             .Where(item => item.Token.QueryMode == "date-range")
+                             .GroupBy(item => item.Token.DatePropertyId))
+                {
+                    if (string.IsNullOrWhiteSpace(rangeGroup.Key))
+                    {
+                        Fail(rangeGroup, "日期范围字段配置不完整，请删除后重新插入。");
+                        continue;
+                    }
+                    var resolved = rangeGroup.Select(item => (Item: item, Range: ResolveRange(item.Token, businessDate))).ToArray();
+                    foreach (var invalid in resolved.Where(entry => !entry.Range.Succeeded))
+                        Fail([invalid.Item], invalid.Range.Message);
+                    var validItems = resolved.Where(entry => entry.Range.Succeeded).Select(entry => entry.Item).ToArray();
+                    var ranges = resolved.Where(entry => entry.Range.Succeeded).Select(entry => entry.Range).ToArray();
+                    if (ranges.Length == 0) continue;
+                    var data = await _database.QueryDateRangeAsync(
+                        binding.DataSourceId,
+                        rangeGroup.Key,
+                        ranges.Min(range => range.Start),
+                        ranges.Max(range => range.End),
+                        cancellationToken);
+                    metrics.Add(data, rangeGroup.Count() - 1);
+                    if (!data.Succeeded)
+                    {
+                        Fail(validItems, data.Message);
+                        continue;
+                    }
+                    if (data.Records.Count == 0)
+                    {
+                        Fail(validItems, $"“{binding.DataSourceName}”在所选日期范围内没有数据。");
+                        continue;
+                    }
+
+                    foreach (var item in validItems)
+                    {
+                        IReadOnlyList<DatabaseRecord> selectedPages;
+                        if (item.Token.PeriodKind == "direct-month")
+                        {
+                            var monthPage = SelectBusinessMonthPage(data.Records, binding, businessDate);
+                            if (!monthPage.Succeeded)
+                            {
+                                Fail([item], monthPage.Message);
+                                continue;
+                            }
+                            selectedPages = [monthPage.Page!];
+                        }
+                        else
+                        {
+                            var periodPages = SelectPeriodPages(data.Records, binding, item.Token, businessDate);
+                            if (!periodPages.Succeeded)
+                            {
+                                Fail([item], periodPages.Message);
+                                continue;
+                            }
+                            selectedPages = periodPages.Pages;
+                        }
+                        var filteredPages = ApplyFilter(selectedPages, item.Token);
+                        if (!filteredPages.Succeeded)
+                        {
+                            Fail([item], filteredPages.Message);
+                            continue;
+                        }
+                        var value = ReadAggregateValue(filteredPages.Pages, item.Token);
+                        if (!value.Succeeded)
+                        {
+                            Fail([item], value.Message);
+                            continue;
+                        }
+                        try
+                        {
+                            replacements[item.Marker] = FormatValue(value.Value, value.Kind, item.Token.Format);
+                        }
+                        catch (FormatException)
+                        {
+                            Fail([item], $"字段“{item.Token.DataSourceName}.{item.Token.PropertyName}”的显示格式无效。");
+                        }
+                    }
+                }
+
+                foreach (var exactGroup in sourceGroup
+                             .Where(item => item.Token.QueryMode == "exact-match")
+                             .GroupBy(item => new
+                             {
+                                 item.Token.ExactMatchPropertyId,
+                                 item.Token.ExactMatchValueKind,
+                                 item.Token.CustomStartDate
+                             }))
+                {
+                    if (string.IsNullOrWhiteSpace(exactGroup.Key.ExactMatchPropertyId) ||
+                        exactGroup.Any(item => item.Token.ExactMatchPropertyType != "date" ||
+                                               item.Token.ExactMatchValueKind is not ("business-month" or "specific-month")))
+                    {
+                        Fail(exactGroup, "精确匹配字段配置不完整，请重新编辑。");
+                        continue;
+                    }
+                    var matchValue = exactGroup.Key.ExactMatchValueKind == "specific-month" &&
+                                     DateOnly.TryParseExact(exactGroup.Key.CustomStartDate, "yyyy-MM-dd",
+                                         CultureInfo.InvariantCulture, DateTimeStyles.None, out var selectedMonth)
+                        ? new DateOnly(selectedMonth.Year, selectedMonth.Month, 1)
+                        : new DateOnly(businessDate.Year, businessDate.Month, 1);
+                    var data = await _database.QueryExactMatchAsync(
+                        binding.DataSourceId, exactGroup.Key.ExactMatchPropertyId, matchValue, cancellationToken);
+                    metrics.Add(data, exactGroup.Count() - 1);
+                    if (!data.Succeeded)
+                    {
+                        Fail(exactGroup, data.Message);
+                        continue;
+                    }
+                    if (data.Records.Count != 1)
+                    {
+                        Fail(exactGroup, $"“{binding.DataSourceName}”中与 {matchValue:yyyy-MM} 匹配的记录数为 {data.Records.Count}，需要恰好 1 条。");
+                        continue;
+                    }
+
+                    foreach (var item in exactGroup)
+                    {
+                        var filteredPages = ApplyFilter(data.Records, item.Token);
+                        if (!filteredPages.Succeeded)
+                        {
+                            Fail([item], filteredPages.Message);
+                            continue;
+                        }
+                        if (filteredPages.Pages.Count != 1)
+                        {
+                            Fail([item], $"字段“{item.Token.PropertyName}”的附加条件没有匹配到唯一记录。");
+                            continue;
+                        }
+                        var value = ReadAggregateValue(filteredPages.Pages, item.Token);
+                        if (!value.Succeeded)
+                        {
+                            Fail([item], value.Message);
+                            continue;
+                        }
+                        try
+                        {
+                            replacements[item.Marker] = FormatValue(value.Value, value.Kind, item.Token.Format);
+                        }
+                        catch (FormatException)
+                        {
+                            Fail([item], $"字段“{item.Token.DataSourceName}.{item.Token.PropertyName}”的显示格式无效。");
+                        }
+                    }
+                }
+
+                var legacyTokens = sourceGroup.Where(item => item.Token.QueryMode is not ("date-range" or "exact-match")).ToArray();
+                Fail(legacyTokens.Where(item => string.IsNullOrWhiteSpace(item.Token.ViewId)),
+                    "模板中存在没有绑定 View 的旧字段，请删除后重新插入。");
+                foreach (var viewGroup in legacyTokens.Where(item => !string.IsNullOrWhiteSpace(item.Token.ViewId)).GroupBy(item => new
+                         {
+                             item.Token.ViewId,
+                             item.Token.ViewName
+                         }))
+                {
+                    var data = await _database.QueryDatasetAsync(
+                        binding.DataSourceId, viewGroup.Key.ViewId, cancellationToken);
+                    metrics.Add(data, viewGroup.Count() - 1);
+                    if (!data.Succeeded)
+                    {
+                        Fail(viewGroup, data.Message);
+                        continue;
+                    }
+                    var pages = data.Records;
+                    if (pages.Count == 0)
+                    {
+                        Fail(viewGroup, $"“{binding.DataSourceName}”的“{viewGroup.Key.ViewName}”View 没有数据。");
+                        continue;
+                    }
+
+                    foreach (var item in viewGroup)
+                    {
+                        IReadOnlyList<DatabaseRecord> selectedPages = pages;
+                        if (SupportsPeriods(item.Token.ViewName))
+                        {
+                            var periodPages = SelectPeriodPages(pages, binding, item.Token, businessDate);
+                            if (!periodPages.Succeeded)
+                            {
+                                Fail([item], periodPages.Message);
+                                continue;
+                            }
+                            selectedPages = periodPages.Pages;
+                        }
+                        else if (item.Token.PeriodKind == "direct-month")
+                        {
+                            var monthPage = SelectBusinessMonthPage(pages, binding, businessDate);
+                            if (!monthPage.Succeeded)
+                            {
+                                Fail([item], monthPage.Message);
+                                continue;
+                            }
+                            selectedPages = [monthPage.Page!];
+                        }
+                        else if (string.IsNullOrWhiteSpace(item.Token.PeriodKind) &&
+                                 TrySelectLegacyBusinessMonthPage(pages, binding, businessDate, out var monthPage))
+                        {
+                            if (monthPage is null)
+                            {
+                                Fail([item], $"“{binding.DataSourceName}”的“{item.Token.ViewName}”View 中没有 {businessDate:yyyy-MM} 月记录。");
+                                continue;
+                            }
+                            selectedPages = [monthPage];
+                        }
+                        var value = ReadAggregateValue(selectedPages, item.Token);
+                        if (!value.Succeeded)
+                        {
+                            Fail([item], value.Message);
+                            continue;
+                        }
+                        try
+                        {
+                            replacements[item.Marker] = FormatValue(value.Value, value.Kind, item.Token.Format);
+                        }
+                        catch (FormatException)
+                        {
+                            Fail([item], $"字段“{item.Token.DataSourceName}.{item.Token.PropertyName}”的显示格式无效。");
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                SourceQueries.Release();
+            }
+        }));
+
+        var errors = tokens.Where(item => failures.ContainsKey(item.Marker))
+            .Select(item => new DailyReportFieldError(item.Marker, failures[item.Marker]))
+            .DistinctBy(error => error.Placeholder).ToArray();
+        if (errors.Length > 0 && !preview)
+            return new(false, errors[0].Message, string.Empty, FieldErrors: errors);
+        var displayValues = new Dictionary<string, string>(replacements, StringComparer.Ordinal);
+        foreach (var item in tokens.Where(item => failures.ContainsKey(item.Marker)))
+            displayValues[item.Marker] = $"[无法取数：{item.Token.PropertyName}]";
+
+        var output = displayValues.Aggregate(template,
             (current, replacement) => current.Replace(
                 replacement.Key, replacement.Value, StringComparison.Ordinal));
         try
@@ -327,7 +390,8 @@ public sealed partial class DailyReportService
         {
             return new(false, "today() 中的日期显示格式无效。", string.Empty);
         }
-        return new(true, "日报生成成功。", output, FieldValues: replacements);
+        return new(errors.Length == 0, errors.Length == 0 ? "日报生成成功。" : errors[0].Message,
+            output, FieldErrors: errors, FieldValues: replacements);
     }
 
     public async Task<DailyReportSendResult> SendAsync(
@@ -602,9 +666,12 @@ public sealed partial class DailyReportService
 
         public void Add(DatabaseRecordSet data, int cacheHits)
         {
-            QueryCount++;
-            RequestCount += data.RequestCount;
-            CacheHits += Math.Max(0, cacheHits);
+            lock (this)
+            {
+                QueryCount++;
+                RequestCount += data.RequestCount;
+                CacheHits += Math.Max(0, cacheHits);
+            }
         }
     }
 

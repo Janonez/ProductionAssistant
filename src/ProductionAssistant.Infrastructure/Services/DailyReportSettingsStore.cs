@@ -48,6 +48,19 @@ public static class DailyReportSettingsStore
         SaveCatalog(catalog);
     }
 
+    public static bool UpdateTemplate(DailyReportJob job, string text, string document)
+    {
+        if (job.DraftTemplate == text && job.DraftTemplateDocument == document) return false;
+        job.DraftTemplate = text;
+        job.DraftTemplateDocument = document;
+        // Keep the legacy execution snapshot in sync with saved content; testing is independent.
+        job.ActiveTemplate = text;
+        job.ActiveTemplateDocument = document;
+        job.ActiveTemplateVersion++;
+        job.ConfigurationValidated = false;
+        return true;
+    }
+
     public static bool DeleteJob(string jobId)
     {
         var catalog = LoadCatalog();

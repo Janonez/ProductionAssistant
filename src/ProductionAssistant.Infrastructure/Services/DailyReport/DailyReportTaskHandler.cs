@@ -88,13 +88,7 @@ public sealed class DailyReportTaskHandler(DailyReportRunner? runner = null)
         if (!installed.Succeeded) throw new InvalidOperationException(installed.Message);
         job.IsEnabled = true;
         DailyReportSettingsStore.SaveJob(job);
-        var catchUp = DateTime.Now.TimeOfDay >= TimeSpan.Parse(job.SendTime) &&
-            !DailyReportSettingsStore.LoadRunRecords(job.Id).Any(record =>
-                record.Source != "test" && record.Succeeded &&
-                record.BusinessDate == DateTime.Today.ToString("yyyy-MM-dd") &&
-                record.TemplateVersion == job.ActiveTemplateVersion);
-        var sentToday = catchUp && await _runner.RunAsync(job.Id) == DailyReportExitCode.Success;
-        return new(true, sentToday);
+        return new(true);
     }
 
     public async Task DeleteAsync(string taskId)
@@ -110,14 +104,10 @@ public sealed class DailyReportTaskHandler(DailyReportRunner? runner = null)
 
     public static (string Step, string Message)? MissingStep(DailyReportJob job)
     {
-        if (string.IsNullOrWhiteSpace(job.Name)) return ("basics", "请先填写任务名称。");
         var notification = NotificationSettingsStore.Load();
         if (!notification.DingTalkEnabled || string.IsNullOrWhiteSpace(notification.EncryptedWebhook) ||
             string.IsNullOrWhiteSpace(notification.EncryptedSecret))
             return ("notification", "请先在系统设置中完成通知渠道配置。");
-        if (notification.DingTalkConnected != true)
-            return ("notification", "请先在系统设置中测试钉钉通知。");
-        if (!IsValidated(job)) return ("template", "请先生成预览并完成测试发送。");
         return null;
     }
 
@@ -131,7 +121,7 @@ public sealed class DailyReportTaskHandler(DailyReportRunner? runner = null)
         var missing = MissingStep(job);
         var enabled = DailyReportTaskScheduler.IsSchedulingAvailable && job.IsEnabled;
         var status = enabled && !schedulerInstalled ? "schedule-error" : enabled ? "enabled" :
-            missing?.Step is "basics" or "notification" ? "incomplete" : !IsValidated(job) ? "pending-test" : "ready";
+            missing is not null ? "incomplete" : "ready";
         var notification = NotificationSettingsStore.Load();
         var connection = notification.DingTalkConnected == true ? "全局通知正常" :
             string.IsNullOrWhiteSpace(notification.EncryptedWebhook) ? "全局通知未配置" : "全局通知待检测";

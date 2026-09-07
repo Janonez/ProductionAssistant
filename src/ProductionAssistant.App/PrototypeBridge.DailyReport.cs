@@ -68,8 +68,6 @@ internal sealed partial class PrototypeBridge
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("任务名称不能为空。");
         if (!TimeSpan.TryParse(sendTime, out var time)) throw new InvalidOperationException("发送时间无效。");
         var timeChanged = job.SendTime != sendTime;
-        if (job.IsEnabled && timeChanged && !DailyReportTaskScheduler.IsSchedulingAvailable)
-            job.IsEnabled = false;
         if (payload.TryGetProperty("metricSourceIds", out var metricSources) && metricSources.ValueKind == JsonValueKind.Array)
         {
             var allowed = AppServices.DatabaseProvider.GetSources().Select(source => source.Id).ToHashSet(StringComparer.Ordinal);
@@ -78,7 +76,7 @@ internal sealed partial class PrototypeBridge
         job.Name = name;
         job.SendTime = time.ToString(@"hh\:mm");
         DailyReportSettingsStore.SaveJob(job);
-        if (job.IsEnabled && timeChanged)
+        if (job.IsEnabled && timeChanged && DailyReportTaskScheduler.IsSchedulingAvailable)
         {
             var result = await DailyReportTaskScheduler.InstallAsync(job.Id, time);
             if (!result.Succeeded) throw new InvalidOperationException(result.Message);
@@ -86,18 +84,14 @@ internal sealed partial class PrototypeBridge
         return new { saved = true, job.SendTime };
     }
 
-    private static async Task<object> SaveDailyTemplateAsync(JsonElement payload)
+    private static Task<object> SaveDailyTemplateAsync(JsonElement payload)
     {
         var job = FindDailyJob(payload);
         var text = ReadString(payload, "text");
         var document = ReadString(payload, "document");
-        if (job.DraftTemplate == text && job.DraftTemplateDocument == document)
-            return new { saved = true, invalidated = false };
-        await InvalidateDailyJobAsync(job);
-        job.DraftTemplate = text;
-        job.DraftTemplateDocument = document;
-        DailyReportSettingsStore.SaveJob(job);
-        return new { saved = true, invalidated = true };
+        var changed = DailyReportSettingsStore.UpdateTemplate(job, text, document);
+        if (changed) DailyReportSettingsStore.SaveJob(job);
+        return Task.FromResult<object>(new { saved = true, invalidated = changed });
     }
 
     private static async Task<object> GetDailyPropertiesAsync(JsonElement payload, CancellationToken cancellationToken)
@@ -161,7 +155,7 @@ internal sealed partial class PrototypeBridge
             throw new InvalidOperationException("请选择开始和结束日期。");
         var useExactMonth = dateRangeSpec is null && metric.Granularity == "monthly" && rangeKind is "current-month" or "specific-month";
         var queryMode = useExactMonth ? "exact-match" : "date-range";
-        await InvalidateDailyJobAsync(job);
+        job.ConfigurationValidated = false;
         var binding = job.Sources.FirstOrDefault(item => item.DataSourceId == source.Id);
         if (binding is null) { binding = new() { DataSourceId = source.Id }; job.Sources.Add(binding); }
         binding.DataSourceName = source.Name;
@@ -196,7 +190,11 @@ internal sealed partial class PrototypeBridge
         var placeholder = edited is null
             ? DailyReportSettingsStore.AddOrUpdateField(job, token)
             : edited.Placeholder;
-        if (edited is not null) edited.Token = token;
+        if (edited is not null)
+        {
+            if (edited.Token != token) job.ActiveTemplateVersion++;
+            edited.Token = token;
+        }
         var displayName = ReadString(payload, "displayName");
         if (!string.IsNullOrWhiteSpace(displayName)) job.Fields.First(field => field.Placeholder == placeholder).DisplayName = displayName;
         DailyReportSettingsStore.SaveJob(job);
@@ -218,9 +216,7 @@ internal sealed partial class PrototypeBridge
         var result = await new DailyReportRunner().TestAsync(job, date, job.DraftTemplate, cancellationToken);
         if (result == DailyReportExitCode.Success)
         {
-            job.ActiveTemplate = job.DraftTemplate;
-            job.ActiveTemplateDocument = job.DraftTemplateDocument;
-            job.ActiveTemplateVersion++;
+            // Only record the test result, without publishing content or changing scheduling.
             job.ConfigurationValidated = true;
             DailyReportSettingsStore.SaveJob(job);
         }
@@ -230,7 +226,6 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> SendDailyReportTodayAsync(JsonElement payload, CancellationToken cancellationToken)
     {
         var job = FindDailyJob(payload);
-        if (!DailyReportTaskHandler.IsValidated(job)) throw new InvalidOperationException("请先完成测试发送，再发送今日消息。");
         var result = await new DailyReportRunner().SendTodayAsync(job.Id, cancellationToken);
         return new
         {
@@ -272,20 +267,6 @@ internal sealed partial class PrototypeBridge
         var id = ReadString(payload, "id");
         return DailyReportSettingsStore.LoadCatalog().Jobs.FirstOrDefault(item => item.Id == id)
             ?? throw new InvalidOperationException("找不到指定的日报任务。");
-    }
-
-    private static async Task InvalidateDailyJobAsync(DailyReportJob job)
-    {
-        if (job.IsEnabled)
-        {
-            if (DailyReportTaskScheduler.IsSchedulingAvailable)
-            {
-                var removed = await DailyReportTaskScheduler.RemoveAsync(job.Id);
-                if (!removed.Succeeded) throw new InvalidOperationException(removed.Message);
-            }
-            job.IsEnabled = false;
-        }
-        job.ConfigurationValidated = false;
     }
 
     private static IEnumerable<object> DailyFieldDtos(DailyReportJob job) =>
