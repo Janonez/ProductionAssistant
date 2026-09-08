@@ -33,17 +33,6 @@ const settingsState = {
   version: '1.5.3',
 }
 
-const openTaskTab = async (container: HTMLElement, label: string) => {
-  if (container.querySelector('.daily-workbench-detail')) {
-    if (label === '基本信息') await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="任务设置"]')!.click() })
-    if (label === '运行记录') await act(async () => { container.querySelector<HTMLButtonElement>('.daily-runs-toggle')!.click() })
-    return
-  }
-  const tab = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-    .find(item => item.textContent === label)!
-  await act(async () => { tab.click(); await Promise.resolve() })
-}
-
 describe('connected production message workflow', () => {
   let container: HTMLDivElement
   beforeEach(async () => {
@@ -653,7 +642,7 @@ describe('automation task creation', () => {
 
     expect(invoke).toHaveBeenCalledWith('notionFill.create', { name: '原材料入库自动填报', sourcePageUrl: 'https://internal.example.test/inbound/summary.php', username: 'tester', password: 'secret' })
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(container.textContent).toContain('Notion 自动填报 · 每天 00:00 · 前一天')
+    expect(container.querySelector('iframe')?.srcdoc).toContain('入库数据')
     await act(async () => root.unmount())
     container.remove()
   })
@@ -677,57 +666,26 @@ describe('daily report message surface', () => {
 });
 
 describe('Notion fill workflow', () => {
-  it('uses a dedicated fixed-contract editor and runs a read-only validation', async () => {
+  it('routes directly to the approved workbench without the old detail tabs', async () => {
     history.replaceState({}, '', '?route=daily-report')
     const container = document.createElement('div')
     document.body.append(container)
-    let runCount = 0
     invoke.mockReset().mockImplementation((operation: string) => {
       if (operation === 'automation.list') return Promise.resolve({ tasks: [{ taskType: 'notion_fill', taskTypeName: 'Notion 自动填报', id: 'fill-1', name: '原材料入库自动填报', schedule: '每天 00:00 · 前一天', isEnabled: false, schedulingAvailable: true, status: 'pending-test', schedulerMessage: '', connectionStatus: '93系统 + Notion', lastRun: '暂无运行记录' }] })
-      if (operation === 'notionFill.get') return Promise.resolve({ id: 'fill-1', name: '原材料入库自动填报', baseUrl: 'https://internal.example.test', sourcePageUrl: 'https://internal.example.test/inbound/summary.php', username: 'tester', passwordConfigured: true, notionConfigured: true, targetDataSourceName: '原材料入库数据库', validated: false, isEnabled: false, schedulingAvailable: true, schedule: '每天 00:00 · 填报前一天', schedulerInstalled: false, schedulerMessage: '', runs: [] })
-      if (operation === 'notionFill.testSource') return Promise.resolve({ succeeded: true, businessDate: '2026-09-03', plateWeight: 9.425, sectionWeight: 3.15, totalWeight: 12.575, message: '93系统材料入库读取成功；本次未访问 Notion。' })
-      if (operation === 'notionFill.test') return Promise.resolve({ succeeded: true, businessDate: '2026-09-03', plateWeight: 9.425, sectionWeight: 3.15, totalWeight: 12.575, targetRecordExists: false, message: '可以新增' })
-      if (operation === 'notionFill.runNow') return Promise.resolve(++runCount === 1
-        ? { succeeded: true, exitCode: 0, created: true, skipped: false, message: '新增完成' }
-        : { succeeded: true, exitCode: 10, created: false, skipped: true, message: '2026-09-03 已有记录，本次未重复新增。' })
+      if (operation === 'notionFill.get') return Promise.resolve({ id: 'fill-1', name: '原材料入库自动填报', sourcePageUrl: 'https://internal.example.test/inbound/summary.php', username: 'tester', passwordConfigured: true, notionConfigured: true, targetDataSourceName: '原材料入库数据库', validated: false, isEnabled: false, schedulingAvailable: true, schedule: '每天 00:00 · 填报前一天', schedulerInstalled: false, schedulerMessage: '', runs: [] })
       return Promise.resolve({})
     })
     const { App } = await import('./App')
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
-    await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click(); await Promise.resolve() })
-    await openTaskTab(container, '任务配置')
-
-    expect(container.textContent).toContain('每天 00:00 · 填报前一天')
-    expect(container.textContent).toContain('按日期查重，仅新增，不覆盖')
-    expect(container.textContent).toContain('当前任务只支持已确认的原材料入库日汇总')
-    await openTaskTab(container, '任务配置')
-    expect([...container.querySelectorAll<HTMLInputElement>('input')].some(input => input.value === 'https://internal.example.test/inbound/summary.php')).toBe(true)
-    await openTaskTab(container, '运行与测试')
-    const sourceTest = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('仅测试 93 读取'))!
-    await act(async () => { sourceTest.click(); await Promise.resolve(); await Promise.resolve() })
-    expect(invoke).toHaveBeenCalledWith('notionFill.testSource', expect.objectContaining({ id: 'fill-1' }), 120000)
-    expect(container.textContent).toContain('本次未访问 Notion')
-    const test = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('测试读取与查重'))!
-    await act(async () => { test.click(); await Promise.resolve(); await Promise.resolve() })
-    expect(invoke).toHaveBeenCalledWith('notionFill.save', expect.objectContaining({ id: 'fill-1', sourcePageUrl: 'https://internal.example.test/inbound/summary.php', username: 'tester', password: '' }))
-    expect(invoke).toHaveBeenCalledWith('notionFill.test', expect.objectContaining({ id: 'fill-1' }), 120000)
-    expect(container.textContent).toContain('12.575 吨')
-    expect(container.textContent).toContain('目标日期暂无记录，可以新增')
-    const run = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('执行本日期'))!
-    await act(async () => { run.click() })
-    expect(container.textContent).toContain('确认正式执行')
-    const confirm = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('确认执行'))!
-    await act(async () => { confirm.click(); await Promise.resolve(); await Promise.resolve() })
-    expect(invoke).toHaveBeenCalledWith('notionFill.runNow', expect.objectContaining({ id: 'fill-1' }), 120000)
-    expect(container.textContent).toContain('Notion 写入成功')
-    const repeat = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('再次执行验证查重'))!
-    await act(async () => { repeat.click() })
-    const confirmRepeat = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('确认执行'))!
-    await act(async () => { confirmRepeat.click(); await Promise.resolve(); await Promise.resolve() })
-    expect(container.textContent).toContain('重复执行验证通过')
-    expect(container.textContent).toContain('首次写入已成功')
-
+    await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click() })
+    const frame = container.querySelector('iframe')!
+    expect(frame.srcdoc).toContain('入库数据')
+    expect(frame.srcdoc).toContain('写入预览')
+    expect(frame.srcdoc).toContain('按日期查重，仅新增，不覆盖')
+    expect(frame.srcdoc).not.toContain('交互 Demo')
+    expect(container.querySelector('[role="tablist"]')).toBeNull()
+    expect(invoke.mock.calls.some(call => call[0] === 'notionFill.test')).toBe(false)
     await act(async () => root.unmount())
     container.remove()
   })
