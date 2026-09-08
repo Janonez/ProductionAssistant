@@ -37,7 +37,7 @@ export function NotionFillPage({ id, ...callbacks }: Callbacks & { id: string })
 }
 
 export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks: Callbacks) {
-  let job = { ...initial };
+  let job = { ...initial, runTime: initial.runTime || '00:00' };
   let doc: Document;
   let dateRoot: Root | undefined;
   let disposed = false, busy = false, revision = 0, runsRevision = 0;
@@ -181,17 +181,21 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
     event.preventDefault(); if (busy) return;
     const name = input('task-name').value.trim(), username = input('username').value.trim();
     if (!name || !username) { node('settings-note').textContent = '任务名称和用户名不能为空。'; return; }
-    const needsSave = configChanged(), desiredEnabled = needsSave ? false : draftEnabled;
+    const connectionChanged = configChanged(), runTime = input('run-time').value;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(runTime)) { node('settings-note').textContent = '请选择有效的执行时间。'; return; }
+    const needsSave = connectionChanged || runTime !== job.runTime, desiredEnabled = connectionChanged ? false : draftEnabled;
     let saved = false;
     busy = true; controls();
     try {
       if (needsSave) {
         const sourcePageUrl = input('url').value.trim().replace(/\/+$/, ''), password = input('password').value;
-        await invoke('notionFill.save', { id: job.id, name, sourcePageUrl, username, password });
+        await invoke('notionFill.save', { id: job.id, name, sourcePageUrl, username, password, runTime });
         if (disposed) return;
         saved = true;
-        job = { ...job, name, sourcePageUrl, username, passwordConfigured: job.passwordConfigured || !!password, isEnabled: false, validated: false };
-        input('password').value = ''; clearPreview('配置已修改，请重新预览');
+        job = { ...job, name, sourcePageUrl, username, runTime, passwordConfigured: job.passwordConfigured || !!password,
+          isEnabled: connectionChanged ? false : job.isEnabled, validated: connectionChanged ? false : job.validated };
+        input('password').value = '';
+        if (connectionChanged) clearPreview('配置已修改，请重新预览');
       }
       if (desiredEnabled !== job.isEnabled) {
         const result = await invoke<{ enabled: boolean; message?: string }>('automation.setEnabled', { id: job.id, taskType: 'notion_fill', enabled: desiredEnabled });
@@ -203,7 +207,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       const fresh = await invoke<NotionFillJobDetail>('notionFill.get', { id: job.id });
       if (disposed) return;
       job = fresh; dialog('settings').close();
-      message(needsSave ? '配置已保存，请重新预览后启用。' : '任务设置已保存。');
+      message(connectionChanged ? '配置已保存，请重新预览后启用。' : '任务设置已保存。');
     } catch (error) {
       if (!disposed) node('settings-note').textContent = `${saved ? '设置已更新，但后续操作失败：' : ''}${errorText(error)}`;
     } finally { if (!disposed) { busy = false; draftEnabled = job.isEnabled; controls(); renderToggle(); if (saved) changed(); } }
@@ -241,8 +245,9 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       button('confirm-run').onclick = () => { void run(); };
       button('settings-open').onclick = () => {
         input('task-name').value = job.name; input('url').value = job.sourcePageUrl; input('username').value = job.username; input('password').value = '';
+        input('run-time').value = job.runTime;
         input('password').required = !job.passwordConfigured;
-        node('settings-note').textContent = '修改配置后，需重新预览并启用定时任务。';
+        node('settings-note').textContent = '修改名称或连接后，需重新预览并启用定时任务。';
         draftEnabled = job.isEnabled; renderToggle(); dialog('settings').showModal();
       };
       button('toggle').onclick = () => {

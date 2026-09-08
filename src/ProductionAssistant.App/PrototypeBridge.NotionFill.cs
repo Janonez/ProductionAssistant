@@ -49,12 +49,13 @@ internal sealed partial class PrototypeBridge
                 NotionFillSettingsStore.SaveJob(job);
             }
         }
-        var scheduler = await NotionFillTaskScheduler.GetStatusAsync(job.Id);
+        var scheduler = await NotionFillTaskScheduler.GetStatusAsync(job.Id, job.RunTime);
         var notion = NotionSettingsStore.Load();
         return new
         {
             job.Id,
             job.Name,
+            job.RunTime,
             job.SourcePageUrl,
             job.Username,
             passwordConfigured = !string.IsNullOrWhiteSpace(job.EncryptedPassword),
@@ -63,7 +64,7 @@ internal sealed partial class PrototypeBridge
             validated = job.ConfigurationValidated,
             isEnabled = NotionFillTaskScheduler.IsSchedulingAvailable && job.IsEnabled,
             schedulingAvailable = NotionFillTaskScheduler.IsSchedulingAvailable,
-            schedule = "每天 00:00 · 填报前一天",
+            schedule = $"每天 {job.RunTime} · 填报前一天",
             schedulerInstalled = scheduler.Installed,
             schedulerMessage = scheduler.Message,
             runs = NotionFillRunDtos(NotionFillSettingsStore.LoadRunRecords(job.Id).Take(5))
@@ -73,6 +74,9 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> SaveNotionFillJobAsync(JsonElement payload)
     {
         var job = FindNotionFillJob(payload);
+        var runTime = payload.TryGetProperty("runTime", out var timeValue)
+            ? NotionFillTaskScheduler.NormalizeRunTime(timeValue.GetString() ?? string.Empty)
+            : job.RunTime;
         var name = ReadString(payload, "name").Trim();
         var sourcePageUrl = NormalizeNotionFillSourcePageUrl(ReadString(payload, "sourcePageUrl"));
         var baseUrl = new Uri(sourcePageUrl).GetLeftPart(UriPartial.Authority);
@@ -90,6 +94,12 @@ internal sealed partial class PrototypeBridge
             if (!removed.Succeeded) throw new InvalidOperationException(removed.Message);
             job.IsEnabled = false;
         }
+        else if (job.RunTime != runTime && job.IsEnabled)
+        {
+            var updated = await NotionFillTaskScheduler.InstallAsync(job.Id, runTime);
+            if (!updated.Succeeded) throw new InvalidOperationException(updated.Message);
+        }
+        job.RunTime = runTime;
         job.Name = name;
         job.BaseUrl = baseUrl;
         job.SourcePageUrl = sourcePageUrl;

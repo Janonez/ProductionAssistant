@@ -16,7 +16,7 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
         var result = new List<AutomationTaskSummary>();
         foreach (var job in NotionFillSettingsStore.LoadCatalog().Jobs)
         {
-            var scheduler = await NotionFillTaskScheduler.GetStatusAsync(job.Id);
+            var scheduler = await NotionFillTaskScheduler.GetStatusAsync(job.Id, job.RunTime);
             result.Add(ToSummary(job, scheduler.Installed, scheduler.Message));
         }
         return result;
@@ -25,8 +25,8 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
     public async Task<AutomationTask> GetTaskAsync(string taskId)
     {
         var job = FindJob(taskId);
-        var scheduler = await NotionFillTaskScheduler.GetStatusAsync(job.Id);
-        return new(job.Id, Type, job.Name, job.IsEnabled, NotionFillTaskScheduler.Schedule,
+        var scheduler = await NotionFillTaskScheduler.GetStatusAsync(job.Id, job.RunTime);
+        return new(job.Id, Type, job.Name, job.IsEnabled, job.RunTime,
             ToSummary(job, scheduler.Installed, scheduler.Message).Status,
             JsonSerializer.SerializeToElement(job));
     }
@@ -114,7 +114,7 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
         }
         var missing = MissingStep(job);
         if (missing is not null) return new(false, MissingStep: missing.Value.Step, Message: missing.Value.Message);
-        var installed = await NotionFillTaskScheduler.InstallAsync(job.Id);
+        var installed = await NotionFillTaskScheduler.InstallAsync(job.Id, job.RunTime);
         if (!installed.Succeeded) throw new InvalidOperationException(installed.Message);
         job.IsEnabled = true;
         NotionFillSettingsStore.SaveJob(job);
@@ -168,7 +168,7 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
         var connection = string.IsNullOrWhiteSpace(job.Username) ? "93系统未配置" :
             string.IsNullOrWhiteSpace(notion.Token) ? "Notion 未配置" : "93系统 + Notion";
         return new(Type, "Notion 自动填报", job.Id, job.Name,
-            "每天 00:00 · 前一天", enabled, NotionFillTaskScheduler.IsSchedulingAvailable,
+            $"每天 {job.RunTime} · 前一天", enabled, NotionFillTaskScheduler.IsSchedulingAvailable,
             status, schedulerMessage, connection,
             last is null ? "暂无运行记录" : $"{last.StartedAt:MM-dd HH:mm} · {(last.Succeeded ? "成功" : "失败")}",
             missing?.Step, missing?.Message);

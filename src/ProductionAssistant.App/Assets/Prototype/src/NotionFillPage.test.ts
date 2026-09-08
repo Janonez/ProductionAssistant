@@ -21,15 +21,16 @@ const edit = async (id: string, value: string, type = 'input') => {
 const save = async () => { await act(async () => node('settings-form').dispatchEvent(new doc.defaultView!.Event('submit', { cancelable: true }))); };
 beforeEach(() => {
   vi.clearAllMocks();
-  job = { id: 'fill-1', name: '原材料入库自动填报', sourcePageUrl: 'https://example.test/inbound', username: 'tester', passwordConfigured: true,
+  job = { id: 'fill-1', name: '原材料入库自动填报', runTime: '00:00', sourcePageUrl: 'https://example.test/inbound', username: 'tester', passwordConfigured: true,
     notionConfigured: true, targetDataSourceName: '原材料入库数据库', validated: false, isEnabled: false, schedulingAvailable: true,
     schedule: '每天 00:00 · 填报前一天', schedulerInstalled: false, schedulerMessage: '', runs: [] };
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
     if (operation === 'notionFill.get') return { ...job };
     if (operation === 'notionFill.runs') return { runs: [] };
     if (operation === 'notionFill.save') {
-      job = { ...job, ...payload, passwordConfigured: true, validated: false, isEnabled: false };
-      return { saved: true, invalidated: true };
+      const invalidated = payload.name !== job.name || payload.sourcePageUrl !== job.sourcePageUrl || payload.username !== job.username || !!payload.password;
+      job = { ...job, ...payload, passwordConfigured: true, validated: invalidated ? false : job.validated, isEnabled: invalidated ? false : job.isEnabled };
+      return { saved: true, invalidated };
     }
     if (operation === 'automation.setEnabled') { job.isEnabled = payload.enabled; job.schedulerInstalled = payload.enabled; return { enabled: payload.enabled }; }
     if (operation === 'notionFill.test') job.validated = true;
@@ -132,7 +133,7 @@ it('preserves saved credentials on blank password and resets scheduling only whe
   await click('settings-open'); await save();
   expect(calls('notionFill.save')).toHaveLength(0); expect(calls('automation.setEnabled')).toHaveLength(0);
   await click('preview'); await click('settings-open'); await edit('username', 'new-user'); await save();
-  expect(calls('notionFill.save')[0][1]).toEqual({ id: job.id, name: job.name, sourcePageUrl: job.sourcePageUrl, username: 'new-user', password: '' });
+  expect(calls('notionFill.save')[0][1]).toEqual({ id: job.id, name: job.name, sourcePageUrl: job.sourcePageUrl, username: 'new-user', password: '', runTime: '00:00' });
   expect(node('enabled').textContent).toBe('未启用'); expect(button('run').disabled).toBe(true);
   await click('settings-open'); await click('toggle');
   expect(button('toggle').getAttribute('aria-checked')).toBe('false');
@@ -187,4 +188,20 @@ it('loads real history on disclosure and keeps failure details visible', async (
   await act(async () => { const runs = doc.querySelector<HTMLDetailsElement>('.runs')!; runs.open = true; runs.dispatchEvent(new doc.defaultView!.Event('toggle')); });
   expect(node('runs-body').textContent).toContain('93 登录失败');
   expect(node('runs-body').textContent).not.toContain('0.000');
+});
+
+it('saves and reopens a custom time without disabling a validated task or fetching data', async () => {
+  await mount({ validated: true, isEnabled: true, schedulerInstalled: true });
+  await click('settings-open'); await edit('run-time', '08:35'); await save();
+  expect(calls('notionFill.save')[0][1]).toMatchObject({ runTime: '08:35' });
+  expect(calls('automation.setEnabled')).toHaveLength(0);
+  expect(node('enabled').textContent).toBe('已启用');
+  expect(calls('notionFill.test')).toHaveLength(0);
+  await click('settings-open'); expect(node<HTMLInputElement>('run-time').value).toBe('08:35');
+  await edit('run-time', '10:20');
+  await act(async () => doc.querySelector<HTMLButtonElement>('#settings [data-close]')!.click());
+  await click('settings-open'); expect(node<HTMLInputElement>('run-time').value).toBe('08:35');
+  await edit('run-time', ''); await save();
+  expect(calls('notionFill.save')).toHaveLength(1);
+  expect(node('settings-note').textContent).toContain('有效的执行时间');
 });

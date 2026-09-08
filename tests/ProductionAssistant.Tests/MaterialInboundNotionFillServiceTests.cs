@@ -10,6 +10,27 @@ namespace ProductionAssistant.Tests;
 public sealed class MaterialInboundNotionFillServiceTests
 {
     [Fact]
+    public void Custom_time_roundtrips_and_controls_the_scheduler_command()
+    {
+        var legacy = JsonSerializer.Deserialize<NotionFillJob>("{\"Name\":\"existing\"}")!;
+        Assert.Equal("00:00", legacy.RunTime);
+        legacy.RunTime = "08:35";
+        var saved = JsonSerializer.Deserialize<NotionFillJob>(JsonSerializer.Serialize(legacy))!;
+        var arguments = NotionFillTaskScheduler.CreateArguments(saved.Id, @"C:\App\ProductionAssistant.exe", saved.RunTime).ToList();
+        Assert.Equal("08:35", arguments[arguments.IndexOf("/ST") + 1]);
+        Assert.Contains("/F", arguments);
+        Assert.Equal(new DateOnly(2026, 9, 3), NotionFillTaskHandler.ResolveBusinessDate(
+            new DateTimeOffset(new DateTime(2026, 9, 4, 8, 35, 0, DateTimeKind.Local))));
+    }
+
+    [Theory]
+    [InlineData("24:00")]
+    [InlineData("08:60")]
+    [InlineData("")]
+    public void Invalid_time_cannot_be_registered(string value) =>
+        Assert.Throws<InvalidOperationException>(() => NotionFillTaskScheduler.CreateArguments("job", "app.exe", value));
+
+    [Fact]
     public void Midnight_run_uses_the_previous_local_calendar_day()
     {
         var startedAt = new DateTimeOffset(new DateTime(2026, 9, 4, 0, 0, 0, DateTimeKind.Local));
