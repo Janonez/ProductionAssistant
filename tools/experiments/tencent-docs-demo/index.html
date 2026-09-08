@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>腾讯文档填报 · 实验工作台</title>
+<style>
+@font-face{font-family:"Inter Variable";src:url('../../../src/ProductionAssistant.App/Assets/Fonts/Inter.ttf')}@font-face{font-family:"Noto Sans SC Variable";src:url('../../../src/ProductionAssistant.App/Assets/Fonts/NotoSansSC.ttf')}
+:root{font-family:"Inter Variable","Noto Sans SC Variable",'Microsoft YaHei UI',sans-serif;color:#292524;background:#fafaf9;font-size:15px}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer;border:1px solid #e7e5e4;background:white;border-radius:14px;padding:11px 17px;color:inherit}button:hover{background:#f5f5f4}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:#c2703d;color:white;border-color:#c2703d}.primary:hover{background:#a85c2e}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #c2703d;outline-offset:3px}header{padding:22px 36px;border-bottom:1px solid #e7e5e4;display:flex;align-items:center;justify-content:space-between;background:white}.brand{font-weight:600}.tag{font-size:14px;background:#f5f5f4;border-radius:14px;padding:5px 9px;margin-left:12px;color:#78716c}.shell{max-width:1180px;margin:auto;padding:36px}h1{font-size:26px;letter-spacing:-.02em;font-weight:600;margin:0 0 10px}h2{font-size:16px;font-weight:600;margin:0 0 18px}p{line-height:1.7}.muted,small{color:#78716c}.intro{display:flex;justify-content:space-between;gap:20px;align-items:center}.tabs{display:flex;gap:8px;margin:28px 0}.tabs button[aria-selected=true]{color:#a85c2e;background:#f5ebe3;border-color:#f5ebe3}.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.panel{background:white;border:1px solid #e7e5e4;border-radius:17px;padding:24px;margin-bottom:24px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:18px}label{display:flex;flex-direction:column;gap:8px;font-size:14px}input,select{width:100%;height:44px;padding:0 12px;border:1px solid #e7e5e4;background:#fafaf9;border-radius:14px;color:inherit}.wide{grid-column:1/-1}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.notice{border:1px solid #e7e5e4;border-radius:14px;padding:9px 16px;background:#f5ebe3;font-size:14px;line-height:1.7}.steps{display:flex;gap:24px;padding:0;list-style:none;margin:26px 0;color:#78716c;font-size:14px}.steps b{display:inline-grid;place-items:center;width:26px;height:26px;border:1px solid #e7e5e4;border-radius:50%;margin-right:8px;font-weight:500}.steps li.active{color:#a85c2e}.steps li.active b{background:#f5ebe3;border-color:#c2703d}table{width:100%;border-collapse:collapse;text-align:left;font-size:14px}th{color:#78716c;font-weight:500}th,td{padding:14px 9px;border-bottom:1px solid #e7e5e4}td input{max-width:130px;height:36px}code{font-family:"Inter Variable",monospace;font-weight:600}.scroll{overflow-x:auto}.empty{padding:30px 0;text-align:center;color:#78716c}.logs{font-size:14px;line-height:1.8;max-height:220px;overflow:auto;padding-left:22px}.error{color:#b91c1c}.status{min-height:26px;font-size:14px;margin:14px 0}.small{font-size:14px}[hidden]{display:none!important}@media(max-width:760px){header{padding:18px}.shell{padding:22px 16px}.grid,.fields{grid-template-columns:1fr}.intro{display:block}.steps{gap:12px;flex-wrap:wrap}.tag{display:inline-block}.panel{padding:18px}h1{font-size:26px}}
+</style>
+<header><div class="brand">ProductionAssistant <span class="tag">实验室 / 腾讯文档</span></div><span class="muted small">独立 Demo · 本地模拟</span></header>
+<main class="shell">
+  <div class="intro"><div><h1>把每日数据，填到正确的位置</h1><p class="muted">先确认日期与目标单元格，再检查、填报和回读。</p></div><button id="settingsShortcut">配置测试环境 →</button></div>
+  <div class="notice">当前为本地模拟环境。网页连接、扫码登录与真实写入尚未接入；此处的操作只改变下方模拟表格。</div>
+  <nav class="tabs" aria-label="工作台页面"><button id="runTab" aria-selected="true">填报测试</button><button id="settingsTab" aria-selected="false">环境与模板设置</button></nav>
+  <section id="settings" hidden>
+    <form id="configForm">
+      <div class="grid"><div class="panel"><h2>01 / 测试环境</h2><div class="fields">
+        <label class="wide">共享文档 / 测试网页地址<input name="documentUrl" type="url" placeholder="稍后填写测试环境地址"><small>可先留空。不保存密码、Cookie 或登录令牌。</small></label>
+        <label class="wide">模板<select disabled><option>生产月报 · 每日下料、装焊与入库</option></select></label>
+        <label>网页超时（秒）<input name="timeout" type="number" min="5" max="120" required></label>
+      </div><p class="muted small">地址与超时会保存，供后续网页接入使用；当前模拟不访问该地址。</p><p class="muted small">专用浏览器登录、名称框定位、读取方式与自动保存校验：待测试网页确认后接入。</p></div>
+      <div class="panel"><h2>02 / 生产月报模板</h2><div class="fields">
+        <label class="wide">月份工作表名称<input name="sheetPattern" required><small>支持 {yyyy}、{yy}、{M}，例如 下料、装焊（{yy}年{M}月）。</small></label>
+        <label>公司<input name="company" required></label><label>园区<input name="park" required></label>
+        <label>第 1 天起始列<input name="startColumn" pattern="[A-Za-z]{1,3}" required></label><label>下料行<input name="cuttingRow" type="number" min="1" max="1048576" required></label>
+        <label>装焊行<input name="weldingRow" type="number" min="1" max="1048576" required></label><label>入库行<input name="inboundRow" type="number" min="1" max="1048576" required></label>
+      </div><p class="muted small">本模板固定：下料 / 装焊每天 1 列，入库每天 2 列，先型材、后板材。初始值来自历史样例，可在此调整。</p></div></div>
+      <div class="actions"><button class="primary" type="submit">保存设置</button><button id="exportConfig" type="button">导出已保存配置</button><button id="importConfig" type="button">导入配置</button><input id="configFile" type="file" accept="application/json,.json" hidden></div>
+    </form>
+  </section>
+  <section id="run">
+    <ol class="steps"><li id="step1" class="active"><b>1</b>输入数据</li><li id="step2"><b>2</b>检查目标</li><li id="step3"><b>3</b>模拟填报与回读</li></ol>
+    <div class="grid"><div class="panel"><h2>本次填报</h2><form id="dataForm"><div class="fields">
+      <label class="wide">业务日期<input id="date" type="date" required></label>
+      <label>下料量<input name="cutting" type="number" min="0" step="any" placeholder="输入测试值" required></label>
+      <label>装焊量<input name="welding" type="number" min="0" step="any" placeholder="输入测试值" required></label>
+      <label>型材入库量<input name="section" type="number" min="0" step="any" placeholder="输入测试值" required></label>
+      <label>板材入库量<input name="plate" type="number" min="0" step="any" placeholder="输入测试值" required></label>
+    </div><div class="actions"><button class="primary" type="submit">生成填报预览</button><button id="sample" type="button">填入示例数据</button></div></form></div>
+    <div class="panel"><h2>模拟条件</h2><label>测试场景<select id="scenario"><option value="ready">可编辑 · 校验通过</option><option value="login">登录失效</option><option value="permission">没有编辑权限</option><option value="sheet">目标工作表不存在</option><option value="anchor">日期 / 公司 / 材料不匹配</option></select></label><p class="muted">在预览表中输入「已有值」可测试冲突保护。为空则填报，相同值则跳过，不同值则整批停止。</p><p class="muted small">模拟表格仅保存在当前页面内存中；刷新会清空，环境设置会保留。</p><button id="clearCells">清空模拟表格</button></div></div>
+    <div class="panel"><h2 id="previewTitle">目标预览</h2><p id="previewMeta" class="muted small">尚未生成计划</p><div id="empty" class="empty">输入数据后，查看当月工作表和四个目标单元格。</div><div class="scroll"><table id="preview" hidden><thead><tr><th>数据项</th><th>公司 / 园区</th><th>A1 地址</th><th>待填值</th><th>模拟已有值</th><th>检查结果</th></tr></thead><tbody></tbody></table></div><div class="actions"><button id="check" disabled>检查模拟目标</button><button id="execute" class="primary" disabled>模拟填报并回读</button><button disabled title="等待测试环境和网页适配">真实网页填报 · 待接入</button></div></div>
+    <div class="panel"><h2>运行记录 <span class="tag">仅本地模拟</span></h2><ol id="logs" class="logs"><li>等待生成填报预览。</li></ol></div>
+  </section>
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+</main>
+<script src="core.js"></script>
+<script>
+'use strict';
+const api = TencentDemo, $ = id => document.getElementById(id), storageKey = 'pa.tencent-docs-demo.v1';
+let config = {...api.defaults}, pending = null, books = {}, checked = false;
+function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
+function log(message) { const li = document.createElement('li'); li.textContent = new Date().toLocaleTimeString() + ' · ' + message; $('logs').prepend(li); while ($('logs').children.length > 30) $('logs').lastElementChild.remove(); status(message); }
+function showSettings(show) { $('settings').hidden = !show; $('run').hidden = show; $('settingsTab').setAttribute('aria-selected', show); $('runTab').setAttribute('aria-selected', !show); }
+$('settingsShortcut').onclick = $('settingsTab').onclick = () => showSettings(true);
+$('runTab').onclick = () => showSettings(false);
+function configToForm() { for (const key in api.defaults) $('configForm').elements[key].value = config[key]; }
+function invalidate() { checked = false; $('execute').disabled = true; }
+function discardPlan() { pending = null; invalidate(); $('check').disabled = true; $('preview').hidden = true; $('empty').hidden = false; $('previewMeta').textContent = '数据或设置已更改，请重新生成预览'; step(1); }
+function step(n) { [1,2,3].forEach(i => $('step'+i).classList.toggle('active', i === n)); }
+function save(next) { next = api.validate(next); localStorage.setItem(storageKey, JSON.stringify(next)); config = next; configToForm(); discardPlan(); status('设置已保存到本机浏览器；真实网页尚未连接。'); }
+try { const stored = localStorage.getItem(storageKey); if (stored) config = api.validate(JSON.parse(stored)); } catch { status('本地配置无法读取，已使用样例设置。请重新保存。', true); }
+configToForm();
+const today = new Date(); $('date').value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+$('configForm').onsubmit = event => { event.preventDefault(); try { const next = Object.fromEntries(new FormData(event.target)); for (const key of ['timeout','cuttingRow','weldingRow','inboundRow']) next[key] = Number(next[key]); next.startColumn = next.startColumn.trim().toUpperCase(); next.documentUrl = next.documentUrl.trim(); save(next); } catch(e) { status(e.message, true); } };
+$('exportConfig').onclick = () => { const blob = new Blob([JSON.stringify(config,null,2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'tencent-docs-demo-config.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); };
+$('importConfig').onclick = () => $('configFile').click();
+$('configFile').onchange = async event => { try { const file = event.target.files[0]; if (!file) return; if (file.size > 20000) throw Error('配置文件过大'); const parsed = JSON.parse(await file.text()); const next = {}; for (const key in api.defaults) next[key] = parsed[key] ?? api.defaults[key]; save(next); } catch(e) { status('导入失败：'+e.message,true); } finally { event.target.value = ''; } };
+$('dataForm').oninput = discardPlan;
+$('sample').onclick = () => { ['42.35','28.6','12.8','19.2'].forEach((v,i) => $('dataForm').elements[['cutting','welding','section','plate'][i]].value = v); discardPlan(); status('已填入示例数据，请生成预览。'); };
+function cells() { return books[pending.sheet] ||= {}; }
+function render(rows) {
+  const tbody = $('preview').querySelector('tbody'); tbody.replaceChildren();
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    [r.label,r.owner,r.address,String(r.value)].forEach(value => { const td = document.createElement('td'); td.textContent = value; tr.append(td); });
+    const td = document.createElement('td'), input = document.createElement('input'); input.value = cells()[r.address] ?? ''; input.placeholder = '空'; input.setAttribute('aria-label',r.address+' 模拟已有值');
+    input.oninput = () => { cells()[r.address] = input.value; invalidate(); tbody.querySelectorAll('[data-result]').forEach(el => { el.textContent = '待重新检查'; el.className = ''; }); step(2); };
+    td.append(input); tr.append(td); const result = document.createElement('td'); result.dataset.result = ''; result.textContent = ({write:'待填报',skip:'相同 · 跳过',conflict:'冲突 · 停止'})[r.action] || '待检查'; result.className = r.action === 'conflict' ? 'error' : ''; tr.append(result); tbody.append(tr);
+  }
+}
+$('dataForm').onsubmit = event => { event.preventDefault(); try { pending = api.plan(config,$('date').value,Object.fromEntries(new FormData(event.target))); invalidate(); render(pending.rows); $('preview').hidden = false; $('empty').hidden = true; $('check').disabled = false; $('previewMeta').textContent = `${pending.sheet} · 业务日期 ${pending.date}`; step(2); log('已计算 4 个目标地址；未进行网页操作。'); } catch(e) { discardPlan(); status(e.message,true); } };
+$('scenario').onchange = () => { invalidate(); if(pending) render(pending.rows); step(pending ? 2 : 1); };
+$('clearCells').onclick = () => { books = {}; invalidate(); if(pending) render(pending.rows); log('已清空本地模拟表格。'); };
+$('check').onclick = () => { if(!pending) return; invalidate(); try { const rows = api.preflight(pending,cells(),$('scenario').value); render(rows); if(rows.some(r => r.action === 'conflict')) throw Error('发现已有值冲突，整批停止，未写入。'); checked = true; $('execute').disabled = false; step(3); log('模拟检查通过：工作表、权限及锚点采用所选模拟条件。'); } catch(e) { log(e.message); status(e.message,true); } };
+$('execute').onclick = () => { if(!pending || !checked) return; try { const result = api.simulate(pending,cells(),$('scenario').value); books[pending.sheet] = result.cells; render(api.preflight(pending,cells(),'ready')); log(`模拟回读通过：填报 ${result.rows.filter(r=>r.action==='write').length} 格，跳过 ${result.rows.filter(r=>r.action==='skip').length} 格。未访问真实文档。`); invalidate(); } catch(e) { invalidate(); log(e.message); status(e.message,true); } };
+</script>
+</html>
