@@ -1,4 +1,4 @@
-export type Route = 'daily-weld' | 'production-message' | 'database-viewer' | 'daily-report' | 'report-center' | `navigation:${string}`
+export type Route = 'daily-weld' | 'production-message' | 'database-viewer' | 'daily-report' | 'report-center' | 'plan-pdf' | `navigation:${string}`
 
 export interface AutomationTaskSummary { taskType: string; taskTypeName: string; id: string; name: string; schedule: string; isEnabled: boolean; schedulingAvailable: boolean; status: string; schedulerMessage: string; connectionStatus: string; lastRun: string; missingStep?: string; missingMessage?: string }
 

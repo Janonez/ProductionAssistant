@@ -6,6 +6,7 @@ import { AutomationPage } from './AutomationPage'
 import { DailyWeldPage } from './DailyWeldPage'
 import { OperationSidebar } from './OperationSidebar'
 import ProductionMessagePage from './ProductionMessagePage'
+import { PlanPdfPage } from './PlanPdfPage'
 import { ReportCenterPage } from './ReportCenterPage'
 import SettingsModal from './SettingsModal'
 import { DatabaseViewerPage } from './DatabaseViewerPage'
@@ -27,7 +28,7 @@ export function App() {
     requested === 'production-message' ||
     requested === 'database-viewer' ||
     requested === 'daily-report' ||
-    requested === 'report-center'
+    requested === 'report-center' || requested === 'plan-pdf'
       ? requested
       : 'production-message'
   ) as Route
@@ -66,7 +67,7 @@ export function App() {
               exit={reduced ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: .2 }}
             >
-              {route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}
+              {route === 'plan-pdf' ? <PlanPdfPage /> : route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}
             </motion.div>
           </AnimatePresence></main></div>}
     </div>
