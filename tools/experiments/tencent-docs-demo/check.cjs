@@ -23,16 +23,19 @@ const result = api.simulate(plan,{},'ready');
 assert.equal(result.cells.J9,'0');
 assert.ok(api.simulate(plan,result.cells,'ready').rows.every(r => r.action === 'skip'));
 const html = fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
-const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
+const inline = fs.readFileSync(path.join(__dirname,'app.js'),'utf8');
 new vm.Script(inline);
 console.log('PASS: date/address, validation, conflicts, blocked scenarios, zero, idempotence, script syntax');
 
 // Reuse the project's installed DOM test dependency; no additional install.
 const {JSDOM} = require('../../../src/ProductionAssistant.App/Assets/Prototype/node_modules/jsdom');
+async function main() {
 const dom = new JSDOM(html,{url:'http://localhost/',runScripts:'outside-only'});
 const w = dom.window;
 w.eval(fs.readFileSync(path.join(__dirname,'core.js'),'utf8'));
 w.eval(inline);
+await w.demoInitialized;
+const settled = () => new Promise(resolve=>setImmediate(resolve));
 const $ = id => w.document.getElementById(id);
 $('sample').click();
 $('date').value = '2026-09-05';
@@ -40,19 +43,24 @@ $('dataForm').dispatchEvent(new w.Event('submit',{cancelable:true}));
 assert.equal($('preview').hidden,false);
 assert.match($('preview').textContent,/J9/);
 $('check').click();
+await settled();
 assert.equal($('execute').disabled,false);
 $('execute').click();
+await settled();
 assert.match($('status').textContent,/填报 4 格/);
-$('check').click(); $('execute').click();
+$('check').click(); await settled(); $('execute').click(); await settled();
 assert.match($('status').textContent,/跳过 4 格/);
 const cell = $('preview').querySelector('input'); cell.value='999'; cell.dispatchEvent(new w.Event('input'));
 assert.equal($('execute').disabled,true);
-$('check').click(); assert.equal($('execute').disabled,true);
+$('check').click(); await settled(); assert.equal($('execute').disabled,true);
 assert.match($('status').textContent,/冲突/);
 $('settingsTab').click(); assert.equal($('settings').hidden,false);
 $('configForm').elements.company.value = '测试公司';
 $('configForm').dispatchEvent(new w.Event('submit',{cancelable:true}));
+await settled();
 assert.equal(JSON.parse(w.localStorage.getItem('pa.tencent-docs-demo.v1')).company,'测试公司');
 assert.equal($('preview').hidden,true);
 dom.window.close();
 console.log('PASS: UI preview, write/readback, repeat, conflict, config persistence and stale-plan invalidation');
+}
+main().catch(e=>{console.error(e);process.exitCode=1;});
