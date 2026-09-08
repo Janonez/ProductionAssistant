@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Database, RefreshCw, SlidersHorizontal, X } from 'lucide-react'
+import { Check, Database, RefreshCw, Settings2, SlidersHorizontal, X } from 'lucide-react'
 import { invoke } from './bridge'
 import DatePicker from './DatePicker'
 import { ChoicePicker } from './FormPickers'
@@ -46,7 +46,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
   const diff = sum - Number(total || 0)
   const rowsValid = rows.length > 0 && rows.every(row => /^\d+$/.test(row.qty)) && diff === 0
   const businessSources = state.usesBusinessSections ? state.sources.filter(source => source.businessSection === selectedBusiness) : state.sources
-  const locked = busy === 'generate' || busy === 'check' || busy === 'write'
+  const locked = !!busy
 
   async function generate() {
     if (!canGenerate || locked) return
@@ -65,7 +65,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
   }
 
   async function saveBinding() {
-    if (!selectedSource) return
+    if (!selectedSource || busy) return
     setBusy('binding'); setError('')
     try {
       const next = await invoke<WeldState>('weld.saveBinding', { sourceId: selectedSource })
@@ -103,22 +103,22 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
     setStep(1); setRows([]); setTotal(''); setMessage(''); setError(''); setProgress(undefined)
   }
 
-  function openBinding() { setError(''); setSettingsSection('database'); setBindingOpen(true) }
+  function openBinding() { if (locked) return; setSelectedSource(state.selected); setSelectedBusiness(state.sources.find(source => source.id === state.selected)?.businessSection || ''); setError(''); setSettingsSection('database'); setBindingOpen(true) }
 
   const writePayload = { month, total, rows: rows.map(row => ({ date: row.date, qty: row.qty })) }
   return <div className="app-shell"><main className="main-content">
-    <header className="content-header"><div><h1>月度焊接计划拆分</h1><p>按自然日模拟产量浮动，确认后写入 Notion 焊接数据库</p></div><button type="button" className="template-config-button" disabled={busy === 'state'} onClick={openBinding}>焊接设置</button></header>
+    <header className="content-header"><h1>每日焊接数据模拟</h1><button type="button" className="template-config-button" disabled={locked} aria-label="焊接设置" title="焊接设置" onClick={openBinding}><Settings2 /></button></header>
     <div className="production-message-scroll daily-weld-page">
       <ThreeStepProgress current={step} titles={['录入计划', '拆分预览', '完成']} label="焊接计划拆分进度" />
 
       {error && <div className="weld-notice error" role="alert">{error}</div>}
       {step === 1 && <section className="weld-plan-card" aria-labelledby="weld-plan-title">
-        <div className="weld-section-heading"><h2 id="weld-plan-title">计划信息</h2><p>输入本月计划焊接总量，下一步将生成每日拆分预览。</p></div>
+        <div className="weld-section-heading"><h2 id="weld-plan-title">计划信息</h2></div>
         <div className="weld-fields">
           <DatePicker label="计划月份" value={month} selectionMode="month" disabled={locked} onChange={setMonth} />
-          <label className="weld-field"><span>计划焊接总量（吨）</span><NumericInput value={total} disabled={locked} onChange={value => { if (value === '' || /^\d+$/.test(value)) setTotal(value) }} unit="吨" ariaLabel="计划焊接总量" /></label>
+          <label className="weld-field"><span>计划焊接总量</span><NumericInput value={total} disabled={locked} onChange={value => { if (value === '' || /^\d+$/.test(value)) setTotal(value) }} unit="吨" ariaLabel="计划焊接总量" /></label>
         </div>
-        <div className="weld-method-note"><strong>按自然日分配 · 模拟真实产量浮动</strong><span>工作日与周末采用不同权重，并叠加波动；每日取整后自动配平至计划总量。</span></div>
+
         <div className="weld-actions"><button type="button" className="primary-button" disabled={!canGenerate || locked} onClick={generate}>{busy === 'generate' ? '正在拆分…' : '下一步：拆分预览'}</button></div>
       </section>}
 

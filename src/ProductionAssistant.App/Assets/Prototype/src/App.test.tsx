@@ -385,22 +385,20 @@ describe('production message Demo UI', () => {
     expect(container.querySelector('.content-header h1')?.textContent).toBe('生产消息入库')
     expect(container.querySelector('.content-header + .production-message-scroll')).toBeTruthy()
     const templateConfig = container.querySelector('.template-config-button') as HTMLButtonElement
-    expect(templateConfig.textContent).toBe('数据库绑定')
+    expect(templateConfig.getAttribute('aria-label')).toBe('数据库绑定')
     expect(templateConfig.disabled).toBe(false)
     expect((container.querySelector('.message-textarea') as HTMLTextAreaElement).value).toBe('')
     expect(invoke).toHaveBeenCalledWith('production.getBindings')
 
     await act(async () => { templateConfig.click() })
-    const selects = container.querySelectorAll<HTMLSelectElement>('.pm-binding-dialog select')
-    await act(async () => {
-      selects[0].value = '下料数据库'; selects[0].dispatchEvent(new Event('change', { bubbles: true }))
-      selects[2].value = '塔筒产线数据库'; selects[2].dispatchEvent(new Event('change', { bubbles: true }))
-    })
-    const databaseSelects = container.querySelectorAll<HTMLSelectElement>('.pm-binding-dialog select')
-    await act(async () => {
-      databaseSelects[1].value = 'cutting'; databaseSelects[1].dispatchEvent(new Event('change', { bubbles: true }))
-      databaseSelects[3].value = 'tower'; databaseSelects[3].dispatchEvent(new Event('change', { bubbles: true }))
-    })
+    async function choose(label: string, value: string) {
+      await act(async () => { container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click() })
+      await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(option => option.textContent === value)!.click() })
+    }
+    await choose('下料业务板块', '下料数据库')
+    await choose('塔筒业务板块', '塔筒产线数据库')
+    await choose('下料主数据库', '下料数据库')
+    await choose('塔筒产线主数据库', '塔筒产线数据库')
     const save = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '保存绑定')!
     await act(async () => { save.click(); await Promise.resolve() })
     expect(invoke).toHaveBeenCalledWith('production.saveBindings', { cutting: 'cutting', towerDaily: 'tower' }, 120000)
@@ -421,8 +419,9 @@ describe('production message Demo UI', () => {
     await act(async () => { root.render(<App />) })
     await act(async () => { (container.querySelector('.template-config-button') as HTMLButtonElement).click() })
 
-    expect(container.querySelectorAll('.pm-binding-dialog select')).toHaveLength(2)
+    expect(container.querySelectorAll('.pm-binding-dialog .picker-trigger')).toHaveLength(2)
     expect(container.textContent).not.toContain('下料业务板块')
+    await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="下料主数据库"]')!.click() })
     expect(container.textContent).toContain('本地生产表')
 
     await act(async () => root.unmount())
@@ -442,7 +441,7 @@ describe('shared operation sidebar', () => {
 
     await act(async () => { root.render(<App />) })
 
-    expect(container.querySelector('.production-message-content h1')?.textContent).toBe('月度焊接计划拆分')
+    expect(container.querySelector('.production-message-content h1')?.textContent).toBe('每日焊接数据模拟')
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('每日焊接数据模拟')
     expect(container.querySelector('.native-content-slot')).toBeNull()
     expect(notifyReady).toHaveBeenLastCalledWith('daily-weld', 'weld')

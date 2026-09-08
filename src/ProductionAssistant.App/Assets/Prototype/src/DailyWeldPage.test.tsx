@@ -68,14 +68,14 @@ describe('daily weld workflow', () => {
     await renderPage()
     expect(container.querySelector('.step-bar')).toBeTruthy()
     expect([...container.querySelectorAll('.step span')].map(item => item.textContent)).toEqual(['录入计划', '拆分预览', '完成'])
-    expect(container.textContent).toContain('计划焊接总量（吨）')
+    expect(container.textContent).toContain('计划焊接总量吨')
     expect(container.textContent).not.toContain('米')
     expect(invoke).toHaveBeenCalledWith('weld.getState')
   })
 
   it('keeps the single business database binding inside the floating settings panel', async () => {
     await renderPage()
-    const settings = [...container.querySelectorAll('button')].find(button => button.textContent === '焊接设置') as HTMLButtonElement
+    const settings = [...container.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === '焊接设置') as HTMLButtonElement
     await act(async () => settings.click())
     const dialog = container.querySelector('.weld-settings-dialog')
     expect(dialog?.getAttribute('aria-modal')).toBe('true')
@@ -97,7 +97,7 @@ describe('daily weld workflow', () => {
       selected: '',
     }) : Promise.resolve({}))
     await renderPage()
-    const settings = [...container.querySelectorAll('button')].find(button => button.textContent === '焊接设置') as HTMLButtonElement
+    const settings = [...container.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === '焊接设置') as HTMLButtonElement
     await act(async () => settings.click())
 
     expect(container.querySelector('[aria-label="焊接业务板块"]')).toBeNull()

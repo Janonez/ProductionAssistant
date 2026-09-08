@@ -48,7 +48,7 @@ public sealed partial class MainWindow : Window
             "production-message" => typeof(PrototypePage),
             "database-viewer" => typeof(PrototypePage),
             "plan-pdf" => typeof(PrototypePage),
-            "production-meeting" => typeof(ProductionMeetingExportPage),
+            "production-meeting" => typeof(PrototypePage),
             "daily-report" => typeof(PrototypePage),
             "report-center" => typeof(PrototypePage),
             _ => typeof(PlanPdfExportPage)

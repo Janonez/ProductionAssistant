@@ -39,6 +39,7 @@ public sealed partial class PrototypePage : Page
             "daily-report" => "daily-report",
             "report-center" => "report-center",
             "plan-pdf" => "plan-pdf",
+            "production-meeting" => "production-meeting",
             _ => "production-message"
         };
         _navigationId = Guid.NewGuid().ToString("N");

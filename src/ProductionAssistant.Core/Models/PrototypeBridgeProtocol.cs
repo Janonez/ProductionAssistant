@@ -53,6 +53,7 @@ public static class PrototypeBridgeProtocol
         "report.saveConfig",
         "report.authenticate",
         "report.run",
+        "meeting.pickFile", "meeting.export", "meeting.openOutput",
         "plan.pickFolder", "plan.audit", "plan.repair", "plan.export", "plan.openOutput"
     };
 
