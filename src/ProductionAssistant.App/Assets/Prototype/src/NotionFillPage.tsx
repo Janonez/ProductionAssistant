@@ -56,7 +56,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
     node('feedback').className = error ? 'callout error' : '';
   }
   function sourceReady() { return !!(job.sourcePageUrl && job.username && job.passwordConfigured); }
-  function renderDate() { dateRoot?.render(<DatePicker value={selectedDate} label="业务日期" disabled={busy} onChange={setDate} />); }
+  function renderDate() { dateRoot?.render(<DatePicker value={selectedDate} disabled={busy} onChange={setDate} />); }
   function controls() {
     for (const id of ['preview', 'source-test', 'yesterday', 'settings-open', 'back', 'confirm-run']) button(id).disabled = busy;
     button('preview').disabled = busy || !sourceReady() || !job.notionConfigured;
@@ -79,30 +79,27 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
     node('target-empty').querySelector('strong')!.textContent = text;
     node('target-empty').querySelector('span')!.textContent = '预览只读取数据，不会新增记录';
     button('run').textContent = '执行本日期'; button('run').disabled = true;
-    node('action-hint').textContent = '按日期查重，仅新增，不覆盖已有记录。';
     if (dialog('confirm').open) dialog('confirm').close();
   }
   function setDate(value: string) {
     if (busy) return;
     selectedDate = value; input('date').value = value;
-    clearPreview('日期已修改'); message('点击“生成预览”读取当前日期的数据。'); renderDate();
+    clearPreview('待重新预览'); message(''); renderDate();
   }
-  function renderSummary(result: NotionFillSourceTestResult, sourceOnly: boolean) {
+  function renderSummary(result: NotionFillSourceTestResult) {
     node('source-empty').hidden = true; node('source-values').hidden = false;
     for (const [id, value] of [['plate', result.plateWeight], ['section', result.sectionWeight], ['total', result.totalWeight]] as const)
       node(id).textContent = number(value);
-    node('source-status').textContent = `${result.businessDate} · 93 系统汇总${sourceOnly ? ' · 未访问 Notion' : ''}`;
   }
   function renderPreview(result: NotionFillTestResult) {
-    renderSummary(result, false);
+    renderSummary(result);
     node('target-empty').hidden = true; node('record').hidden = false;
     node('record-title').textContent = `${result.businessDate} 入库`; node('record-date').textContent = result.businessDate;
     node('record-plate').textContent = `${number(result.plateWeight)} 吨`; node('record-section').textContent = `${number(result.sectionWeight)} 吨`;
     node('target-status').hidden = false;
     node('target-status').textContent = result.targetRecordExists
-      ? '该日期已有记录，执行时将跳过。以上是来源数据，不代表 Notion 已有记录的值。' : '该日期暂无记录，可新增 1 条入库记录。';
+      ? '该日期已有记录，无需新增。' : '可新增 1 条入库记录。';
     button('run').textContent = result.targetRecordExists ? '验证查重' : '执行本日期';
-    node('action-hint').textContent = result.targetRecordExists ? '已有记录不会覆盖，可再次执行验证查重。' : '只读预览已完成。正式执行仍会重新读取并查重。';
   }
   function renderRuns(runs: NotionFillRun[]) {
     node('run-count').textContent = runs.length ? `· ${runs.length}` : '';
@@ -142,7 +139,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       if (disposed || version !== revision) return;
       if (!result.succeeded) throw new Error(result.message || '读取失败');
       if (sourceOnly) {
-        renderSummary(result, true);
+        renderSummary(result);
         node('target-empty').querySelector('strong')!.textContent = '尚未检查 Notion';
         node('target-empty').querySelector('span')!.textContent = '点击“生成预览”完成读取与查重';
       } else { job.validated = true; preview = result; renderPreview(result); }
@@ -163,8 +160,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       // Execution re-reads source data. Preview weights are not the values actually written.
       preview = { ...preview!, targetRecordExists: true };
       node('target-status').textContent = result.message;
-      node('source-status').textContent = `${date} · 执行前预览值，实际结果见运行记录`;
-      node('action-hint').textContent = '已有记录不会覆盖，可再次执行验证查重。'; button('run').textContent = '验证查重';
+      button('run').textContent = '验证查重';
       message(result.created ? 'Notion 写入成功。' : '该日期已有记录，本次已跳过。'); changed();
     } catch (error) {
       if (!disposed) { clearPreview('执行未完成，请重新预览'); message(errorText(error), true); }
@@ -207,7 +203,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       const fresh = await invoke<NotionFillJobDetail>('notionFill.get', { id: job.id });
       if (disposed) return;
       job = fresh; dialog('settings').close();
-      message(needsSave ? '配置已保存，请重新预览后启用。' : '任务设置已保存。'); node('saved').textContent = '配置已保存';
+      message(needsSave ? '配置已保存，请重新预览后启用。' : '任务设置已保存。');
     } catch (error) {
       if (!disposed) node('settings-note').textContent = `${saved ? '设置已更新，但后续操作失败：' : ''}${errorText(error)}`;
     } finally { if (!disposed) { busy = false; draftEnabled = job.isEnabled; controls(); renderToggle(); if (saved) changed(); } }
@@ -246,7 +242,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       button('settings-open').onclick = () => {
         input('task-name').value = job.name; input('url').value = job.sourcePageUrl; input('username').value = job.username; input('password').value = '';
         input('password').required = !job.passwordConfigured;
-        node('settings-note').textContent = '修改任务名称或连接配置后，按现有规则暂停定时任务，需要重新预览并启用。';
+        node('settings-note').textContent = '修改配置后，需重新预览并启用定时任务。';
         draftEnabled = job.isEnabled; renderToggle(); dialog('settings').showModal();
       };
       button('toggle').onclick = () => {

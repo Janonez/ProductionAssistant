@@ -56,6 +56,8 @@ it('loads no source data on entry, date changes or settings saves, and uses the 
   await mount();
   expect(calls('notionFill.test')).toHaveLength(0);
   expect(doc.querySelector('input[type=date]')).toBeNull();
+  expect(doc.querySelector('.date-picker-label')).toBeNull();
+  expect(node('date-label').textContent).toBe('业务日期');
   expect(doc.querySelector('.demo')).toBeNull();
   expect(button('run').disabled).toBe(true);
   await act(async () => doc.querySelector<HTMLButtonElement>('.date-picker-trigger')!.click());
@@ -77,7 +79,7 @@ it('loads no source data on entry, date changes or settings saves, and uses the 
 it('requires full preview and explicit confirmation; only backend results report actual writes and skips', async () => {
   await mount(); await edit('date', '2026-09-03', 'change');
   await click('source-test');
-  expect(node('source-status').textContent).toContain('未访问 Notion');
+  expect(node('target-empty').textContent).toContain('尚未检查 Notion');
   expect(button('run').disabled).toBe(true);
   expect(calls('notionFill.test')).toHaveLength(0);
   await click('preview'); await click('run');
@@ -88,7 +90,7 @@ it('requires full preview and explicit confirmation; only backend results report
   await click('run'); await click('confirm-run');
   expect(calls('notionFill.runNow')[0][1]).toEqual({ id: job.id, businessDate: '2026-09-03' });
   expect(node('target-status').textContent).toContain('板材 10 吨');
-  expect(node('source-status').textContent).toContain('执行前预览值');
+  expect(node('record-plate').textContent).toBe('9.425 吨');
   invoke.mockImplementationOnce(async () => ({ succeeded: true, created: false, skipped: true, message: '日期已存在，跳过新增' }));
   await click('run'); await click('confirm-run');
   expect(node('feedback').textContent).toContain('已跳过');

@@ -682,7 +682,7 @@ describe('Notion fill workflow', () => {
     const frame = container.querySelector('iframe')!
     expect(frame.srcdoc).toContain('入库数据')
     expect(frame.srcdoc).toContain('写入预览')
-    expect(frame.srcdoc).toContain('按日期查重，仅新增，不覆盖')
+    expect(frame.srcdoc).toContain('生成预览')
     expect(frame.srcdoc).not.toContain('交互 Demo')
     expect(container.querySelector('[role="tablist"]')).toBeNull()
     expect(invoke.mock.calls.some(call => call[0] === 'notionFill.test')).toBe(false)
