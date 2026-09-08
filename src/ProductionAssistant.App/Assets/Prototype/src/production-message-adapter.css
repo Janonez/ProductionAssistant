@@ -197,7 +197,10 @@
 
 .production-message-content .template-config-button {
   height: 44px;
-  padding: 0 14px;
+  width: 44px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
   flex: none;
   border: 1px solid var(--input-border);
   border-radius: var(--radius-sm);
@@ -208,7 +211,7 @@
   font-weight: var(--fw-regular);
   box-shadow: none;
   opacity: 1;
-  cursor: default;
+  cursor: pointer;
 }
 
 /* Shared application type scale. Keep Demo structure intact; normalize only typography. */
@@ -251,3 +254,7 @@
 
 /* Keep the approved page on the same application-wide font stack. */
 .production-message-demo, body:has(.production-message-demo) { font-family: var(--font-ui); }
+
+.production-message-content .template-config-button svg { width: 18px; height: 18px; }
+.production-message-content .template-config-button:hover:not(:disabled) { background: var(--surface-muted); }
+.production-message-content .template-config-button:disabled { opacity: .5; cursor: default; }

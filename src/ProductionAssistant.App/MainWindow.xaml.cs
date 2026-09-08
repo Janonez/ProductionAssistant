@@ -32,7 +32,7 @@ public sealed partial class MainWindow : Window
             presenter.PreferredMinimumHeight = 700;
         }
 
-        ShellFrame.Navigate(typeof(PrototypePage), "navigation:plan-pdf");
+        ShellFrame.Navigate(typeof(PrototypePage), "plan-pdf");
         NavigateTo("plan-pdf");
     }
 
@@ -47,8 +47,8 @@ public sealed partial class MainWindow : Window
             "daily-weld" => typeof(PrototypePage),
             "production-message" => typeof(PrototypePage),
             "database-viewer" => typeof(PrototypePage),
-            "plan-pdf" => typeof(PlanPdfExportPage),
-            "production-meeting" => typeof(ProductionMeetingExportPage),
+            "plan-pdf" => typeof(PrototypePage),
+            "production-meeting" => typeof(PrototypePage),
             "daily-report" => typeof(PrototypePage),
             "report-center" => typeof(PrototypePage),
             _ => typeof(PlanPdfExportPage)

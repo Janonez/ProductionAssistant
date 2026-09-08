@@ -116,6 +116,8 @@ internal sealed partial class PrototypeBridge
             "daily.setEnabled" => await SetDailyEnabledAsync(payload),
             "daily.delete" => await DeleteDailyJobAsync(payload),
             "daily.runs" => DailyRuns(payload),
+            "plan.pickFolder" or "plan.audit" or "plan.repair" or "plan.export" or "plan.openOutput" => await HandlePlanAsync(id, operation, payload),
+            "meeting.pickFile" or "meeting.export" or "meeting.openOutput" => await HandleMeetingAsync(operation, payload),
             "report.getState" => AppServices.ReportCenter.GetState(),
             "report.saveConfig" => SaveReportCenterConfig(payload),
             "report.authenticate" => await AuthenticateReportCenterAsync(cancellationToken),

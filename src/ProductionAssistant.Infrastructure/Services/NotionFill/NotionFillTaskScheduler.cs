@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Xml.Linq;
 
 namespace ProductionAssistant.Services;
@@ -6,23 +7,29 @@ namespace ProductionAssistant.Services;
 public static class NotionFillTaskScheduler
 {
     private const string TaskPrefix = "ProductionAssistant-NotionFill-";
-    public const string Schedule = "00:00";
     public static bool IsSchedulingAvailable => RuntimeEnvironment.Current.SchedulerEnabled;
     public static string TaskName(string jobId) => TaskPrefix + jobId;
 
-    public static async Task<(bool Succeeded, string Message)> InstallAsync(string jobId)
+    public static string NormalizeRunTime(string value) =>
+        TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var time)
+            ? time.ToString("HH:mm", CultureInfo.InvariantCulture)
+            : throw new InvalidOperationException("执行时间无效，请使用 HH:mm 格式。");
+
+    public static IReadOnlyList<string> CreateArguments(string jobId, string executable, string runTime)
+    {
+        var command = $"\"{executable}\" --environment {RuntimeEnvironment.Current.Name} " +
+                      $"--run-automation-task --task-type {NotionFillTaskHandler.Type} --task-id {jobId}";
+        return ["/Create", "/TN", TaskName(jobId), "/TR", command, "/SC", "DAILY", "/ST", NormalizeRunTime(runTime),
+            "/F", "/IT", "/RL", "LIMITED", "/RU", Environment.UserName];
+    }
+
+    public static async Task<(bool Succeeded, string Message)> InstallAsync(string jobId, string runTime)
     {
         if (!IsSchedulingAvailable) return (false, "Development 环境默认不启用定时填报。");
         var executable = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
             return (false, "无法确定生产助手程序路径。");
-        var command = $"\"{executable}\" --environment {RuntimeEnvironment.Current.Name} " +
-                      $"--run-automation-task --task-type {NotionFillTaskHandler.Type} --task-id {jobId}";
-        var result = await RunSchtasksAsync([
-            "/Create", "/TN", TaskName(jobId), "/TR", command,
-            "/SC", "DAILY", "/ST", Schedule, "/F", "/IT", "/RL", "LIMITED",
-            "/RU", Environment.UserName
-        ], "定时任务已安装；每天 00:00 填报前一天数据。");
+        var result = await RunSchtasksAsync(CreateArguments(jobId, executable, runTime), $"定时任务已安装；每天 {runTime} 填报前一天数据。");
         if (result.Succeeded) EnableWakeAndCatchUp(jobId);
         return result;
     }
@@ -32,7 +39,7 @@ public static class NotionFillTaskScheduler
             ? RunSchtasksAsync(["/Delete", "/TN", TaskName(jobId), "/F"], "定时任务已停用。")
             : Task.FromResult((false, "Development 环境默认不启用定时填报。"));
 
-    public static async Task<(bool Installed, string Message)> GetStatusAsync(string jobId)
+    public static async Task<(bool Installed, string Message)> GetStatusAsync(string jobId, string runTime)
     {
         if (!IsSchedulingAvailable) return (false, "Development 环境不启用定时填报");
         var result = await RunSchtasksAsync(["/Query", "/TN", TaskName(jobId), "/XML"], string.Empty);
@@ -40,9 +47,9 @@ public static class NotionFillTaskScheduler
         var executable = ExecutableFromTaskXml(result.Message);
         return string.IsNullOrWhiteSpace(executable) || !File.Exists(executable)
             ? (true, "已安装，但原程序路径已失效，请更新任务")
-            : !result.Message.Contains("T00:00:00", StringComparison.Ordinal)
-                ? (true, "已安装，但执行时间不是 00:00，请更新任务")
-                : (true, "已安装 · 每天 00:00 填报前一天");
+            : !result.Message.Contains($"T{NormalizeRunTime(runTime)}:00", StringComparison.Ordinal)
+                ? (true, $"已安装，但执行时间不是 {runTime}，请更新任务")
+                : (true, $"已安装 · 每天 {runTime} 填报前一天");
     }
 
     public static string ExecutableFromTaskXml(string xml)

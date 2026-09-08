@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, RefreshCw } from "lucide-react";
+import { Check, RefreshCw, Settings2 } from "lucide-react";
 import { invoke } from "./bridge";
 import DatePicker from "./DatePicker";
+import { ChoicePicker } from "./FormPickers";
 import type { BindingState, Draft, ImportField, ImportResult } from "./types";
 import { ThreeStepProgress } from "./ThreeStepProgress";
 
@@ -174,12 +175,12 @@ export default function ProductionMessagePage() {
     && confirmFields.every((field) => Boolean(conflictChoices[`${field.draft.index}:${field.key}`]));
 
   if (completed) return <div className="app-shell"><main className="main-content">
-    <PageTitle configure={() => setBindingOpen(true)} /><div className="production-message-scroll"><StepIndicator current={3} />
+    <PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><div className="production-message-scroll"><StepIndicator current={3} />
     <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入 Notion`}</p><button className="primary-button" onClick={handleNext}>录入下一条</button></section></div>
   </main>{bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} close={() => setBindingOpen(false)} save={saveBindings} />}</div>;
 
   return <div className="app-shell"><main className="main-content">
-    <PageTitle configure={() => setBindingOpen(true)} /><div className="production-message-scroll"><StepIndicator current={parsed ? 2 : 1} />
+    <PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><div className="production-message-scroll"><StepIndicator current={parsed ? 2 : 1} />
     <div className="workspace-panel">
       <section className="message-pane">
         <div className="pane-title"><h2>原始消息</h2><p>输入生产消息，系统将自动解析并检查已有数据。</p></div>
@@ -282,16 +283,16 @@ function BindingDialog({ state, selections, setSelections, error, close, save }:
   const [towerBusiness, setTowerBusiness] = useState(state.sources.find(source => source.id === selections.towerDaily)?.businessSection || "");
   const sourcesFor = (business: string) => state.usesBusinessSections ? state.sources.filter(source => source.businessSection === business) : state.sources;
   return <div className="pm-dialog-overlay"><section className="pm-dialog pm-binding-dialog" role="dialog" aria-modal="true" aria-labelledby="binding-title"><h2 id="binding-title">数据库绑定</h2><p>只绑定每日主数据库。月累计和年累计由软件查询计算；下料月计划库通过主库的 Relation 自动识别。</p>
-    {state.usesBusinessSections && <label>下料业务板块<select value={cuttingBusiness} onChange={(event) => { setCuttingBusiness(event.target.value); setSelections({ ...selections, cutting: "" }) }}><option value="">不处理下料消息</option>{state.businessSections.map(section => <option value={section} key={`cutting-business-${section}`}>{section}</option>)}</select></label>}
-    <label>下料主数据库<select value={selections.cutting} disabled={state.usesBusinessSections && !cuttingBusiness} onChange={(event) => setSelections({ ...selections, cutting: event.target.value })}><option value="">不处理下料消息</option>{sourcesFor(cuttingBusiness).map((source) => <option value={source.id} key={`cutting-${source.id}`}>{source.name}</option>)}</select></label>
-    {state.usesBusinessSections && <label>塔筒业务板块<select value={towerBusiness} onChange={(event) => { setTowerBusiness(event.target.value); setSelections({ ...selections, towerDaily: "" }) }}><option value="">请选择业务板块</option>{state.businessSections.map(section => <option value={section} key={`tower-business-${section}`}>{section}</option>)}</select></label>}
-    <label>塔筒产线主数据库<select value={selections.towerDaily} disabled={state.usesBusinessSections && !towerBusiness} onChange={(event) => setSelections({ ...selections, towerDaily: event.target.value })}><option value="">请选择具体数据库</option>{sourcesFor(towerBusiness).map((source) => <option value={source.id} key={`tower-${source.id}`}>{source.name}</option>)}</select></label>
+    {state.usesBusinessSections && <label>下料业务板块<ChoicePicker value={cuttingBusiness} ariaLabel="下料业务板块" placeholder="不处理下料消息" options={[{ value: "", label: "不处理下料消息" }, ...state.businessSections.map(value => ({ value, label: value }))]} onChange={value => { setCuttingBusiness(value); setSelections({ ...selections, cutting: "" }) }} /></label>}
+    <label>下料主数据库<ChoicePicker value={selections.cutting} ariaLabel="下料主数据库" placeholder="不处理下料消息" disabled={state.usesBusinessSections && !cuttingBusiness} options={[{ value: "", label: "不处理下料消息" }, ...sourcesFor(cuttingBusiness).map(source => ({ value: source.id, label: source.name }))]} onChange={value => setSelections({ ...selections, cutting: value })} /></label>
+    {state.usesBusinessSections && <label>塔筒业务板块<ChoicePicker value={towerBusiness} ariaLabel="塔筒业务板块" placeholder="请选择业务板块" options={state.businessSections.map(value => ({ value, label: value }))} onChange={value => { setTowerBusiness(value); setSelections({ ...selections, towerDaily: "" }) }} /></label>}
+    <label>塔筒产线主数据库<ChoicePicker value={selections.towerDaily} ariaLabel="塔筒产线主数据库" placeholder="请选择具体数据库" disabled={state.usesBusinessSections && !towerBusiness} options={sourcesFor(towerBusiness).map(source => ({ value: source.id, label: source.name }))} onChange={value => setSelections({ ...selections, towerDaily: value })} /></label>
     {error && <div className="pm-notice" role="alert">{error}</div>}
     <div className="pm-dialog-actions"><button onClick={close}>取消</button><button className="primary-button" disabled={!selections.towerDaily} onClick={save}>保存绑定</button></div>
   </section></div>;
 }
 
-function PageTitle({ configure }: { configure: () => void }) { return <header className="content-header"><div><h1>生产消息入库</h1><p>解析生产消息，检查已有数据并确认入库</p></div><button type="button" className="template-config-button" onClick={configure}>数据库绑定</button></header>; }
+function PageTitle({ configure, disabled }: { configure: () => void; disabled: boolean }) { return <header className="content-header"><h1>生产消息入库</h1><button type="button" className="template-config-button" disabled={disabled} aria-label="数据库绑定" title="数据库绑定" onClick={configure}><Settings2 /></button></header>; }
 function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
   return <ThreeStepProgress current={current} titles={["录入消息", "解析确认", "完成"]} label="生产消息入库进度" />;
 }

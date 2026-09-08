@@ -52,7 +52,9 @@ public static class PrototypeBridgeProtocol
         "report.getState",
         "report.saveConfig",
         "report.authenticate",
-        "report.run"
+        "report.run",
+        "meeting.pickFile", "meeting.export", "meeting.openOutput",
+        "plan.pickFolder", "plan.audit", "plan.repair", "plan.export", "plan.openOutput"
     };
 
     public static readonly IReadOnlySet<string> AllowedNavigationTags = new HashSet<string>(StringComparer.Ordinal)

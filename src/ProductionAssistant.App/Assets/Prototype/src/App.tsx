@@ -6,6 +6,8 @@ import { AutomationPage } from './AutomationPage'
 import { DailyWeldPage } from './DailyWeldPage'
 import { OperationSidebar } from './OperationSidebar'
 import ProductionMessagePage from './ProductionMessagePage'
+import { PlanPdfPage } from './PlanPdfPage'
+import { ProductionMeetingPage } from './ProductionMeetingPage'
 import { ReportCenterPage } from './ReportCenterPage'
 import SettingsModal from './SettingsModal'
 import { DatabaseViewerPage } from './DatabaseViewerPage'
@@ -27,7 +29,7 @@ export function App() {
     requested === 'production-message' ||
     requested === 'database-viewer' ||
     requested === 'daily-report' ||
-    requested === 'report-center'
+    requested === 'report-center' || requested === 'plan-pdf' || requested === 'production-meeting'
       ? requested
       : 'production-message'
   ) as Route
@@ -56,19 +58,19 @@ export function App() {
     </div>
     <div className={`desktop-shell-content ${native ? 'desktop-shell-content-native' : ''}`}>
       {native ? <div className="native-content-slot" aria-hidden="true" />
-        : route === 'production-message' || route === 'daily-weld'
-          ? <div className="production-message-demo production-message-content">{route === 'daily-weld' ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <ProductionMessagePage />}</div>
-          : <div className="app-shell"><main><AnimatePresence mode="wait">
+        : <AnimatePresence mode="wait">
             <motion.div
               key={route}
+              className={route === 'production-message' || route === 'daily-weld' ? 'production-message-demo production-message-content' : 'app-shell'}
+              data-page-route={route}
               initial={reduced ? false : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={reduced ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: .2 }}
             >
-              {route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}
+              {route === 'production-message' ? <ProductionMessagePage /> : route === 'daily-weld' ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === 'production-meeting' ? <ProductionMeetingPage /> : route === 'plan-pdf' ? <PlanPdfPage /> : route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
             </motion.div>
-          </AnimatePresence></main></div>}
+          </AnimatePresence>}
     </div>
     <SettingsModal open={settingsOpen} onClose={closeSettings} />
   </div>

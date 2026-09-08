@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Database, LoaderCircle, Play, Rows3, Sigma } from 'lucide-react'
 import { invoke } from './bridge'
-import { ChoicePicker, ReportDatePicker } from './FormPickers'
+import { ChoicePicker } from './FormPickers'
+import DatePicker from './DatePicker'
 
 type Source = { id: string; name: string; path: string; businessSection: string }
 type Dataset = { id: string; name: string }
@@ -83,8 +84,8 @@ export function DatabaseViewerPage() {
         {supportsDateRanges && <><label>日期字段<ChoicePicker value={dateFieldId} placeholder="请选择日期字段" disabled={!fields.length || !!busy} options={dateFields.map(field => ({ value: field.id, label: field.name }))} onChange={setDateFieldId} /></label>
         <label>累计字段<ChoicePicker value={valueFieldId} placeholder="可选择数值字段" disabled={!fields.length || !!busy} options={valueFields.map(field => ({ value: field.id, label: field.name }))} onChange={setValueFieldId} /></label>
         <label>软件查询口径<ChoicePicker value={rangeKind} placeholder="请选择日期口径" disabled={!!busy} options={[{ value: 'day', label: '指定日期' }, { value: 'week', label: '指定日期范围' }, { value: 'month', label: '月初至指定日期' }, { value: 'year', label: '年初至指定日期' }]} onChange={value => { setRangeKind(value); setResult(undefined) }} /></label>
-        {!needsCustomRange && <label>指定日期<ReportDatePicker value={businessDate} onChange={setBusinessDate} /></label>}
-        {needsCustomRange && <><label>开始日期<ReportDatePicker value={startDate} onChange={setStartDate} /></label><label>结束日期<ReportDatePicker value={endDate} onChange={setEndDate} /></label></>}</>}
+        {!needsCustomRange && <label>指定日期<DatePicker value={businessDate} onChange={setBusinessDate} /></label>}
+        {needsCustomRange && <><label>开始日期<DatePicker value={startDate} onChange={setStartDate} /></label><label>结束日期<DatePicker value={endDate} onChange={setEndDate} /></label></>}</>}
       </div>
       <div className="database-query-actions"><button className="primary" disabled={!canQuery || !!busy} onClick={inspect}>{busy === 'query' ? <LoaderCircle className="spin" /> : <Play />}{busy === 'query' ? '正在查询…' : '执行查询'}</button></div>
     </section>

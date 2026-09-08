@@ -13,6 +13,7 @@ public sealed class NotionFillJob
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = "原材料入库自动填报";
     public bool IsEnabled { get; set; }
+    public string RunTime { get; set; } = "00:00";
     public string BaseUrl { get; set; } = string.Empty;
     public string SourcePageUrl { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;

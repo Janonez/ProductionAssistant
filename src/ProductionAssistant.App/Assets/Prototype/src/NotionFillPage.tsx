@@ -1,132 +1,273 @@
-import { useEffect, useState } from "react";
-import { CheckCircle2, Database, LoaderCircle, Server, ShieldCheck } from "lucide-react";
-import { invoke } from "./bridge";
-import { ReportDatePicker } from "./FormPickers";
-import type { NotionFillJobDetail, NotionFillRunNowResult, NotionFillSourceTestResult, NotionFillTestResult } from "./types";
-import type { AutomationTaskEditorProps } from "./automationTaskTypes";
+import { useEffect, useRef, useState } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import DatePicker from './DatePicker';
+import sharedControls from './production-message.css?raw';
+import controlRefinements from './control-refinements.css?raw';
+import html from './notion-fill.html?raw';
+import interFont from '../../Fonts/Inter.ttf?url';
+import chineseFont from '../../Fonts/NotoSansSC.ttf?url';
+import { invoke } from './bridge';
+import type { NotionFillJobDetail, NotionFillRun, NotionFillRunNowResult, NotionFillSourceTestResult, NotionFillTestResult } from './types';
 
-type NoticeValue = { tone: string; title: string; message: string };
-
+type Callbacks = { back: () => void; changed: () => unknown; openSettings?: () => void };
 const yesterday = () => {
-  const value = new Date();
-  value.setDate(value.getDate() - 1);
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  const date = new Date(); date.setDate(date.getDate() - 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
-export function NotionFillTaskEditor({ id, section, changed }: AutomationTaskEditorProps) {
-  const [job, setJob] = useState<NotionFillJobDetail>();
-  const [name, setName] = useState("");
-  const [sourcePageUrl, setSourcePageUrl] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [testDate, setTestDate] = useState(yesterday);
-  const [testResult, setTestResult] = useState<NotionFillTestResult>();
-  const [sourceResult, setSourceResult] = useState<NotionFillSourceTestResult>();
-  const [notice, setNotice] = useState<NoticeValue>();
-  const [confirmRun, setConfirmRun] = useState(false);
-  const [createdDate, setCreatedDate] = useState("");
-  const [busy, setBusy] = useState("");
+export function NotionFillPage({ id, ...callbacks }: Callbacks & { id: string }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let disposed = false;
+    let runtime: ReturnType<typeof createNotionFillRuntime> | undefined;
+    const el = frame.current!;
+    setError('');
+    invoke<NotionFillJobDetail>('notionFill.get', { id }).then(job => {
+      if (disposed) return;
+      runtime = createNotionFillRuntime(job, callbacks);
+      el.onload = () => { if (!disposed && el.contentDocument?.getElementById('date-picker')) runtime!.connect(el.contentDocument); };
+      // Keep the approved Demo markup; only the service binding and shared date picker change.
+      el.srcdoc = html.replace('../../src/ProductionAssistant.App/Assets/Fonts/Inter.ttf', new URL(interFont, window.location.href).href)
+        .replace('../../src/ProductionAssistant.App/Assets/Fonts/NotoSansSC.ttf', new URL(chineseFont, window.location.href).href);
+    }).catch(e => { if (!disposed) setError(String(e.message || e)); });
+    return () => { disposed = true; el.onload = null; runtime?.dispose(); };
+  }, [id]);
+  return <div className="message-template-host">{error && <p role="alert">{error}</p>}<iframe ref={frame} title="原材料自动入库" /></div>;
+}
 
-  const load = () => invoke<NotionFillJobDetail>("notionFill.get", { id }).then(value => {
-    setJob(value);
-    setName(value.name);
-    setSourcePageUrl(value.sourcePageUrl);
-    setUsername(value.username);
-  });
+export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks: Callbacks) {
+  let job = { ...initial, runTime: initial.runTime || '00:00' };
+  let doc: Document;
+  let dateRoot: Root | undefined;
+  let disposed = false, busy = false, revision = 0, runsRevision = 0;
+  let selectedDate = yesterday();
+  let preview: NotionFillTestResult | undefined;
+  let draftEnabled = job.isEnabled;
+  const node = <T extends HTMLElement = HTMLElement>(id: string) => doc.getElementById(id) as T;
+  const input = (id: string) => node<HTMLInputElement>(id);
+  const button = (id: string) => node<HTMLButtonElement>(id);
+  const dialog = (id: string) => node<HTMLDialogElement>(id);
+  const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
+  const number = (value: number) => value.toLocaleString('zh-CN', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
-  useEffect(() => { load().catch(showError); }, [id]);
-
-  function showError(error: unknown) {
-    setNotice({ tone: "error", title: "操作失败", message: error instanceof Error ? error.message : String(error) });
+  function message(text: string, error = false) {
+    node('feedback').textContent = text;
+    node('feedback').className = error ? 'callout error' : '';
   }
-
-  async function save() {
-    setBusy("save");
-    setNotice(undefined);
-    try {
-      await invoke("notionFill.save", { id, name, sourcePageUrl, username, password });
-      setPassword("");
-      await load();
-      changed();
-      setNotice({ tone: "success", title: "配置已保存", message: "测试通过后即可返回任务列表启用。" });
-    } catch (error) { showError(error); }
-    finally { setBusy(""); }
+  function sourceReady() { return !!(job.sourcePageUrl && job.username && job.passwordConfigured); }
+  function renderDate() { dateRoot?.render(<DatePicker value={selectedDate} disabled={busy} onChange={setDate} />); }
+  function controls() {
+    for (const id of ['preview', 'source-test', 'yesterday', 'settings-open', 'back', 'confirm-run']) button(id).disabled = busy;
+    button('preview').disabled = busy || !sourceReady() || !job.notionConfigured;
+    button('source-test').disabled = busy || !sourceReady();
+    button('run').disabled = busy || !preview;
+    doc.querySelectorAll<HTMLButtonElement | HTMLInputElement>('#settings button, #settings input').forEach(el => el.disabled = busy);
+    button('toggle').disabled = busy || !job.schedulingAvailable;
+    button('preview').textContent = busy ? '处理中…' : '生成预览';
+    node('name').textContent = job.name;
+    node('enabled').textContent = job.isEnabled ? (job.schedulerInstalled ? '已启用' : '计划异常') : '未启用';
+    node('target-name').textContent = job.targetDataSourceName;
+    node('settings-target-name').textContent = job.targetDataSourceName;
+    input('password').placeholder = job.passwordConfigured ? '已保存；留空不修改' : '请输入 93 系统密码';
+    renderDate();
   }
-
-  async function test() {
-    setBusy("test");
-    setNotice(undefined);
-    setTestResult(undefined);
-    setConfirmRun(false);
-    try {
-      await invoke("notionFill.save", { id, name, sourcePageUrl, username, password });
-      setPassword("");
-      const result = await invoke<NotionFillTestResult>("notionFill.test", { id, businessDate: testDate }, 120000);
-      setTestResult(result);
-      await load();
-      changed();
-      setNotice({ tone: "success", title: "只读测试通过", message: result.message });
-    } catch (error) { showError(error); }
-    finally { setBusy(""); }
+  function clearPreview(text = '尚未生成预览') {
+    revision++; preview = undefined;
+    node('source-empty').hidden = false; node('source-values').hidden = true; node('source-error').hidden = true;
+    node('record').hidden = true; node('target-status').hidden = true; node('target-empty').hidden = false;
+    node('target-empty').querySelector('strong')!.textContent = text;
+    node('target-empty').querySelector('span')!.textContent = '预览只读取数据，不会新增记录';
+    button('run').textContent = '执行本日期'; button('run').disabled = true;
+    if (dialog('confirm').open) dialog('confirm').close();
   }
-
-  async function testSource() {
-    setBusy("source-test");
-    setNotice(undefined);
-    setSourceResult(undefined);
+  function setDate(value: string) {
+    if (busy) return;
+    selectedDate = value; input('date').value = value;
+    clearPreview('待重新预览'); message(''); renderDate();
+  }
+  function renderSummary(result: NotionFillSourceTestResult) {
+    node('source-empty').hidden = true; node('source-values').hidden = false;
+    for (const [id, value] of [['plate', result.plateWeight], ['section', result.sectionWeight], ['total', result.totalWeight]] as const)
+      node(id).textContent = number(value);
+  }
+  function renderPreview(result: NotionFillTestResult) {
+    renderSummary(result);
+    node('target-empty').hidden = true; node('record').hidden = false;
+    node('record-title').textContent = `${result.businessDate} 入库`; node('record-date').textContent = result.businessDate;
+    node('record-plate').textContent = `${number(result.plateWeight)} 吨`; node('record-section').textContent = `${number(result.sectionWeight)} 吨`;
+    node('target-status').hidden = false;
+    node('target-status').textContent = result.targetRecordExists
+      ? '该日期已有记录，无需新增。' : '可新增 1 条入库记录。';
+    button('run').textContent = result.targetRecordExists ? '验证查重' : '执行本日期';
+  }
+  function renderRuns(runs: NotionFillRun[]) {
+    node('run-count').textContent = runs.length ? `· ${runs.length}` : '';
+    const rows = runs.map(run => {
+      const row = doc.createElement('div'); row.className = 'run';
+      const kind = doc.createElement('span');
+      kind.textContent = ({ 'source-test': '93 测试', test: '只读预览', manual: '手动执行', automatic: '自动执行' } as Record<string, string>)[run.source] || run.source;
+      const content = doc.createElement('div');
+      content.textContent = run.error || run.message || (run.status === 'created' ? '已新增' : run.status === 'failed' ? '执行失败' : '已检查');
+      if (run.status === 'failed') content.style.color = '#B91C1C';
+      const detail = doc.createElement('p');
+      detail.textContent = run.status === 'failed' ? run.businessDate : `${run.businessDate} · 板材 ${number(run.plateWeight)} 吨 · 型材 ${number(run.sectionWeight)} 吨`;
+      content.append(detail);
+      const time = doc.createElement('small'); time.textContent = run.time;
+      row.append(kind, content, time); return row;
+    });
+    node('runs-body').replaceChildren(...rows);
+    if (!runs.length) node('runs-body').textContent = '暂无运行记录';
+  }
+  async function loadRuns() {
+    const version = ++runsRevision;
     try {
-      await invoke("notionFill.save", { id, name, sourcePageUrl, username, password });
-      setPassword("");
-      const result = await invoke<NotionFillSourceTestResult>("notionFill.testSource", { id, businessDate: testDate }, 120000);
-      setSourceResult(result);
-      await load();
-      changed();
-      setNotice({ tone: "success", title: "93 系统读取成功", message: result.message });
+      const result = await invoke<{ runs: NotionFillRun[] }>('notionFill.runs', { id: job.id });
+      if (!disposed && version === runsRevision) renderRuns(result.runs);
     } catch (error) {
-      setNotice({ tone: "error", title: "93 系统读取失败", message: error instanceof Error ? error.message : String(error) });
+      if (!disposed && version === runsRevision) node('runs-body').textContent = `运行记录读取失败：${errorText(error)}；重新展开可重试。`;
     }
-    finally { setBusy(""); }
   }
-
-  async function runNow() {
-    setBusy("run");
-    setNotice(undefined);
+  function changed() { Promise.resolve(callbacks.changed()).catch(() => undefined); }
+  async function read(sourceOnly: boolean) {
+    if (busy || !selectedDate) return;
+    busy = true; clearPreview('正在读取…');
+    const version = revision;
+    controls(); message('');
     try {
-      const result = await invoke<NotionFillRunNowResult>("notionFill.runNow", { id, businessDate: testDate }, 120000);
-      setConfirmRun(false);
-      setTestResult(current => current ? { ...current, targetRecordExists: true, message: result.message } : current);
-      if (result.created) setCreatedDate(testDate);
+      const result = await invoke<NotionFillTestResult>(sourceOnly ? 'notionFill.testSource' : 'notionFill.test', { id: job.id, businessDate: selectedDate }, 120000);
+      if (disposed || version !== revision) return;
+      if (!result.succeeded) throw new Error(result.message || '读取失败');
+      if (sourceOnly) {
+        renderSummary(result);
+        node('target-empty').querySelector('strong')!.textContent = '尚未检查 Notion';
+        node('target-empty').querySelector('span')!.textContent = '点击“生成预览”完成读取与查重';
+      } else { job.validated = true; preview = result; renderPreview(result); }
       changed();
-      const repeatedAfterCreate = !result.created && createdDate === testDate;
-      setNotice({
-        tone: "success",
-        title: result.created ? "Notion 写入成功" : repeatedAfterCreate ? "重复执行验证通过" : "目标记录已存在",
-        message: repeatedAfterCreate ? `首次写入已成功；${result.message}` : result.message,
-      });
-    } catch (error) { showError(error); }
-    finally { setBusy(""); }
+    } catch (error) {
+      if (disposed || version !== revision) return;
+      clearPreview('本次预览未完成'); node('source-error').hidden = false; node('source-error').textContent = errorText(error);
+    } finally { if (!disposed) { busy = false; controls(); void loadRuns(); } }
+  }
+  async function run() {
+    if (busy || !preview || !dialog('confirm').open) return;
+    const date = preview.businessDate;
+    dialog('confirm').close(); busy = true; controls(); message('');
+    try {
+      const result = await invoke<NotionFillRunNowResult>('notionFill.runNow', { id: job.id, businessDate: date }, 120000);
+      if (disposed) return;
+      if (!result.succeeded) throw new Error(result.message || '执行失败');
+      // Execution re-reads source data. Preview weights are not the values actually written.
+      preview = { ...preview!, targetRecordExists: true };
+      node('target-status').textContent = result.message;
+      button('run').textContent = '验证查重';
+      message(result.created ? 'Notion 写入成功。' : '该日期已有记录，本次已跳过。'); changed();
+    } catch (error) {
+      if (!disposed) { clearPreview('执行未完成，请重新预览'); message(errorText(error), true); }
+    } finally { if (!disposed) { busy = false; controls(); void loadRuns(); } }
+  }
+  function configChanged() {
+    return input('task-name').value.trim() !== job.name || input('url').value.trim().replace(/\/+$/, '') !== job.sourcePageUrl ||
+      input('username').value.trim() !== job.username || !!input('password').value;
+  }
+  function renderToggle() {
+    button('toggle').setAttribute('aria-checked', String(draftEnabled));
+    node('schedule-hint').textContent = !job.schedulingAvailable ? '当前运行环境不支持定时启停，预览与手动执行仍可使用。'
+      : configChanged() ? '配置已修改：保存后需重新预览，再启用。'
+      : job.isEnabled && !job.schedulerInstalled ? job.schedulerMessage
+      : job.validated ? '只读预览已通过，可以启用定时入库。' : '完成一次“生成预览”后可启用。';
+  }
+  async function saveSettings(event: SubmitEvent) {
+    event.preventDefault(); if (busy) return;
+    const name = input('task-name').value.trim(), username = input('username').value.trim();
+    if (!name || !username) { node('settings-note').textContent = '任务名称和用户名不能为空。'; return; }
+    const connectionChanged = configChanged(), runTime = input('run-time').value;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(runTime)) { node('settings-note').textContent = '请选择有效的执行时间。'; return; }
+    const needsSave = connectionChanged || runTime !== job.runTime, desiredEnabled = connectionChanged ? false : draftEnabled;
+    let saved = false;
+    busy = true; controls();
+    try {
+      if (needsSave) {
+        const sourcePageUrl = input('url').value.trim().replace(/\/+$/, ''), password = input('password').value;
+        await invoke('notionFill.save', { id: job.id, name, sourcePageUrl, username, password, runTime });
+        if (disposed) return;
+        saved = true;
+        job = { ...job, name, sourcePageUrl, username, runTime, passwordConfigured: job.passwordConfigured || !!password,
+          isEnabled: connectionChanged ? false : job.isEnabled, validated: connectionChanged ? false : job.validated };
+        input('password').value = '';
+        if (connectionChanged) clearPreview('配置已修改，请重新预览');
+      }
+      if (desiredEnabled !== job.isEnabled) {
+        const result = await invoke<{ enabled: boolean; message?: string }>('automation.setEnabled', { id: job.id, taskType: 'notion_fill', enabled: desiredEnabled });
+        if (disposed) return;
+        job.isEnabled = result.enabled;
+        if (result.enabled !== desiredEnabled) throw new Error(result.message || '定时任务状态未更新');
+        saved = true;
+      }
+      const fresh = await invoke<NotionFillJobDetail>('notionFill.get', { id: job.id });
+      if (disposed) return;
+      job = fresh; dialog('settings').close();
+      message(connectionChanged ? '配置已保存，请重新预览后启用。' : '任务设置已保存。');
+    } catch (error) {
+      if (!disposed) node('settings-note').textContent = `${saved ? '设置已更新，但后续操作失败：' : ''}${errorText(error)}`;
+    } finally { if (!disposed) { busy = false; draftEnabled = job.isEnabled; controls(); renderToggle(); if (saved) changed(); } }
+  }
+  async function settingsUpdated() {
+    if (busy || disposed) return;
+    const version = revision;
+    try {
+      const fresh = await invoke<NotionFillJobDetail>('notionFill.get', { id: job.id });
+      if (disposed || busy || version !== revision) return;
+      job = fresh; clearPreview('系统设置已更新，请重新预览'); controls();
+      message(job.notionConfigured ? '系统设置已更新，点击“生成预览”读取数据。' : 'Notion 连接尚未配置，仍可仅测试 93 读取。');
+    } catch (error) { if (!disposed) message(errorText(error), true); }
   }
 
-  if (!job) return <div className="page daily-page"><LoaderCircle className="spin page-loader" /></div>;
-  return <div className="page daily-page notion-fill-page automation-task-panel">
-    {notice && <div className={`notice ${notice.tone}`} role="status"><div><strong>{notice.title}</strong><span>{notice.message}</span></div></div>}
-    {!job.notionConfigured && section !== "basics" && <div className="notice warning" role="status"><div><strong>Notion 连接未就绪</strong><span>请先在“设置 → Notion 连接”中保存并测试 Token，然后再执行只读测试。</span></div></div>}
-    {section === "basics" && <section className="surface notion-fill-card" id="basics"><div className="notion-fill-heading"><Server /><div><h2>基本信息</h2><p>名称用于在自动化任务列表中识别当前任务。</p></div></div>
-        <div className="notion-fill-fields"><label>任务名称<input value={name} onChange={event => { setName(event.target.value); setTestResult(undefined); }} /></label></div>
-        <div className="notion-fill-actions"><button className="secondary" disabled={!!busy || !name.trim() || !username.trim() || (!password && !job.passwordConfigured)} onClick={save}>{busy === "save" && <LoaderCircle className="spin" />}保存配置</button></div>
-      </section>}
-      {section === "configuration" && <section className="surface notion-fill-card" id="configuration"><div className="notion-fill-heading"><Server /><div><h2>93 系统连接</h2><p>连接配置由当前任务保存，密码只保留 Windows 加密值。</p></div></div>
-        <div className="notion-fill-fields"><label className="notion-fill-wide-field">材料入库业务页面<input type="url" value={sourcePageUrl} placeholder="http://服务器/业务页面" onChange={event => { setSourcePageUrl(event.target.value); setTestResult(undefined); }} /></label><label>用户名<input autoComplete="username" value={username} onChange={event => { setUsername(event.target.value); setTestResult(undefined); }} /></label><label>密码<input type="password" autoComplete="current-password" value={password} placeholder={job.passwordConfigured ? "已保存；留空表示不修改" : "请输入93系统密码"} onChange={event => { setPassword(event.target.value); setTestResult(undefined); }} /></label></div>
-        <div className="notion-fill-subsection"><div className="notion-fill-heading"><Database /><div><h2>固定填报目标</h2><p>当前任务只支持已确认的原材料入库日汇总，不提供通用字段映射。</p></div></div>
-        <dl className="notion-fill-contract"><div><dt>目标数据库</dt><dd>{job.targetDataSourceName}</dd></div><div><dt>字段</dt><dd>业务、日期、板材、型材</dd></div><div><dt>写入方式</dt><dd>按日期查重，仅新增，不覆盖</dd></div><div><dt>执行计划</dt><dd>{job.schedule}</dd></div></dl>
-        </div><div className="notion-fill-actions"><button className="secondary" disabled={!!busy || !name.trim() || !username.trim() || (!password && !job.passwordConfigured)} onClick={save}>{busy === "save" && <LoaderCircle className="spin" />}保存任务配置</button></div>
-      </section>}
-    {section === "execution" && <section className="surface notion-fill-card notion-fill-test" id="execution"><div className="notion-fill-heading"><ShieldCheck /><div><h2>运行与测试</h2><p>读取指定日期的 93 数据并检查 Notion 是否已有记录；只有二次确认后才会写入。</p></div></div>
-      <div className="notion-fill-testbar"><label>测试业务日期<ReportDatePicker value={testDate} onChange={value => { setTestDate(value); setTestResult(undefined); setSourceResult(undefined); setConfirmRun(false); setCreatedDate(""); }} /></label><div className="notion-fill-test-actions"><button className="secondary" disabled={!!busy || !name.trim() || !username.trim() || (!password && !job.passwordConfigured)} onClick={testSource}>{busy === "source-test" ? <LoaderCircle className="spin" /> : <Server />}仅测试 93 读取</button><button className="primary" disabled={!!busy || !job.notionConfigured || !name.trim() || !username.trim() || (!password && !job.passwordConfigured)} onClick={test}>{busy === "test" ? <LoaderCircle className="spin" /> : <ShieldCheck />}测试读取与查重</button></div></div>
-      {sourceResult && <div className="notion-fill-result"><div><span>板材</span><strong>{sourceResult.plateWeight.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 吨</strong></div><div><span>型材</span><strong>{sourceResult.sectionWeight.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 吨</strong></div><div><span>合计</span><strong>{sourceResult.totalWeight.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 吨</strong></div><p><CheckCircle2 />93 系统读取成功，本次未访问 Notion</p></div>}
-      {testResult && <div className="notion-fill-result"><div><span>板材</span><strong>{testResult.plateWeight.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 吨</strong></div><div><span>型材</span><strong>{testResult.sectionWeight.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 吨</strong></div><div><span>合计</span><strong>{testResult.totalWeight.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 吨</strong></div><p><CheckCircle2 />{testResult.targetRecordExists ? "目标日期已有记录，正式任务将跳过" : "目标日期暂无记录，可以新增"}</p></div>}
-      {testResult && !confirmRun && <div className="notion-fill-write-action"><button className="danger" disabled={!!busy} onClick={() => setConfirmRun(true)}>{busy === "run" && <LoaderCircle className="spin" />}{testResult.targetRecordExists ? "再次执行验证查重" : "执行本日期"}</button><span>正式执行会重新读取并查重；仅在目标日期不存在时新增。</span></div>}
-      {testResult && confirmRun && <div className="notice warning notion-fill-confirm" role="alert"><div><strong>确认正式执行 {testDate}？</strong><span>{testResult.targetRecordExists ? "当前检测到已有记录，执行应只产生跳过记录。" : `将向“${job.targetDataSourceName}”新增板材 ${testResult.plateWeight} 吨、型材 ${testResult.sectionWeight} 吨。`}</span></div><div className="notion-fill-confirm-actions"><button className="secondary" disabled={!!busy} onClick={() => setConfirmRun(false)}>取消</button><button className="danger" disabled={!!busy} onClick={runNow}>{busy === "run" && <LoaderCircle className="spin" />}确认执行</button></div></div>}
-    </section>}
-  </div>;
+  return {
+    connect(document: Document) {
+      dateRoot?.unmount(); doc = document;
+      const style = doc.createElement('style');
+      style.textContent = sharedControls + '\n' + controlRefinements + '\nbody{color:#292524}#date-picker{width:163px;display:inline-block}';
+      doc.head.append(style);
+      const marker = doc.createElement('span'); marker.className = 'production-message-demo'; marker.hidden = true; doc.body.append(marker);
+      dateRoot = createRoot(node('date-picker'));
+      input('date').value = selectedDate; input('date').onchange = () => setDate(input('date').value);
+      button('yesterday').onclick = () => setDate(yesterday());
+      button('preview').onclick = () => { void read(false); }; button('source-test').onclick = () => { void read(true); };
+      button('back').onclick = callbacks.back;
+      button('run').onclick = () => {
+        if (busy || !preview) return;
+        node('confirm-title').textContent = preview.targetRecordExists ? '验证查重' : '执行本日期';
+        node('confirm-copy').textContent = preview.targetRecordExists ? `${preview.businessDate} 已有记录，本次执行应跳过。`
+          : `将向“${job.targetDataSourceName}”新增 ${preview.businessDate} 的记录：板材 ${number(preview.plateWeight)} 吨，型材 ${number(preview.sectionWeight)} 吨。`;
+        dialog('confirm').showModal();
+      };
+      button('confirm-run').onclick = () => { void run(); };
+      button('settings-open').onclick = () => {
+        input('task-name').value = job.name; input('url').value = job.sourcePageUrl; input('username').value = job.username; input('password').value = '';
+        input('run-time').value = job.runTime;
+        input('password').required = !job.passwordConfigured;
+        node('settings-note').textContent = '修改名称或连接后，需重新预览并启用定时任务。';
+        draftEnabled = job.isEnabled; renderToggle(); dialog('settings').showModal();
+      };
+      button('toggle').onclick = () => {
+        if (!job.schedulingAvailable) return;
+        if (!draftEnabled && (!job.validated || configChanged())) { node('schedule-hint').textContent = '请先保存配置并完成“生成预览”，再启用定时入库。'; return; }
+        draftEnabled = !draftEnabled; renderToggle();
+      };
+      for (const id of ['task-name', 'url', 'username', 'password']) input(id).oninput = () => { if (configChanged()) draftEnabled = false; renderToggle(); };
+      node<HTMLFormElement>('settings-form').onsubmit = event => { void saveSettings(event); };
+      dialog('settings').onclose = () => { input('password').value = ''; };
+      dialog('settings').oncancel = event => { if (busy) event.preventDefault(); };
+      doc.querySelectorAll<HTMLButtonElement>('[data-close]').forEach(el => el.onclick = () => { if (!busy) dialog(el.dataset.close!).close(); });
+      button('system-settings').hidden = !callbacks.openSettings;
+      button('system-settings').onclick = () => { dialog('settings').close(); callbacks.openSettings?.(); };
+      doc.querySelector<HTMLDetailsElement>('.runs')!.ontoggle = event => { if ((event.currentTarget as HTMLDetailsElement).open) void loadRuns(); };
+      window.addEventListener('production-settings-updated', settingsUpdated);
+      clearPreview(); controls();
+      if (!sourceReady()) message('请先在任务设置中补全 93 系统连接配置。');
+      else if (!job.notionConfigured) message('Notion 连接尚未配置，请从任务设置打开系统设置；仍可仅测试 93 读取。');
+    },
+    dispose() { disposed = true; revision++; runsRevision++; dateRoot?.unmount(); window.removeEventListener('production-settings-updated', settingsUpdated); }
+  };
 }

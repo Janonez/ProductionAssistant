@@ -1,4 +1,5 @@
 import { MessageTemplatePage } from "./MessageTemplatePage";
+import { NotionFillPage } from "./NotionFillPage";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, ArrowLeft, ArrowRight, Ellipsis, FileText, LoaderCircle, Plus, RotateCw, Trash2 } from "lucide-react";
@@ -189,6 +190,7 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
   }
 
   if (isDaily) return <MessageTemplatePage id={task.id} back={back} changed={refresh} openSettings={openSettings} />;
+  if (task.taskType === "notion_fill") return <NotionFillPage id={task.id} back={back} changed={refresh} openSettings={openSettings} />;
 
   return <div className="page daily-page automation-detail">
     <header>

@@ -1,7 +1,8 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ChoicePicker, ReportDatePicker, TimePicker } from "./FormPickers";
+import { ChoicePicker, TimePicker } from "./FormPickers";
+import DatePicker from "./DatePicker";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
@@ -20,7 +21,7 @@ function render(value: React.ReactNode) {
 
 describe("daily report pickers", () => {
   it("uses styled React popovers instead of native form pickers", () => {
-    render(<><ChoicePicker value="" placeholder="选择数据库" options={[{ value: "db", label: "日报数据库" }]} onChange={() => undefined} /><TimePicker value="17:30" onChange={() => undefined} /><ReportDatePicker value="2026-08-13" onChange={() => undefined} /></>);
+    render(<><ChoicePicker value="" placeholder="选择数据库" options={[{ value: "db", label: "日报数据库" }]} onChange={() => undefined} /><TimePicker value="17:30" onChange={() => undefined} /><DatePicker value="2026-08-13" onChange={() => undefined} /></>);
     expect(container.querySelector("select,input[type=time],input[type=date]")).toBeNull();
   });
 

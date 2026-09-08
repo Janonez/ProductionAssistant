@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { invoke } from "./bridge";
 import { MessageTemplatePage } from "./MessageTemplatePage";
-import { NotionFillTaskEditor } from "./NotionFillPage";
+import { NotionFillPage } from "./NotionFillPage";
 import { DailyReportCreateWizard } from "./DailyReportCreateWizard";
 import { NotionFillCreateWizard } from "./NotionFillCreateWizard";
 import type { DailyRun, NotionFillRun } from "./types";
@@ -70,7 +70,7 @@ export const automationTaskTypes: AutomationTaskTypeDefinition[] = [
     taskTabs: [{ id: "configuration", label: "任务配置" }, { id: "execution", label: "运行与测试" }],
     resolveSection: (missingStep) => missingStep === "basics" ? "basics" : missingStep === "test" ? "execution" : "configuration",
     issueTitle: (missingStep) => missingStep === "connection" ? "93 系统连接未就绪" : missingStep === "target" ? "Notion 填报目标未就绪" : missingStep === "test" ? "任务尚未完成只读测试" : "基本信息不完整",
-    renderEditor: (props) => <NotionFillTaskEditor {...props} />,
+    renderEditor: (props) => <NotionFillPage id={props.id} back={() => props.navigate("list")} changed={props.changed} openSettings={props.openSettings} />,
     loadRuns: (id) => invoke<{ runs: NotionFillRun[] }>("notionFill.runs", { id }).then(({ runs }) => runs.map(run => ({
       id: run.id,
       time: run.time,
