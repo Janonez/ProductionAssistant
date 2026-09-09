@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const core = require('./core.js');
-const {BrowserSession,normalizeAdapter} = require('./browser.cjs');
+const {BrowserSession,normalizeAdapter,explainError} = require('./browser.cjs');
 
 const root = path.resolve(__dirname,'../../..');
 const defaultRuntime = path.join(root,'artifacts/tencent-docs-demo');
@@ -104,7 +104,7 @@ async function createServer(options = {}) {
       } finally { busy = false; }
     } catch(e) {
       // Never report a partial write as an untouched document or retry it automatically.
-      send(res,400,{error:e.message,completed:e.completed || [],uncertainAddress:e.uncertainAddress || null});
+      send(res,400,{...explainError(e),completed:e.completed || [],uncertainAddress:e.uncertainAddress || null});
     }
   });
   server.requestTimeout = 30000;

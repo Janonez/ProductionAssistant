@@ -1,5 +1,20 @@
 'use strict';
 const core = require('./core.js');
+const fieldLabels = {nameBox:'名称框',valueBox:'值编辑区 / 公式栏',sheetTabs:'工作表标签集合',activeSheet:'当前选中的工作表',ready:'编辑状态标志',saved:'已保存状态标志',frame:'表格所在 iframe',dateFormat:'日期表头格式'};
+const textControls = 'input:not([type=hidden]):not([type=password]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=image]),textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
+function fieldError(key,message,details='') {
+  const error=Error(message);error.field=key;error.details=details;return error;
+}
+function explainError(error) {
+  const clean=value=>String(value||'').replace(/\u001b\[[0-?]*[ -/]*[@-~]/g,'').trim();
+  const original=clean(error.message), details=clean(error.details);
+  let message=original;
+  if (/Target.*closed|has been closed/.test(original)) message='专用浏览器已关闭，操作已中断。请重新打开网页后检查。';
+  else if (/Timeout \d+ms|TimeoutError/.test(original)) message='等待网页响应超时。请确认页面加载完成，并检查相关控件配置。';
+  else if (/net::ERR_/.test(original)) message='网页连接失败。请检查测试地址和网络连接后重试。';
+  else if (/(?:locator|page|browserType|frameLocator|browserContext)\.\w+:|Call log:|strict mode violation/.test(original)) message='网页控件操作未完成。请检查网页操作设置；具体原因可展开技术详情查看。';
+  return {error:message,details:details || (message!==original?original:''),field:error.field||null};
+}
 
 function playwright() {
   try { return require('playwright'); }
@@ -13,14 +28,16 @@ const anchorSpecs = [
 ];
 const adapterDefaults = {
   frame: '', nameBox: '', valueBox: '', sheetTabs: '', activeSheet: '', ready: '', saved: '',
-  dateFormat: '{yyyy}年{M}月{d}日',
+  dateFormat: '{yyyy}年{M}月{d}日', stateMode:'auto',
   anchors: Object.fromEntries(anchorSpecs.map(([key,,expected]) => [key,{address:'',expected}]))
 };
 function normalizeAdapter(raw = {}) {
   const result = {};
+  result.stateMode=raw.stateMode ?? 'auto';
+  if(!['auto','selectors'].includes(result.stateMode))throw Error('请选择有效的页面状态判断方式');
   for (const key of ['frame','nameBox','valueBox','sheetTabs','activeSheet','ready','saved','dateFormat']) {
     const value = raw[key] ?? adapterDefaults[key];
-    if (typeof value !== 'string' || value.length > 1000) throw Error('网页配置字段格式无效：'+key);
+    if (typeof value !== 'string' || value.length > 1000) throw fieldError(key,'网页配置格式无效：'+fieldLabels[key]);
     result[key] = value.trim();
   }
   result.anchors = {};
@@ -77,10 +94,28 @@ class BrowserSession {
   }
   scope(config) { return config.adapter.frame ? this.page.frameLocator(config.adapter.frame) : this.page; }
   async one(config, key) {
-    if (!config.adapter[key]) throw Error('请在网页操作设置中填写：'+key);
+    const label=fieldLabels[key];
+    if (!config.adapter[key]) throw fieldError(key,'尚未设置「'+label+'」。请到“环境与模板设置 → 网页操作设置”选取对应控件。');
     const locator = this.scope(config).locator(config.adapter[key]);
-    await locator.waitFor({state:'visible'});
-    if (await locator.count() !== 1) throw Error(key+' 选择器必须唯一匹配可见元素');
+    try {
+      await locator.first().waitFor({state:'visible'});
+      if (await locator.count() !== 1) throw fieldError(key,'「'+label+'」匹配到了多个元素，请重新选取唯一的目标控件。');
+    } catch(error) {
+      if(error.field)throw error;
+      throw fieldError(key,'未找到可见的「'+label+'」。请确认网页已打开、相关区域已展开，并检查该项设置。',error.message);
+    }
+    return locator;
+  }
+  async control(config,key) {
+    let locator=await this.one(config,key);
+    const supported=await locator.evaluate((el,selector)=>el.matches(selector) || el.isContentEditable,textControls);
+    if(!supported) {
+      const children=locator.locator(':is('+textControls+'):visible');
+      const count=await children.count();
+      if(count!==1) throw fieldError(key,'「'+fieldLabels[key]+'」选中了普通页面区域，'+(count>1?'里面有多个输入框，无法确定目标。':'没有找到可输入的控件。')+'请先在网页中点出输入光标，再重新选取该项。');
+      locator=children.first();
+    }
+    if(!await locator.isEditable()) throw fieldError(key,'「'+fieldLabels[key]+'」当前只读或已禁用。请确认已登录、具有编辑权限，并激活该输入框。');
     return locator;
   }
   async text(locator) {
@@ -88,9 +123,9 @@ class BrowserSession {
   }
   async ready(config) {
     this.requirePage(config);
-    await this.one(config,'ready');
-    const name = await this.one(config,'nameBox'), value = await this.one(config,'valueBox');
-    if (!await name.isEditable() || !await value.isEditable()) throw Error('名称框或值编辑区不可编辑，请检查登录和填写权限');
+    if(config.adapter.stateMode==='selectors')await this.one(config,'ready');
+    await this.control(config,'nameBox');
+    await this.control(config,'valueBox');
     return {message:'网页编辑控件可用；尚未校验目标工作表与单元格。'};
   }
   async selectSheet(config, sheet) {
@@ -112,7 +147,7 @@ class BrowserSession {
   }
   async locate(config, address) {
     a1(address);
-    const name = await this.one(config,'nameBox');
+    const name = await this.control(config,'nameBox');
     await name.fill(address);
     await name.press('Enter');
     await name.press('Tab');
@@ -121,7 +156,7 @@ class BrowserSession {
     await new Promise(resolve => setTimeout(resolve,100));
     const selected = (await this.text(name)).replace(/\$/g,'').toUpperCase();
     if (selected !== address) throw Error('选中地址不一致：期望 '+address+'，实际 '+selected);
-    return this.one(config,'valueBox');
+    return this.control(config,'valueBox');
   }
   async read(config, address) { return this.text(await this.locate(config,address)); }
   async anchors(config, plan) {
@@ -148,7 +183,7 @@ class BrowserSession {
     const completed = [];
     let attempted = null;
     try {
-      if (!config.adapter.saved) throw Error('请先配置网页「已保存」状态选择器');
+      if (config.adapter.stateMode==='selectors' && !config.adapter.saved) throw fieldError('saved','额外状态检查已启用，请设置「已保存状态标志」，或改用自动检查。');
       const inspection = await this.inspect(config,plan);
       if (inspection.conflict) throw Error('已有值冲突，整批停止');
       if (inspection.rows.some((row,i) => row.current !== baseline.rows[i].current)) throw Error('网页数据在预览后发生变化，请重新检查');
@@ -163,7 +198,7 @@ class BrowserSession {
         attempted = row.address;
         await editor.fill(String(row.value));
         await editor.press('Enter');
-        await this.one(config,'saved');
+        if(config.adapter.stateMode==='selectors')await this.one(config,'saved');
         // Navigate away and back so this is a fresh formula-bar read, not the text just typed.
         const other = inspection.rows.find(r => r.address !== row.address).address;
         await this.read(config,other);
@@ -171,7 +206,10 @@ class BrowserSession {
         if (!sameNumber(actual,row.value)) throw Error(row.address+' 写后回读不一致');
         completed.push({...row,result:'written',actual}); attempted = null;
       }
-      // A reload verifies the server-persisted document rather than only the editor's local value.
+      // Allow debounced autosave to start; the delay is NOT evidence of a successful save.
+      // Only the subsequent reload/readback can mark the run complete.
+      if(config.adapter.stateMode!=='selectors' && completed.some(r=>r.result==='written'))await new Promise(resolve=>setTimeout(resolve,2000));
+      // A reload verifies the reopened document rather than only the text just entered.
       await this.page.reload({waitUntil:'domcontentloaded'});
       await this.selectSheet(config,plan.sheet);
       for (const row of inspection.rows) {
@@ -203,9 +241,9 @@ class BrowserSession {
     this.requirePage(config);
     const locator = this.scope(config).locator('body');
     await this.page.bringToFront();
-    return locator.evaluate((body,kind) => new Promise(resolve => {
+    const result=await locator.evaluate((body,{kind,label,textControls}) => new Promise(resolve => {
       const banner = document.createElement('div');
-      banner.textContent = 'Demo 选取模式：点击目标控件，仅记录位置，不执行原操作。Esc 取消（60 秒后自动结束）。';
+      banner.textContent = 'Demo 选取模式：正在选取「'+label+'」。点击目标控件，仅记录位置，不执行原操作。Esc 取消（60 秒后自动结束）。';
       Object.assign(banner.style,{position:'fixed',top:'0',left:'0',right:'0',padding:'14px',background:'#292524',color:'white',zIndex:'2147483647',pointerEvents:'none'});
       body.append(banner);
       const timer = setTimeout(()=>finish({error:'选取超时，请重试'}),60000);
@@ -214,7 +252,16 @@ class BrowserSession {
       function keydown(e) {if(e.key==='Escape'){block(e);finish({error:'已取消控件选取'});}}
       function click(e) {
         block(e);
-        let el=e.target.closest('input,textarea,[contenteditable=true],[role=tab],[role=status]') || e.target;
+        let el=e.target.closest(textControls+',[role=tab],[role=status]') || e.target;
+        if(kind==='nameBox' || kind==='valueBox') {
+          const visible=node=>!!node.getClientRects().length && getComputedStyle(node).visibility!=='hidden';
+          if(!el.matches(textControls) && !el.isContentEditable) {
+            const children=[...el.querySelectorAll(textControls)].filter(visible);
+            if(children.length!==1) {finish({error:'「'+label+'」选中了普通页面区域，'+(children.length?'里面有多个输入框。':'没有找到可输入的控件。')+'请先在网页中点出输入光标，再重新选取。'});return;}
+            el=children[0];
+          }
+          if(el.disabled || el.readOnly || el.getAttribute('aria-readonly')==='true') {finish({error:'「'+label+'」当前只读或已禁用，请确认编辑权限后再选取。'});return;}
+        }
         const attr=(name,value)=>'['+name+'='+JSON.stringify(value)+']';
         let selector='';
         if(kind==='sheetTabs') {
@@ -239,8 +286,10 @@ class BrowserSession {
       }
       for(const type of ['pointerdown','mousedown','pointerup','mouseup'])document.addEventListener(type,block,true);
       document.addEventListener('click',click,true);document.addEventListener('keydown',keydown,true);
-    }),key);
+    }),{kind:key,label:fieldLabels[key],textControls});
+    if(result.error)throw fieldError(key,result.error);
+    return result;
   }
   async close() { if (this.context) await this.context.close(); }
 }
-module.exports = {BrowserSession,adapterDefaults,anchorSpecs,normalizeAdapter,expand,a1,playwright};
+module.exports = {BrowserSession,adapterDefaults,anchorSpecs,normalizeAdapter,expand,a1,playwright,explainError};

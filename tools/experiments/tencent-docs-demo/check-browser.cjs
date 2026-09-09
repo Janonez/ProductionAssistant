@@ -23,7 +23,7 @@ async function main() {
     res.end(`<!doctype html><meta charset="utf-8"><title>Local sheet fixture</title>
       <button role="tab" aria-selected="true">其他工作表</button><button role="tab" aria-selected="false">下料、装焊（26年9月）</button>
       <span id="editable" ${denyEdit?'hidden':''}>可编辑</span><span id="saved">已保存</span>
-      <label>名称框<input id="name" value="A1"></label><label>公式栏<input id="value" ${denyEdit?'readonly':''}></label>
+      <div id="ordinary">普通页面区域</div><div id="nameWrap"><label>名称框<input id="name" value="A1"></label></div><label>公式栏<input id="value" ${denyEdit?'readonly':''}></label>
       <script>
       const cells=${JSON.stringify(cells)},nameBox=document.querySelector('#name'),valueBox=document.querySelector('#value');let address='A1';
       document.querySelectorAll('[role=tab]').forEach(tab=>tab.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(t=>t.setAttribute('aria-selected','false'));tab.setAttribute('aria-selected','true');});
@@ -34,16 +34,27 @@ async function main() {
   await new Promise(resolve=>fixture.listen(0,'127.0.0.1',resolve));
   const profile = await fs.mkdtemp(path.resolve(__dirname,'../../../artifacts/tencent-browser-test-'));
   const driver = new BrowserSession(profile,{headless:true,viewport:{width:1200,height:800}});
-  const adapter=normalizeAdapter({nameBox:'#name',valueBox:'#value',sheetTabs:'[role=tab]',activeSheet:'[aria-selected=true]',ready:'#editable',saved:'#saved'});
+  const adapter=normalizeAdapter({nameBox:'#name',valueBox:'#value',sheetTabs:'[role=tab]',activeSheet:'[aria-selected=true]',ready:'',saved:''});
   for(const [key,address] of Object.entries({cuttingDate:'J8',weldingDate:'J18',sectionDate:'N34',plateDate:'O34',cuttingCompany:'B9',weldingCompany:'B19',park:'B35',sectionType:'N33',plateType:'O33'}))adapter.anchors[key].address=address;
   const config={...core.defaults,timeout:5,documentUrl:`http://127.0.0.1:${fixture.address().port}/`,adapter};
   const plan=core.plan(config,'2026-09-05',{cutting:0,welding:2,section:3,plate:4});
   try {
     await driver.open(config);
+    assert.equal(config.adapter.stateMode,'auto');
+    await driver.ready(config);
+    await driver.ready({...config,adapter:{...adapter,ready:'#obsolete',saved:'#obsolete'}});
+    assert.equal(await (await driver.control({...config,adapter:{...adapter,nameBox:'#nameWrap'}},'nameBox')).getAttribute('id'),'name');
+    await assert.rejects(driver.control({...config,adapter:{...adapter,nameBox:'#ordinary'}},'nameBox'),e=>e.field==='nameBox' && e.message.includes('普通页面区域'));
+    await assert.rejects(driver.ready({...config,adapter:{...adapter,stateMode:'selectors'}}),e=>e.field==='ready' && e.message.includes('编辑状态标志') && !e.message.includes('ready'));
+    const badPick=driver.pick(config,'nameBox');
+    const badPickCheck=assert.rejects(badPick,e=>e.field==='nameBox' && e.message.includes('普通页面区域'));
+    await driver.page.getByText('Demo 选取模式：',{exact:false}).waitFor();
+    await driver.page.locator('#ordinary').click();await badPickCheck;
     const picking=driver.pick(config,'nameBox');
     await driver.page.getByText('Demo 选取模式：',{exact:false}).waitFor();
     await driver.page.locator('#name').click();
     assert.equal((await picking).selector,'#name');
+    console.log('PASS: automatic state checks with empty/legacy markers, wrapper recovery, invalid picker rejection and Chinese field errors');
     const discovered=await driver.discover(config);assert.ok(discovered.frames[0].controls.some(c=>c.id==='name'));
     const check=await driver.inspect(config,plan);assert.equal(check.anchors.length,9);assert.equal(writes,0);
     const result=await driver.write(config,plan,check);assert.equal(result.completed.length,4);assert.equal(writes,4);assert.equal(cells.J9,'0');assert.ok(reloads>=2);

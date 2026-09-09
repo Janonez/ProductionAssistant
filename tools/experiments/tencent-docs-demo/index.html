@@ -27,11 +27,12 @@
         <label>第 1 天起始列<input name="startColumn" pattern="[A-Za-z]{1,3}" required></label><label>下料行<input name="cuttingRow" type="number" min="1" max="1048576" required></label>
         <label>装焊行<input name="weldingRow" type="number" min="1" max="1048576" required></label><label>入库行<input name="inboundRow" type="number" min="1" max="1048576" required></label>
       </div><p class="muted small">本模板固定：下料 / 装焊每天 1 列，入库每天 2 列，先型材、后板材。初始值来自历史样例，可在此调整。</p></div></div>
-      <div class="panel"><h2>03 / 网页操作设置</h2><p class="muted small">按实际网页填写 CSS / Playwright 选择器。仅操作网页可见控件；名称框与值编辑区必须支持文本输入。复杂表格可先使用「读取控件信息」辅助配置。</p><div class="fields">
-        <label>名称框<input data-adapter="nameBox" placeholder="用于输入 J9 的控件"></label><label>值编辑区 / 公式栏<input data-adapter="valueBox" placeholder="读取和编辑当前格的控件"></label>
+      <div class="panel"><h2>03 / 网页操作设置</h2><p class="muted small">使用“从网页选取”告诉 Demo 名称框、公式栏和工作表标签的位置。输入框是否可编辑由程序检查，保存结果通过刷新回读确认，不需要寻找“编辑状态”或“保存状态”。</p><div class="fields">
+        <label>名称框<input data-adapter="nameBox" placeholder="用于输入 J9 的控件"><small>选表格左上角显示 A1 / J9、能出现输入光标的位置。</small></label><label>值编辑区 / 公式栏<input data-adapter="valueBox" placeholder="读取和编辑当前格的控件"><small>选显示当前单元格内容、可以输入文字的区域。</small></label>
         <label>工作表标签集合<input data-adapter="sheetTabs" placeholder="匹配底部工作表标签"></label><label>当前选中的工作表<input data-adapter="activeSheet" placeholder="只匹配当前激活标签"></label>
-        <label>编辑状态标志<input data-adapter="ready" placeholder="仅登录且可编辑时可见的元素"></label><label>已保存状态标志<input data-adapter="saved" placeholder="仅服务端保存完成时可见的元素"></label>
         <label>表格所在 iframe（可留空）<input data-adapter="frame" placeholder="页面无 iframe 时留空"></label><label>日期表头格式<input data-adapter="dateFormat" placeholder="{yyyy}年{M}月{d}日"></label>
+        <label class="wide">页面状态判断<select id="stateMode" data-adapter="stateMode"><option value="auto">自动检查（推荐，无需选取状态）</option><option value="selectors">额外检查网页状态标志</option></select><small>自动模式检查输入框，提交后留出自动保存时间，再刷新读取实际值。等待本身不会被当作保存成功。</small></label>
+        <div id="stateSelectors" class="wide fields" hidden><label>编辑状态标志<input data-adapter="ready" placeholder="仅可编辑时可见的元素"><small>仅网页有明确、稳定的可编辑状态时使用；找不到请用自动检查。</small></label><label>已保存状态标志<input data-adapter="saved" placeholder="仅保存完成时可见的元素"><small>选择“已保存”状态，不要选择保存按钮；仍会刷新回读。</small></label></div>
       </div><details style="margin-top:24px"><summary>写前校验格 · 日期、公司、园区与材料</summary><p class="muted small">地址可用 {cuttingColumn}、{weldingColumn}、{sectionColumn}、{plateColumn} 跟随日期移动，例如 {cuttingColumn}8。期望文本支持 {date}、{company}、{park}；{date} 由上方日期格式生成。全部校验一致才允许填报。</p><div class="scroll"><table class="anchor-table"><thead><tr><th>校验项</th><th>A1 地址 / 地址模板</th><th>期望文本</th></tr></thead><tbody id="anchorSettings"></tbody></table></div></details></div>
       <div class="actions"><button class="primary" type="submit">保存设置</button><button id="exportConfig" type="button">导出已保存配置</button><button id="importConfig" type="button">导入配置</button><input id="configFile" type="file" accept="application/json,.json" hidden></div>
     </form>
@@ -51,6 +52,7 @@
     <div class="panel"><h2>运行记录 <span id="logTag" class="tag">本地模拟</span></h2><ol id="logs" class="logs"><li>等待生成填报预览。</li></ol></div>
   </section>
   <p id="status" class="status" role="status" aria-live="polite"></p>
+  <button id="fixSetting" hidden>前往相关设置</button><details id="errorDetails" hidden><summary>技术详情（排查时使用）</summary><pre id="errorText" class="code-output"></pre></details>
 </main>
 <dialog id="confirmWrite"><h2>确认填报到真实网页</h2><p id="writeSummary"></p><p class="muted small">提交后会修改文档中的目标格；执行前将重新校验。请勿在执行期间手动操作专用浏览器。</p><div class="actions"><button id="cancelWrite">返回检查</button><button id="submitWrite" class="primary">确认填报</button></div></dialog>
 <script src="core.js"></script>

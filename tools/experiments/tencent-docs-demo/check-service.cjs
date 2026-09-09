@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const core = require('./core.js');
 const {createServer} = require('./server.cjs');
-const {anchorSpecs,normalizeAdapter,expand,a1} = require('./browser.cjs');
+const {anchorSpecs,normalizeAdapter,expand,a1,explainError} = require('./browser.cjs');
 
 async function main() {
   const runtime = await fs.mkdtemp(path.resolve(__dirname,'../../../artifacts/tencent-demo-test-'));
@@ -13,6 +13,9 @@ async function main() {
   assert.equal(expand('{cuttingColumn}8',config,plan),'J8');
   assert.equal(expand('{date}',config,plan),'2026年9月5日');
   assert.throws(()=>a1('XFE1')); assert.throws(()=>a1('A0')); assert.throws(()=>a1('A1:B2'));
+  const readable=explainError(Error('locator.isEditable: Error: Element is not an <input>\nCall log: \u001b[2mwaiting\u001b[22m'));
+  assert.ok(readable.error.includes('网页控件'));assert.ok(!readable.error.includes('locator'));
+  assert.ok(readable.details.includes('locator.isEditable'));assert.ok(!readable.details.includes('\u001b'));
   let writes=0;
   const driver = {
     async close(){},async open(){return {message:'test open'};},
@@ -65,6 +68,7 @@ async function checkRealUI(origin,token,config) {
   await w.demoInitialized;
   const $=id=>w.document.getElementById(id);
   assert.equal($('mode').value,'real');assert.equal($('browserPanel').hidden,false);
+  assert.equal($('stateMode').value,'auto');assert.equal($('stateSelectors').hidden,true);
   $('sample').click();$('date').value='2026-09-05';$('dataForm').dispatchEvent(new w.Event('submit',{cancelable:true}));
   $('check').click();
   for(let i=0;i<100 && $('execute').disabled;i++)await new Promise(resolve=>setTimeout(resolve,10));

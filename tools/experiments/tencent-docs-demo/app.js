@@ -9,7 +9,16 @@ const anchorSpecs = [
 ];
 let config = {...api.defaults}, pending = null, books = {}, checked = false, inspectionId = null, inspectionRows = [], busy = false, dirty = false;
 function real() { return $('mode').value === 'real'; }
-function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
+function status(message, error = false) {
+  $('status').textContent = message; $('status').classList.toggle('error', error);
+  $('errorDetails').hidden=true;$('errorDetails').open=false;$('errorText').textContent='';$('fixSetting').hidden=true;
+}
+function showErrorDetails(error) {
+  if(error.details){$('errorText').textContent=error.details;$('errorDetails').hidden=false;}
+  const field=[...document.querySelectorAll('[data-adapter]')].find(el=>el.dataset.adapter===error.field);
+  if(field){$('fixSetting').hidden=false;$('fixSetting').onclick=()=>{showSettings(true);field.focus();field.scrollIntoView({block:'center'});};}
+}
+function syncStateMode() { $('stateSelectors').hidden=$('stateMode').value!=='selectors'; }
 function log(message, error = false) {
   const li = document.createElement('li'); li.textContent = new Date().toLocaleTimeString() + (real() ? ' · 真实网页 · ' : ' · 本地模拟 · ') + message;
   $('logs').prepend(li); while ($('logs').children.length > 40) $('logs').lastElementChild.remove(); status(message,error);
@@ -22,7 +31,8 @@ function discardPlan() { pending = null; invalidate(); $('preview').hidden = tru
 function configToForm() {
   for (const key in api.defaults) $('configForm').elements[key].value = config[key];
   const adapter = config.adapter || {};
-  document.querySelectorAll('[data-adapter]').forEach(input => input.value = adapter[input.dataset.adapter] ?? (input.dataset.adapter==='dateFormat' ? '{yyyy}年{M}月{d}日' : ''));
+  document.querySelectorAll('[data-adapter]').forEach(input => input.value = adapter[input.dataset.adapter] ?? (input.dataset.adapter==='dateFormat' ? '{yyyy}年{M}月{d}日' : input.dataset.adapter==='stateMode'?'auto':''));
+  syncStateMode();
   $('anchorSettings').replaceChildren();
   for(const [key,label,expected] of anchorSpecs) {
     const tr = document.createElement('tr'), name = document.createElement('td'); name.textContent = label; tr.append(name);
@@ -35,7 +45,7 @@ function configToForm() {
   }
 }
 for (const input of document.querySelectorAll('[data-adapter]')) {
-  if(['frame','dateFormat'].includes(input.dataset.adapter)) continue;
+  if(['frame','dateFormat','stateMode'].includes(input.dataset.adapter)) continue;
   const button=document.createElement('button');button.type='button';button.textContent='从网页选取';button.hidden=!service;
   button.onclick=()=>operation(async()=> {
     if($('configForm').elements.documentUrl.value.trim()!==config.documentUrl)throw Error('网页地址已修改，请先保存地址并重新打开网页');
@@ -61,7 +71,7 @@ async function request(route, body) {
     let message = result.error || '本地服务请求失败';
     if(result.completed?.length) message += '；已完成：'+result.completed.map(r=>r.address+(r.result==='skipped'?'（跳过）':'（已写入）')).join('、');
     if(result.uncertainAddress) message += '；结果不确定：'+result.uncertainAddress+'，请读取确认，勿直接重试';
-    throw Error(message);
+    const error=Error(message);error.details=result.details;error.field=result.field;throw error;
   }
   return result;
 }
@@ -72,7 +82,7 @@ async function operation(action) {
   states.forEach(([el]) => el.disabled = true);
   status('正在执行，请等待；不要操作专用浏览器…');
   try { await action(); }
-  catch(e) { invalidate(); log(e.message,true); }
+  catch(e) { invalidate(); log(e.message,true);showErrorDetails(e); }
   finally { busy = false; states.forEach(([el,disabled]) => el.disabled = disabled); syncButtons(); }
 }
 async function save(next) {
@@ -96,6 +106,7 @@ function modeChanged() {
 $('settingsShortcut').onclick = $('settingsTab').onclick = () => showSettings(true);
 $('runTab').onclick = () => showSettings(false);
 $('mode').onchange = modeChanged;
+$('stateMode').onchange = syncStateMode;
 $('configForm').oninput = () => { dirty = true; discardPlan(); status('设置尚未保存。请保存后再执行。'); };
 $('configForm').onsubmit = event => { event.preventDefault(); operation(async()=>save(fromForm())); };
 $('exportConfig').onclick = () => {
