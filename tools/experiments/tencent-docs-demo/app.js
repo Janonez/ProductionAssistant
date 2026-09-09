@@ -7,7 +7,7 @@ const anchorSpecs = [
   ['cuttingCompany','下料公司','{company}'], ['weldingCompany','装焊公司','{company}'],
   ['park','入库园区','{park}'], ['sectionType','型材表头','型材'], ['plateType','板材表头','板材']
 ];
-let config = {...api.defaults}, pending = null, books = {}, checked = false, inspectionId = null, inspectionRows = [], busy = false, dirty = false;
+let config = {...api.defaults}, pending = null, books = {}, checked = false, inspectionId = null, inspectionRows = [], busy = false, dirty = false, writeEnabled=false;
 function real() { return $('mode').value === 'real'; }
 function status(message, error = false) {
   $('status').textContent = message; $('status').classList.toggle('error', error);
@@ -25,7 +25,7 @@ function log(message, error = false) {
 }
 function showSettings(show) { $('settings').hidden = !show; $('run').hidden = show; $('settingsTab').setAttribute('aria-selected', show); $('runTab').setAttribute('aria-selected', !show); }
 function step(n) { [1,2,3].forEach(i => $('step'+i).classList.toggle('active', i === n)); }
-function syncButtons() { $('check').disabled = busy || !pending || dirty; $('execute').disabled = busy || dirty || !pending || !(real() ? inspectionId : checked); }
+function syncButtons() { $('check').disabled = busy || !pending || dirty; $('execute').disabled = busy || dirty || !pending || !(real() ? writeEnabled && inspectionId : checked); }
 function invalidate() { checked = false; inspectionId = null; inspectionRows = []; syncButtons(); }
 function discardPlan() { pending = null; invalidate(); $('preview').hidden = true; $('empty').hidden = false; $('previewMeta').textContent = '数据或设置已更改，请重新生成预览'; step(1); }
 function configToForm() {
@@ -87,7 +87,7 @@ async function operation(action) {
 }
 async function save(next) {
   next = api.validate(next);
-  if(service) next = (await request('config',next)).config;
+  if(service) {const result=await request('config',next);next=result.config;writeEnabled=result.writeEnabled===true;}
   let localWarning = '';
   try { localStorage.setItem(storageKey,JSON.stringify(next)); }
   catch { if(!service) throw Error('浏览器不允许保存本地配置，请导出配置备份'); localWarning = '；浏览器缓存不可用，但本机服务已保存'; }
@@ -100,7 +100,8 @@ function modeChanged() {
   $('modeNotice').textContent = isReal ? '真实网页模式：操作由本机 Playwright 服务执行。检查只读，确认填报后才修改文档。请先保存配置并打开专用浏览器。' : '本地模拟模式：所有填报只改变内存中的模拟表格，不访问真实文档。';
   $('currentHeading').textContent = isReal ? '网页已有值' : '模拟已有值';
   $('check').textContent = isReal ? '检查真实目标（只读）' : '检查模拟目标';
-  $('execute').textContent = isReal ? '确认真实填报…' : '模拟填报并回读';
+  $('execute').textContent = isReal ? writeEnabled ? '确认真实填报…' : '真实写入已暂停' : '模拟填报并回读';
+  $('writeBlockNotice').hidden=!isReal || writeEnabled;
   $('logTag').textContent = isReal ? '真实网页' : '本地模拟'; discardPlan();
 }
 $('settingsShortcut').onclick = $('settingsTab').onclick = () => showSettings(true);
@@ -178,6 +179,7 @@ $('check').onclick = () => operation(async()=> {
 $('execute').onclick = () => {
   if(!pending) return;
   if(real()) {
+    if(!writeEnabled)return;
     if(!inspectionId) return;
     $('writeSummary').textContent = pending.sheet+' · '+pending.date+'：'+inspectionRows.map(r=>`${r.address} = ${r.value}${r.action==='skip'?'（跳过）':''}`).join('；');
     $('confirmWrite').showModal();
@@ -209,7 +211,7 @@ async function initialize() {
   const today=new Date();$('date').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   if(service) {
     try {
-      const saved=await request('config');config=saved.config;warning=saved.warning;
+      const saved=await request('config');config=saved.config;warning=saved.warning;writeEnabled=saved.writeEnabled===true;
       if(location.hash.startsWith('#import=')) {
         const imported=JSON.parse(decodeURIComponent(location.hash.slice(8)));
         history.replaceState(null,'',location.pathname);await save(imported);warning='原 Demo 配置已迁移。网页操作设置可在此继续补充。';

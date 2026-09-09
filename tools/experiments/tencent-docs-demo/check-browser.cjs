@@ -74,7 +74,7 @@ async function main() {
   } finally {await driver.close();await new Promise(resolve=>fixture.close(resolve));}
 }
 async function checkApplication(driver,config,runtime) {
-  const app=await createServer({runtime:path.join(runtime,'app-test'),driver,port:0});
+  const app=await createServer({runtime:path.join(runtime,'app-test'),driver,port:0,allowFixtureWrites:true});
   const page=await driver.context.newPage();
   try {
     await page.goto(app.origin+'/#import='+encodeURIComponent(JSON.stringify(config)));

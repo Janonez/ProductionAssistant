@@ -30,6 +30,8 @@ async function createServer(options = {}) {
   const driver = options.driver || new BrowserSession(path.join(runtime,'edge-profile'));
   const token = crypto.randomBytes(32).toString('hex');
   let busy = false, preview = null, version = 0;
+  const writeBlockedReason='真实写入已暂停：已报告修改了错误位置，需验证目标单元格与编辑器的关联。读取和校验仍可使用。';
+  const canWrite=()=>options.allowFixtureWrites===true && new URL(config.documentUrl || 'https://invalid.local').hostname==='127.0.0.1';
   function send(res,status,body,type='application/json; charset=utf-8') {
     res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'});
     res.end(type.startsWith('application/json')?JSON.stringify(body):body);
@@ -57,7 +59,7 @@ async function createServer(options = {}) {
       }
       if (!url.pathname.startsWith('/api/')) return send(res,404,{error:'地址不存在'});
       if (req.headers['x-demo-token'] !== token || (req.headers.origin && req.headers.origin !== origin)) return send(res,403,{error:'请从本地 Demo 页面发起操作'});
-      if (req.method==='GET' && url.pathname==='/api/config') return send(res,200,{config,warning:loadWarning,busy});
+      if (req.method==='GET' && url.pathname==='/api/config') return send(res,200,{config,warning:loadWarning,busy,writeEnabled:canWrite(),writeBlockedReason});
       if (req.method !== 'POST' || !String(req.headers['content-type']).startsWith('application/json')) return send(res,405,{error:'需要 JSON POST 请求'});
       if (busy) return send(res,409,{error:'已有操作正在执行，请等待完成'});
       // One dedicated browser page: serialize all mutations and invalidate one-use previews.
@@ -75,7 +77,7 @@ async function createServer(options = {}) {
           await fs.writeFile(configPath+'.tmp',JSON.stringify(next,null,2),'utf8');
           await fs.rename(configPath+'.tmp',configPath);
           config = next; version++; preview = null; loadWarning = '';
-          return send(res,200,{config,message:'设置已保存到本机服务'});
+          return send(res,200,{config,writeEnabled:canWrite(),message:'设置已保存到本机服务'});
         }
         if(url.pathname==='/api/open') { preview = null; return send(res,200,await driver.open(config)); }
         if(url.pathname==='/api/close') { preview = null; await driver.close(); return send(res,200,{message:'专用浏览器已关闭，登录会话保留'}); }
@@ -96,6 +98,7 @@ async function createServer(options = {}) {
           return send(res,200,{...result,inspectionId:preview?.id || null});
         }
         if(url.pathname==='/api/write') {
+          if(!canWrite()){preview=null;throw Error(writeBlockedReason);}
           const saved = preview; preview = null;
           if(!saved || saved.id !== body.inspectionId || saved.version !== version || Date.now()-saved.created > 120000) throw Error('检查结果已失效，请重新检查真实目标');
           return send(res,200,await driver.write(config,saved.plan,saved.result));
