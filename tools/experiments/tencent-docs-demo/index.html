@@ -12,7 +12,7 @@
 <main class="shell">
   <div class="intro"><div><h1>把每日数据，填到正确的位置</h1><p class="muted">先确认日期与目标单元格，再检查、填报和回读。</p></div><button id="settingsShortcut">配置测试环境 →</button></div>
   <div id="modeNotice" class="notice">正在读取本地设置…</div>
-  <p id="writeBlockNotice" class="error" hidden>当前服务不是修复后的键盘定位版本，真实写入不可用。请关闭旧服务，重启 start.cmd 后刷新页面。</p>
+  <p id="writeBlockNotice" class="error" hidden>当前服务不是内容编辑区写入 v3 版本，真实写入不可用。请关闭旧服务，重启 start.cmd 后刷新页面。</p>
   <div class="modebar"><label>执行环境<select id="mode"><option value="simulation">本地模拟</option><option value="real">真实网页</option></select></label><button id="migrate">迁移当前配置到本地服务 →</button><span id="connection" class="muted small">尚未检查网页连接</span></div>
   <nav class="tabs" aria-label="工作台页面"><button id="runTab" aria-selected="true">填报测试</button><button id="settingsTab" aria-selected="false">环境与模板设置</button></nav>
   <section id="settings" hidden>
@@ -48,7 +48,7 @@
       <label>型材入库量<input name="section" type="number" min="0" step="any" placeholder="输入测试值" required></label>
       <label>板材入库量<input name="plate" type="number" min="0" step="any" placeholder="输入测试值" required></label>
     </div><div class="actions"><button class="primary" type="submit">生成填报预览</button><button id="sample" type="button">填入示例数据</button></div></form></div>
-    <div class="panel"><div id="simulationPanel"><h2>模拟条件</h2><label>测试场景<select id="scenario"><option value="ready">可编辑 · 校验通过</option><option value="login">登录失效</option><option value="permission">没有编辑权限</option><option value="sheet">目标工作表不存在</option><option value="anchor">日期 / 公司 / 材料不匹配</option></select></label><p class="muted">在预览表中输入「已有值」可测试冲突保护。为空则填报，相同值则跳过，不同值则整批停止。</p><p class="muted small">模拟表格仅保存在当前页面内存中；刷新会清空，环境设置会保留。</p><button id="clearCells">清空模拟表格</button></div><div id="realPolicy" hidden><h2>真实填报规则</h2><p>检查时只读取，不写数据。全量校验通过后，你可确认本次填报。</p><p class="muted">相同值跳过，不同值停止。执行前重新检查，完成后刷新网页并回读。</p><p class="muted small">网页写入不是事务。中途失败会列出已完成与结果不确定的单元格，不会自动重试或回滚。</p></div></div></div>
+    <div class="panel"><div id="simulationPanel"><h2>模拟条件</h2><label>测试场景<select id="scenario"><option value="ready">可编辑 · 校验通过</option><option value="login">登录失效</option><option value="permission">没有编辑权限</option><option value="sheet">目标工作表不存在</option><option value="anchor">日期 / 公司 / 材料不匹配</option></select></label><p class="muted">在预览表中输入「已有值」可测试冲突保护。仅空格允许填报；任何已有内容（包括相同数字）都会整批停止。</p><p class="muted small">模拟表格仅保存在当前页面内存中；刷新会清空，环境设置会保留。</p><button id="clearCells">清空模拟表格</button></div><div id="realPolicy" hidden><h2>真实填报规则</h2><p>检查时只读取，不写数据。全量校验通过后，你可确认本次填报。</p><p class="muted">任何已有内容都停止，不清空、不覆盖。执行前重新检查，完成后刷新网页并回读。</p><p class="muted small">网页写入不是事务。中途失败会列出已完成与结果不确定的单元格，不会自动重试或回滚。</p></div></div></div>
     <div class="panel"><h2 id="previewTitle">目标预览</h2><p id="previewMeta" class="muted small">尚未生成计划</p><div id="empty" class="empty">输入数据后，查看当月工作表和四个目标单元格。</div><div class="scroll"><table id="preview" hidden><thead><tr><th>数据项</th><th>公司 / 园区</th><th>A1 地址</th><th>待填值</th><th id="currentHeading">模拟已有值</th><th>检查结果</th></tr></thead><tbody></tbody></table></div><div class="actions"><button id="check" disabled>检查模拟目标</button><button id="execute" class="primary" disabled>模拟填报并回读</button></div></div>
     <div class="panel"><h2>运行记录 <span id="logTag" class="tag">本地模拟</span></h2><ol id="logs" class="logs"><li>等待生成填报预览。</li></ol></div>
   </section>

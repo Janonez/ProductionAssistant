@@ -21,11 +21,12 @@ assert.deepEqual(original,{J19:'999'});
 for (const scenario of ['login','permission','anchor','sheet']) assert.throws(() => api.simulate(plan,{},scenario));
 const result = api.simulate(plan,{},'ready');
 assert.equal(result.cells.J9,'0');
-assert.ok(api.simulate(plan,result.cells,'ready').rows.every(r => r.action === 'skip'));
+assert.throws(() => api.simulate(plan,result.cells,'ready'), /整批停止/);
+assert.throws(() => api.simulate(plan,{J9:' '},'ready'), /整批停止/);
 const html = fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
 const inline = fs.readFileSync(path.join(__dirname,'app.js'),'utf8');
 new vm.Script(inline);
-console.log('PASS: date/address, validation, conflicts, blocked scenarios, zero, idempotence, script syntax');
+console.log('PASS: date/address, validation, conflicts, blocked scenarios, zero, occupied-cell rejection, script syntax');
 
 // Reuse the project's installed DOM test dependency; no additional install.
 const {JSDOM} = require('../../../src/ProductionAssistant.App/Assets/Prototype/node_modules/jsdom');
@@ -49,7 +50,8 @@ $('execute').click();
 await settled();
 assert.match($('status').textContent,/填报 4 格/);
 $('check').click(); await settled(); $('execute').click(); await settled();
-assert.match($('status').textContent,/跳过 4 格/);
+assert.match($('status').textContent,/冲突/);
+assert.equal($('execute').disabled,true);
 const cell = $('preview').querySelector('input'); cell.value='999'; cell.dispatchEvent(new w.Event('input'));
 assert.equal($('execute').disabled,true);
 $('check').click(); await settled(); assert.equal($('execute').disabled,true);

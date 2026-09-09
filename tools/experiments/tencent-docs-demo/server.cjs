@@ -30,7 +30,7 @@ async function createServer(options = {}) {
   const driver = options.driver || new BrowserSession(path.join(runtime,'edge-profile'));
   const token = crypto.randomBytes(32).toString('hex');
   let busy = false, preview = null, version = 0;
-  const protocol='keyboard-edit-v2';
+  const protocol='content-edit-v3';
   function send(res,status,body,type='application/json; charset=utf-8') {
     res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'});
     res.end(type.startsWith('application/json')?JSON.stringify(body):body);
@@ -122,7 +122,7 @@ async function createServer(options = {}) {
 }
 if (require.main === module) {
   createServer().then(app => {
-    console.log(`Tencent Docs Demo [keyboard-edit-v2]: ${app.origin}\nOpen this address to configure and operate the test page.\nPress Ctrl+C to stop.`);
+    console.log(`Tencent Docs Demo [content-edit-v3]: ${app.origin}\nOpen this address to configure and operate the test page.\nPress Ctrl+C to stop.`);
     for (const signal of ['SIGINT','SIGTERM']) process.once(signal,async()=>{await app.close();process.exit(0);});
   }).catch(e => { console.error(e.code === 'EADDRINUSE' ? 'Port 43128 is in use. Open http://127.0.0.1:43128 if the demo is already running.' : e.message); process.exitCode=1; });
 }

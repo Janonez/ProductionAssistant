@@ -31,10 +31,9 @@ async function main() {
       render();
       document.querySelectorAll('[role=tab]').forEach(tab=>tab.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(t=>t.setAttribute('aria-selected','false'));tab.setAttribute('aria-selected','true');});
       nameBox.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();address=nameBox.value;render();grid.focus();}};
-      grid.onkeydown=e=>{
-        if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();address=address.replace(/[0-9]+$/,n=>Number(n)+(e.key==='ArrowDown'?1:-1));render();}
-        if(e.key==='F2'){e.preventDefault();editAddress=address;render();valueBox.focus();}
-      };
+      grid.onkeydown=e=>{if(e.key==='F2'){e.preventDefault();editAddress=address;valueBox.focus();}};
+      // The tested page contract uses F2 editor entry; no grid navigation is needed.
+      document.addEventListener('keydown',e=>{if(['Tab','ArrowDown','ArrowUp','Backspace','Delete'].includes(e.key))throw Error('Unexpected navigation key: '+e.key);});
       valueBox.onkeydown=async e=>{
         if(e.key==='Escape'){e.preventDefault();render();grid.focus();}
         if(e.key==='Enter'){e.preventDefault();document.querySelector('#saved').hidden=true;cells[editAddress]=valueBox.value;await fetch('/',{method:'POST',body:JSON.stringify({address:editAddress,value:valueBox.value})});document.querySelector('#saved').hidden=false;render();grid.focus();}
@@ -50,24 +49,20 @@ async function main() {
   const plan=core.plan(config,'2026-09-05',{cutting:0,welding:2,section:3,plate:4});
   try {
     await driver.open(config);
-    // Reproduce the reported class of failure: the old path writes the initial edit target N2.
-    await driver.page.locator('#name').fill('N9');await driver.page.locator('#name').press('Enter');
-    await driver.page.locator('#name').press('Tab');await driver.page.locator('#value').fill('42.35');await driver.page.locator('#value').press('Enter');
-    await driver.page.locator('#saved').waitFor({state:'visible'});
-    assert.equal(cells.N2,'42.35');assert.equal(cells.N9,undefined);
-    cells.N2='2026/9/9';writes=0;await driver.page.reload();
+    driver.page.on('pageerror',error=>{throw error;});
     const diagnosis=await driver.diagnose(config,'N9');assert.equal(diagnosis.returnedAddress,'N9');assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');
-    console.log('PASS: old Tab/shared-editor path reproduces N2 corruption; new keyboard diagnosis writes nothing');
-    await driver.page.locator('#grid').evaluate(el=>el.addEventListener('keydown',e=>{if(e.key.startsWith('Arrow')){e.preventDefault();e.stopImmediatePropagation();}},true));
-    await assert.rejects(driver.diagnose(config,'N9'),/定位验证未通过/);
-    assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');await driver.page.reload();
-    await driver.page.locator('#grid').evaluate(el=>el.addEventListener('keydown',e=>{if(e.key==='F2'){e.preventDefault();e.stopImmediatePropagation();}},true));
-    await assert.rejects(driver.diagnose(config,'N9'),/编辑焦点没有进入/);
+    await driver.page.locator('#grid').evaluate(el=>el.onkeydown=null);
+    await assert.rejects(driver.diagnose(config,'N9'),/未获得焦点/);
     assert.equal(writes,0);await driver.page.reload();
-    await driver.page.locator('#grid').evaluate(el=>el.addEventListener('keydown',e=>{if(e.key==='F2'){e.preventDefault();e.stopImmediatePropagation();const input=el.ownerDocument.querySelector('#value');input.value='2026/9/9';input.focus();}},true));
-    await assert.rejects(driver.diagnose(config,'N9'),/进入编辑后的原值不一致/);
+    await assert.rejects(driver.prepareEdit(config,'N2','unexpected'),/写前原值不一致/);
+    assert.equal(writes,0);
+    await driver.page.locator('#value').evaluate(el=>el.addEventListener('focus',()=>{el.value='stale';}));
+    await assert.rejects(driver.diagnose(config,'N9'),/聚焦后的原值不一致/);
     assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');await driver.page.reload();
-    console.log('PASS: address echo without native navigation, failed F2 focus and stale editor contents all stop before data input');
+    await driver.page.locator('#value').evaluate(el=>el.addEventListener('focus',()=>{el.ownerDocument.querySelector('#name').value='N2';}));
+    await assert.rejects(driver.diagnose(config,'N9'),/聚焦后地址变成/);
+    assert.equal(writes,0);await driver.page.reload();
+    console.log('PASS: F2 editor entry diagnosis writes nothing; original-value and address changes stop before input');
     if(process.argv.includes('--location-only'))return;
     assert.equal(config.adapter.stateMode,'auto');
     await driver.ready(config);
@@ -88,17 +83,17 @@ async function main() {
     const check=await driver.inspect(config,plan);assert.equal(check.anchors.length,9);assert.equal(writes,0);
     const result=await driver.write(config,plan,check);assert.equal(result.completed.length,4);assert.equal(writes,4);assert.equal(cells.J9,'0');assert.ok(reloads>=2);
     assert.equal(cells.N2,'2026/9/9');
-    await driver.write(config,plan,await driver.inspect(config,plan));assert.equal(writes,4);
+    await assert.rejects(driver.write(config,plan,await driver.inspect(config,plan)),/冲突/);assert.equal(writes,4);
     cells.J9='99';await driver.page.reload();
     const conflict=await driver.inspect(config,plan);assert.equal(conflict.conflict,true);
     await assert.rejects(driver.write(config,plan,conflict),/冲突/);assert.equal(writes,4);
     cells.J9='0';cells.B9='别的公司';await driver.page.reload();
     await assert.rejects(driver.inspect(config,plan),/公司校验失败/);assert.equal(writes,4);
-    cells.B9='滨海公司';delete cells.J9;await driver.page.reload();
+    cells.B9='滨海公司';for(const row of plan.rows)delete cells[row.address];await driver.page.reload();
     const baseline=await driver.inspect(config,plan);failedSave=true;
-    await assert.rejects(driver.write(config,plan,baseline),/刷新后回读不一致/);assert.equal(writes,5);
+    await assert.rejects(driver.write(config,plan,baseline),/刷新后回读不一致/);assert.equal(writes,8);
     denyEdit=true;await driver.page.reload();await assert.rejects(driver.ready(config));
-    console.log('PASS: actual DOM navigation, 9 anchors, read-only inspect, write and reload verification, skip, conflict, anchor failure, unsaved data and permission failure');
+    console.log('PASS: actual DOM navigation, 9 anchors, read-only inspect, write and reload verification, occupied-cell rejection, conflict, anchor failure, unsaved data and permission failure');
     failedSave=false;denyEdit=false;for(const row of plan.rows)delete cells[row.address];await driver.page.reload();
     await checkApplication(driver,config,profile);
   } finally {await driver.close();await new Promise(resolve=>fixture.close(resolve));}

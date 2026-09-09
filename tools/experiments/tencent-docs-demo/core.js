@@ -57,15 +57,14 @@
     const failures = { login: '模拟登录已失效，需要重新扫码', permission: '模拟账号没有编辑权限', anchor: '模拟日期 / 公司 / 材料锚点不匹配', sheet: '模拟目标工作表不存在' };
     if (failures[scenario]) throw Error(failures[scenario]);
     return plan.rows.map(r => {
-      const current = String(cells[r.address] ?? '').trim();
-      const same = /^(?:\d+\.?\d*|\.\d+)$/.test(current) && Number(current) === r.value;
-      return { ...r, current, action: current === '' ? 'write' : same ? 'skip' : 'conflict' };
+      const current = String(cells[r.address] ?? '');
+      return { ...r, current, action: current === '' ? 'write' : 'conflict' };
     });
   }
   // Local simulation only. A real page adapter must verify its own anchors and saved values.
   function simulate(plan, cells, scenario) {
     const rows = preflight(plan, cells, scenario);
-    if (rows.some(r => r.action === 'conflict')) throw Error('存在不同的已有值，整批停止；未写入任何单元格');
+    if (rows.some(r => r.action === 'conflict')) throw Error('目标格已有内容，整批停止；未写入任何单元格');
     const next = { ...cells };
     rows.filter(r => r.action === 'write').forEach(r => { next[r.address] = String(r.value); });
     if (!rows.every(r => Number(next[r.address]) === r.value)) throw Error('模拟回读不一致');
