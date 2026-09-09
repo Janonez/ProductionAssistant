@@ -25,7 +25,9 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
   const [deleteTarget, setDeleteTarget] = useState<AutomationTaskSummary>();
   const [createOpen, setCreateOpen] = useState(false);
   const [createType, setCreateType] = useState("");
-  const refresh = () => invoke<{ tasks: AutomationTaskSummary[] }>("automation.list").then((value) => {
+  const [availableTypes, setAvailableTypes] = useState(["daily_report", "notion_fill"]);
+  const refresh = () => invoke<{ tasks: AutomationTaskSummary[]; availableTaskTypes?: string[] }>("automation.list").then((value) => {
+    if (value.availableTaskTypes) setAvailableTypes(value.availableTaskTypes);
     const nextTasks = Array.isArray(value.tasks) ? value.tasks : tasks;
     setTasks(nextTasks);
     setSelected(current => current
@@ -130,7 +132,7 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
       </Dialog.Content></Dialog.Portal></Dialog.Root>
     <Dialog.Root open={createOpen} onOpenChange={open => { setCreateOpen(open); if (!open) setCreateType(""); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" />
       <Dialog.Content className="dialog automation-create-dialog"><Dialog.Title>新建自动化任务</Dialog.Title><Dialog.Description>{createType ? "填写任务信息，创建后可随时通过 Tab 修改。" : "先选择任务类型，后续配置由对应任务自己提供。"}</Dialog.Description>
-        {!createType ? <div className="automation-create-types">{automationTaskTypes.map(definition => <button key={definition.taskType} onClick={() => setCreateType(definition.taskType)}><strong>{definition.name}</strong><span>{definition.description}</span></button>)}</div>
+        {!createType ? <div className="automation-create-types">{automationTaskTypes.filter(definition => availableTypes.includes(definition.taskType)).map(definition => <button key={definition.taskType} onClick={() => setCreateType(definition.taskType)}><strong>{definition.name}</strong><span>{definition.description}</span></button>)}</div>
           : findAutomationTaskType(createType)?.renderCreate({ onCreated: result => created(createType, result), onBack: () => setCreateType(""), onCancel: () => { setCreateOpen(false); setCreateType(""); } })}
       </Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>;
@@ -145,13 +147,13 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
   refresh: () => Promise<AutomationTaskSummary[]>;
   back: () => void;
 }) {
-  const [tab, setTab] = useState(focusStep ? definition.resolveSection(focusStep) : "basics");
+  const [tab, setTab] = useState(focusStep ? definition.resolveSection(focusStep) : definition.includeBasics === false ? definition.taskTabs[0].id : "basics");
   const isDaily = task.taskType === "daily_report";
   const [runs, setRuns] = useState<AutomationRunView[]>();
   const [runsError, setRunsError] = useState("");
   const [loadingRuns, setLoadingRuns] = useState(false);
   const tabs = [
-    { id: "basics", label: "基本信息" },
+    ...(definition.includeBasics === false ? [] : [{ id: "basics", label: "基本信息" }]),
     ...definition.taskTabs,
     { id: "runs", label: "运行记录" },
   ];
@@ -221,5 +223,5 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
 }
 
 function statusLabel(status: string) {
-  return ({ incomplete: "配置未完成", "pending-test": "待测试", ready: "可启用", enabled: "已启用", "schedule-error": "计划异常" } as Record<string, string>)[status] || status;
+  return ({ incomplete: "配置未完成", "pending-test": "待测试", checked: "已验证", ready: "可启用", enabled: "已启用", "schedule-error": "计划异常" } as Record<string, string>)[status] || status;
 }

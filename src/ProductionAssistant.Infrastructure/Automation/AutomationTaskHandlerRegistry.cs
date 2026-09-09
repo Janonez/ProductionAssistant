@@ -5,6 +5,7 @@ namespace ProductionAssistant.Services;
 public sealed class AutomationTaskHandlerRegistry
 {
     private readonly IReadOnlyDictionary<string, IAutomationTaskHandler> _handlers;
+    public IEnumerable<string> TaskTypes => _handlers.Keys;
 
     public AutomationTaskHandlerRegistry(IEnumerable<IAutomationTaskHandler> handlers)
     {

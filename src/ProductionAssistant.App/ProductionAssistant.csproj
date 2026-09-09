@@ -24,6 +24,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="Assets\TencentSheet\*.cjs;Assets\TencentSheet\*.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\tools\experiments\machining_summary\playwright_test\FineReportTest\node_modules\playwright\**"
+             Condition="'$(RuntimeEnvironment)' == 'Development'" Link="Assets\TencentSheet\node_modules\playwright\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\tools\experiments\machining_summary\playwright_test\FineReportTest\node_modules\playwright-core\**"
+             Condition="'$(RuntimeEnvironment)' == 'Development'" Link="Assets\TencentSheet\node_modules\playwright-core\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.250907003" />
   </ItemGroup>
 

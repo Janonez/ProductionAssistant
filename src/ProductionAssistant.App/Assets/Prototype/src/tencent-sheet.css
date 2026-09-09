@@ -1,0 +1,22 @@
+.tencent-sheet-workbench { display: grid; gap: 24px; max-width: 1100px; }
+.tencent-sheet-intro { display: flex; align-items: start; justify-content: space-between; gap: 24px; }
+.tencent-sheet-intro h2 { margin: 0 0 8px; font-size: 26px; font-weight: 600; }
+.tencent-sheet-intro p, .tencent-sheet-help { color: #78716C; }
+.tencent-sheet-intro > span { font-size: 14px; white-space: nowrap; color: #78716C; }
+.tencent-sheet-panel { min-width: 0; margin: 0; padding: 24px; border: 1px solid #E7E5E4; border-radius: 17px; background: #FFFFFF; display: grid; gap: 16px; }
+.tencent-sheet-panel legend { padding: 0 8px; font-size: 16px; font-weight: 600; }
+.tencent-sheet-panel label { display: grid; gap: 8px; font-size: 14px; font-weight: 500; }
+.tencent-sheet-panel input:not([type=checkbox]), .tencent-sheet-panel select { width: 100%; min-width: 0; min-height: 44px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--canvas); color: var(--text); font-size: 15px; font-weight: 400; }
+.tencent-sheet-panel input:focus-visible, .tencent-sheet-panel select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.tencent-sheet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.tencent-sheet-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.tencent-sheet-panel > button { justify-self: start; }
+.tencent-sheet-panel summary { cursor: pointer; color: #78716C; padding: 8px 0; }
+.tencent-sheet-panel .tencent-sheet-date-mode { display: flex; align-items: center; gap: 8px; }
+.tencent-sheet-guidance { display: grid; gap: 12px; background: #F5F5F4; padding: 16px; border-radius: 14px; }
+.tencent-sheet-guidance > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.tencent-sheet-table { overflow-x: auto; }
+.tencent-sheet-table table { width: 100%; border-collapse: collapse; text-align: left; }
+.tencent-sheet-table th, .tencent-sheet-table td { padding: 12px; border-bottom: 1px solid #E7E5E4; }
+.tencent-sheet-progress { display: flex; gap: 8px; align-items: center; }
+@media(max-width: 700px) { .tencent-sheet-grid { grid-template-columns: 1fr; } .tencent-sheet-intro { flex-direction: column; gap: 8px; } .tencent-sheet-panel { padding: 16px; } }
