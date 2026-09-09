@@ -30,8 +30,7 @@ async function createServer(options = {}) {
   const driver = options.driver || new BrowserSession(path.join(runtime,'edge-profile'));
   const token = crypto.randomBytes(32).toString('hex');
   let busy = false, preview = null, version = 0;
-  const writeBlockedReason='真实写入已暂停：已报告修改了错误位置，需验证目标单元格与编辑器的关联。读取和校验仍可使用。';
-  const canWrite=()=>options.allowFixtureWrites===true && new URL(config.documentUrl || 'https://invalid.local').hostname==='127.0.0.1';
+  const protocol='keyboard-edit-v2';
   function send(res,status,body,type='application/json; charset=utf-8') {
     res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'});
     res.end(type.startsWith('application/json')?JSON.stringify(body):body);
@@ -59,7 +58,7 @@ async function createServer(options = {}) {
       }
       if (!url.pathname.startsWith('/api/')) return send(res,404,{error:'地址不存在'});
       if (req.headers['x-demo-token'] !== token || (req.headers.origin && req.headers.origin !== origin)) return send(res,403,{error:'请从本地 Demo 页面发起操作'});
-      if (req.method==='GET' && url.pathname==='/api/config') return send(res,200,{config,warning:loadWarning,busy,writeEnabled:canWrite(),writeBlockedReason});
+      if (req.method==='GET' && url.pathname==='/api/config') return send(res,200,{config,warning:loadWarning,busy,writeEnabled:true,protocol});
       if (req.method !== 'POST' || !String(req.headers['content-type']).startsWith('application/json')) return send(res,405,{error:'需要 JSON POST 请求'});
       if (busy) return send(res,409,{error:'已有操作正在执行，请等待完成'});
       // One dedicated browser page: serialize all mutations and invalidate one-use previews.
@@ -77,7 +76,7 @@ async function createServer(options = {}) {
           await fs.writeFile(configPath+'.tmp',JSON.stringify(next,null,2),'utf8');
           await fs.rename(configPath+'.tmp',configPath);
           config = next; version++; preview = null; loadWarning = '';
-          return send(res,200,{config,writeEnabled:canWrite(),message:'设置已保存到本机服务'});
+          return send(res,200,{config,writeEnabled:true,protocol,message:'设置已保存到本机服务'});
         }
         if(url.pathname==='/api/open') { preview = null; return send(res,200,await driver.open(config)); }
         if(url.pathname==='/api/close') { preview = null; await driver.close(); return send(res,200,{message:'专用浏览器已关闭，登录会话保留'}); }
@@ -90,17 +89,23 @@ async function createServer(options = {}) {
           await driver.selectSheet(config,plan.sheet);
           return send(res,200,{address:body.address,value:await driver.read(config,body.address),sheet:plan.sheet});
         }
+        if(url.pathname==='/api/diagnose') {
+          preview=null;
+          const plan=core.plan(config,body.date,{cutting:0,welding:0,section:0,plate:0});
+          await driver.selectSheet(config,plan.sheet);
+          return send(res,200,await driver.diagnose(config,body.address));
+        }
         if(url.pathname==='/api/inspect') {
           preview = null;
           const plan = core.plan(config,body.date,body.values);
           const result = await driver.inspect(config,plan);
+          if(!result.conflict && result.editingVerified!==true)throw Error('目标单元格的定位与编辑关联未通过验证，不能生成填报确认。');
           if(!result.conflict) preview = {id:crypto.randomUUID(),version,created:Date.now(),plan,result};
           return send(res,200,{...result,inspectionId:preview?.id || null});
         }
         if(url.pathname==='/api/write') {
-          if(!canWrite()){preview=null;throw Error(writeBlockedReason);}
           const saved = preview; preview = null;
-          if(!saved || saved.id !== body.inspectionId || saved.version !== version || Date.now()-saved.created > 120000) throw Error('检查结果已失效，请重新检查真实目标');
+          if(!saved || saved.result.editingVerified!==true || saved.id !== body.inspectionId || saved.version !== version || Date.now()-saved.created > 120000) throw Error('检查结果已失效或未验证编辑关联，请重新检查真实目标');
           return send(res,200,await driver.write(config,saved.plan,saved.result));
         }
         return send(res,404,{error:'操作不存在'});
@@ -117,7 +122,7 @@ async function createServer(options = {}) {
 }
 if (require.main === module) {
   createServer().then(app => {
-    console.log(`Tencent Docs Demo: ${app.origin}\nOpen this address to configure and operate the test page.\nPress Ctrl+C to stop.`);
+    console.log(`Tencent Docs Demo [keyboard-edit-v2]: ${app.origin}\nOpen this address to configure and operate the test page.\nPress Ctrl+C to stop.`);
     for (const signal of ['SIGINT','SIGTERM']) process.once(signal,async()=>{await app.close();process.exit(0);});
   }).catch(e => { console.error(e.code === 'EADDRINUSE' ? 'Port 43128 is in use. Open http://127.0.0.1:43128 if the demo is already running.' : e.message); process.exitCode=1; });
 }

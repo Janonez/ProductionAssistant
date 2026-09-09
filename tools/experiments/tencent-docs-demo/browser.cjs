@@ -147,10 +147,12 @@ class BrowserSession {
   }
   async locate(config, address) {
     a1(address);
+    await this.page.bringToFront();
     const name = await this.control(config,'nameBox');
-    await name.fill(address);
+    await name.click();
+    await name.press('Control+A');
+    await name.pressSequentially(address);
     await name.press('Enter');
-    await name.press('Tab');
     // Do not await requestAnimationFrame: an occluded/minimized sheet can suspend it indefinitely.
     // The concrete page binding must be validated by reading anchors before any write.
     await new Promise(resolve => setTimeout(resolve,100));
@@ -159,6 +161,55 @@ class BrowserSession {
     return this.control(config,'valueBox');
   }
   async read(config, address) { return this.text(await this.locate(config,address)); }
+  async selectedAddress(config) {
+    return (await this.text(await this.control(config,'nameBox'))).replace(/\$/g,'').toUpperCase();
+  }
+  async waitAddress(config,expected) {
+    const until=Date.now()+Math.min(config.timeout*1000,3000);let actual;
+    do {
+      actual=await this.selectedAddress(config);
+      if(actual===expected)return;
+      await new Promise(resolve=>setTimeout(resolve,50));
+    } while(Date.now()<until);
+    throw Error('定位验证未通过：期望实际选区 '+expected+'，名称框返回 '+actual+'。未输入填报值。');
+  }
+  async editorFocused(editor) {
+    return editor.evaluate(el=>el===el.ownerDocument.activeElement || el.contains(el.ownerDocument.activeElement));
+  }
+  async prepareEdit(config,address,expected) {
+    let editor=await this.locate(config,address);
+    const name=await this.control(config,'nameBox');
+    // A field echoing the address we just typed is not independent selection evidence.
+    // Native arrow navigation must update that address without writing into the name box.
+    if(await this.editorFocused(name))throw fieldError('nameBox','名称框输入地址后没有把焦点交回表格，无法确认实际选区。未输入填报值。');
+    const focus=await this.scope(config).locator('body').evaluate(body=>{
+      const el=body.ownerDocument.activeElement;
+      return {tag:el?.tagName||'',editable:!!el?.isContentEditable,role:el?.getAttribute('role')||''};
+    });
+    if((/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(focus.tag) || focus.editable) && !await this.editorFocused(editor))throw Error('焦点不在表格或配置的编辑器中，停止定位验证。未输入填报值。');
+    const [,column,rowText]=/^([A-Z]+)(\d+)$/.exec(address), row=Number(rowText);
+    const direction=row===1048576?-1:1, neighbour=column+(row+direction);
+    await this.page.keyboard.press(direction===1?'ArrowDown':'ArrowUp');
+    await this.waitAddress(config,neighbour);
+    await this.page.keyboard.press(direction===1?'ArrowUp':'ArrowDown');
+    await this.waitAddress(config,address);
+    // Enter cell edit mode through the sheet's own keyboard handler. Do not focus/fill
+    // the shared editor directly: its DOM can show a new value while its edit target is old.
+    await this.page.keyboard.press('F2');
+    editor=await this.control(config,'valueBox');
+    if(!await this.editorFocused(editor))throw fieldError('valueBox','按 F2 后，编辑焦点没有进入配置的值编辑区。未输入填报值，请使用定位与编辑诊断检查。');
+    const actualAddress=await this.selectedAddress(config), actualValue=await this.text(editor);
+    if(actualAddress!==address)throw Error('进入编辑后选区变成 '+actualAddress+'，目标应为 '+address+'。未输入填报值。');
+    if(actualValue!==expected)throw Error(address+' 进入编辑后的原值不一致：期望「'+expected+'」，实际「'+actualValue+'」。未输入填报值。');
+    return {editor,evidence:{address,neighbour,returnedAddress:actualAddress,editorValue:actualValue,editingVerified:true}};
+  }
+  async diagnose(config,address) {
+    const current=await this.read(config,address);
+    try {
+      const {evidence}=await this.prepareEdit(config,address,current);
+      return {...evidence,message:'定位往返、编辑焦点和原值验证通过；未输入或提交填报数据。'};
+    } finally {await this.page.keyboard.press('Escape').catch(()=>{});}
+  }
   async anchors(config, plan) {
     const results = [];
     for (const [key,label] of anchorSpecs) {
@@ -177,7 +228,12 @@ class BrowserSession {
     const anchors = await this.anchors(config,plan), cells = {};
     for (const row of plan.rows) cells[row.address] = await this.read(config,row.address);
     const rows = core.preflight(plan,cells,'ready');
-    return {sheet:plan.sheet,rows,anchors,conflict:rows.some(r=>r.action==='conflict')};
+    const conflict=rows.some(r=>r.action==='conflict'), editing=[];
+    if(!conflict)for(const row of rows) {
+      try {editing.push((await this.prepareEdit(config,row.address,row.current)).evidence);}
+      finally {await this.page.keyboard.press('Escape').catch(()=>{});}
+    }
+    return {sheet:plan.sheet,rows,anchors,conflict,editing,editingVerified:!conflict && editing.length===rows.length};
   }
   async write(config, plan, baseline) {
     const completed = [];
@@ -194,16 +250,18 @@ class BrowserSession {
         const current = await this.read(config,row.address);
         if (current !== row.current) throw Error(row.address+' 在执行期间被修改，停止后续写入');
         if (row.action === 'skip') { completed.push({...row,result:'skipped'}); continue; }
-        const editor = await this.locate(config,row.address);
+        const {editor}=await this.prepareEdit(config,row.address,current);
+        await this.page.keyboard.press('Control+A');
+        if(!await this.editorFocused(editor) || await this.selectedAddress(config)!==row.address)throw Error(row.address+' 输入前焦点或选区发生变化，未输入填报值。');
         attempted = row.address;
-        await editor.fill(String(row.value));
-        await editor.press('Enter');
+        await this.page.keyboard.insertText(String(row.value));
+        await this.page.keyboard.press('Enter');
         if(config.adapter.stateMode==='selectors')await this.one(config,'saved');
         // Navigate away and back so this is a fresh formula-bar read, not the text just typed.
         const other = inspection.rows.find(r => r.address !== row.address).address;
         await this.read(config,other);
         const actual = await this.read(config,row.address);
-        if (!sameNumber(actual,row.value)) throw Error(row.address+' 写后回读不一致');
+        if (!sameNumber(actual,row.value)) throw Error(row.address+' 写后回读不一致：期望「'+row.value+'」，实际「'+actual+'」');
         completed.push({...row,result:'written',actual}); attempted = null;
       }
       // Allow debounced autosave to start; the delay is NOT evidence of a successful save.
@@ -218,6 +276,7 @@ class BrowserSession {
       }
       return {completed,message:'真实填报完成，刷新后回读一致。'};
     } catch(error) {
+      await this.page?.keyboard.press('Escape').catch(()=>{});
       error.completed = completed;
       error.uncertainAddress = attempted;
       throw error;

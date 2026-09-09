@@ -12,7 +12,7 @@
 <main class="shell">
   <div class="intro"><div><h1>把每日数据，填到正确的位置</h1><p class="muted">先确认日期与目标单元格，再检查、填报和回读。</p></div><button id="settingsShortcut">配置测试环境 →</button></div>
   <div id="modeNotice" class="notice">正在读取本地设置…</div>
-  <p id="writeBlockNotice" class="error" hidden>真实写入已暂停：目标单元格与编辑器的关联尚未验证。可以继续读取和校验，请勿用旧服务重试填报。</p>
+  <p id="writeBlockNotice" class="error" hidden>当前服务不是修复后的键盘定位版本，真实写入不可用。请关闭旧服务，重启 start.cmd 后刷新页面。</p>
   <div class="modebar"><label>执行环境<select id="mode"><option value="simulation">本地模拟</option><option value="real">真实网页</option></select></label><button id="migrate">迁移当前配置到本地服务 →</button><span id="connection" class="muted small">尚未检查网页连接</span></div>
   <nav class="tabs" aria-label="工作台页面"><button id="runTab" aria-selected="true">填报测试</button><button id="settingsTab" aria-selected="false">环境与模板设置</button></nav>
   <section id="settings" hidden>
@@ -39,7 +39,7 @@
     </form>
   </section>
   <section id="run">
-    <div id="browserPanel" class="panel" hidden><h2>网页连接</h2><p class="muted">打开专用浏览器后自行扫码。配置完成后，检查连接并尝试读取一个单元格，再进行整批填报。</p><div class="actions"><button id="openBrowser">打开网页 / 扫码登录</button><button id="browserStatus">检查连接</button><button id="discover">读取控件信息</button><button id="closeBrowser">关闭专用浏览器</button></div><details id="discovery" hidden><summary>网页可见控件信息</summary><pre id="discoveryOutput" class="code-output"></pre></details><div class="actions"><label>只读测试地址<input id="readAddress" placeholder="J9" value="J9"></label><button id="readCell">读取单元格</button></div><p id="readResult" class="muted small"></p></div>
+    <div id="browserPanel" class="panel" hidden><h2>网页连接</h2><p class="muted">打开专用浏览器后自行扫码。配置完成后，检查连接并尝试读取一个单元格，再进行整批填报。</p><div class="actions"><button id="openBrowser">打开网页 / 扫码登录</button><button id="browserStatus">检查连接</button><button id="discover">读取控件信息</button><button id="closeBrowser">关闭专用浏览器</button></div><details id="discovery" hidden><summary>网页可见控件信息</summary><pre id="discoveryOutput" class="code-output"></pre></details><div class="actions"><label>只读测试地址<input id="readAddress" placeholder="J9" value="J9"></label><button id="readCell">读取单元格</button><button id="diagnoseCell">定位与编辑诊断（不写入）</button></div><p id="readResult" class="muted small"></p></div>
     <ol class="steps"><li id="step1" class="active"><b>1</b>输入数据</li><li id="step2"><b>2</b>检查目标</li><li id="step3"><b>3</b>填报与回读</li></ol>
     <div class="grid"><div class="panel"><h2>本次填报</h2><form id="dataForm"><div class="fields">
       <label class="wide">业务日期<input id="date" type="date" required></label>

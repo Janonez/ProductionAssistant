@@ -9,7 +9,7 @@ const {BrowserSession,normalizeAdapter} = require('./browser.cjs');
 const {createServer} = require('./server.cjs');
 
 async function main() {
-  const cells = {J8:'2026年9月5日',J18:'2026年9月5日',N34:'2026年9月5日',O34:'2026年9月5日',B9:'滨海公司',B19:'滨海公司',B35:'滨海园区',N33:'型材',O33:'板材'};
+  const cells = {N2:'2026/9/9',J8:'2026年9月5日',J18:'2026年9月5日',N34:'2026年9月5日',O34:'2026年9月5日',B9:'滨海公司',B19:'滨海公司',B35:'滨海园区',N33:'型材',O33:'板材'};
   let writes = 0, failedSave = false, denyEdit = false, reloads = 0;
   const fixture = http.createServer(async(req,res)=> {
     if(req.method==='POST') {
@@ -24,11 +24,21 @@ async function main() {
       <button role="tab" aria-selected="true">其他工作表</button><button role="tab" aria-selected="false">下料、装焊（26年9月）</button>
       <span id="editable" ${denyEdit?'hidden':''}>可编辑</span><span id="saved">已保存</span>
       <div id="ordinary">普通页面区域</div><div id="nameWrap"><label>名称框<input id="name" value="A1"></label></div><label>公式栏<input id="value" ${denyEdit?'readonly':''}></label>
+      <div id="grid" role="grid" tabindex="0">表格键盘操作区</div>
       <script>
-      const cells=${JSON.stringify(cells)},nameBox=document.querySelector('#name'),valueBox=document.querySelector('#value');let address='A1';
+      const cells=${JSON.stringify(cells)},nameBox=document.querySelector('#name'),valueBox=document.querySelector('#value'),grid=document.querySelector('#grid');let address='N2',editAddress='N2';
+      function render(){nameBox.value=address;valueBox.value=cells[address]??'';}
+      render();
       document.querySelectorAll('[role=tab]').forEach(tab=>tab.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(t=>t.setAttribute('aria-selected','false'));tab.setAttribute('aria-selected','true');});
-      nameBox.onkeydown=e=>{if(e.key==='Enter'){address=nameBox.value;valueBox.value=cells[address]??'';}};
-      valueBox.onkeydown=async e=>{if(e.key==='Enter'){document.querySelector('#saved').hidden=true;cells[address]=valueBox.value;await fetch('/',{method:'POST',body:JSON.stringify({address,value:valueBox.value})});document.querySelector('#saved').hidden=false;}};
+      nameBox.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();address=nameBox.value;render();grid.focus();}};
+      grid.onkeydown=e=>{
+        if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();address=address.replace(/[0-9]+$/,n=>Number(n)+(e.key==='ArrowDown'?1:-1));render();}
+        if(e.key==='F2'){e.preventDefault();editAddress=address;render();valueBox.focus();}
+      };
+      valueBox.onkeydown=async e=>{
+        if(e.key==='Escape'){e.preventDefault();render();grid.focus();}
+        if(e.key==='Enter'){e.preventDefault();document.querySelector('#saved').hidden=true;cells[editAddress]=valueBox.value;await fetch('/',{method:'POST',body:JSON.stringify({address:editAddress,value:valueBox.value})});document.querySelector('#saved').hidden=false;render();grid.focus();}
+      };
       </script>`);
   });
   await new Promise(resolve=>fixture.listen(0,'127.0.0.1',resolve));
@@ -40,6 +50,25 @@ async function main() {
   const plan=core.plan(config,'2026-09-05',{cutting:0,welding:2,section:3,plate:4});
   try {
     await driver.open(config);
+    // Reproduce the reported class of failure: the old path writes the initial edit target N2.
+    await driver.page.locator('#name').fill('N9');await driver.page.locator('#name').press('Enter');
+    await driver.page.locator('#name').press('Tab');await driver.page.locator('#value').fill('42.35');await driver.page.locator('#value').press('Enter');
+    await driver.page.locator('#saved').waitFor({state:'visible'});
+    assert.equal(cells.N2,'42.35');assert.equal(cells.N9,undefined);
+    cells.N2='2026/9/9';writes=0;await driver.page.reload();
+    const diagnosis=await driver.diagnose(config,'N9');assert.equal(diagnosis.returnedAddress,'N9');assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');
+    console.log('PASS: old Tab/shared-editor path reproduces N2 corruption; new keyboard diagnosis writes nothing');
+    await driver.page.locator('#grid').evaluate(el=>el.addEventListener('keydown',e=>{if(e.key.startsWith('Arrow')){e.preventDefault();e.stopImmediatePropagation();}},true));
+    await assert.rejects(driver.diagnose(config,'N9'),/定位验证未通过/);
+    assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');await driver.page.reload();
+    await driver.page.locator('#grid').evaluate(el=>el.addEventListener('keydown',e=>{if(e.key==='F2'){e.preventDefault();e.stopImmediatePropagation();}},true));
+    await assert.rejects(driver.diagnose(config,'N9'),/编辑焦点没有进入/);
+    assert.equal(writes,0);await driver.page.reload();
+    await driver.page.locator('#grid').evaluate(el=>el.addEventListener('keydown',e=>{if(e.key==='F2'){e.preventDefault();e.stopImmediatePropagation();const input=el.ownerDocument.querySelector('#value');input.value='2026/9/9';input.focus();}},true));
+    await assert.rejects(driver.diagnose(config,'N9'),/进入编辑后的原值不一致/);
+    assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');await driver.page.reload();
+    console.log('PASS: address echo without native navigation, failed F2 focus and stale editor contents all stop before data input');
+    if(process.argv.includes('--location-only'))return;
     assert.equal(config.adapter.stateMode,'auto');
     await driver.ready(config);
     await driver.ready({...config,adapter:{...adapter,ready:'#obsolete',saved:'#obsolete'}});
@@ -58,6 +87,7 @@ async function main() {
     const discovered=await driver.discover(config);assert.ok(discovered.frames[0].controls.some(c=>c.id==='name'));
     const check=await driver.inspect(config,plan);assert.equal(check.anchors.length,9);assert.equal(writes,0);
     const result=await driver.write(config,plan,check);assert.equal(result.completed.length,4);assert.equal(writes,4);assert.equal(cells.J9,'0');assert.ok(reloads>=2);
+    assert.equal(cells.N2,'2026/9/9');
     await driver.write(config,plan,await driver.inspect(config,plan));assert.equal(writes,4);
     cells.J9='99';await driver.page.reload();
     const conflict=await driver.inspect(config,plan);assert.equal(conflict.conflict,true);
@@ -74,7 +104,7 @@ async function main() {
   } finally {await driver.close();await new Promise(resolve=>fixture.close(resolve));}
 }
 async function checkApplication(driver,config,runtime) {
-  const app=await createServer({runtime:path.join(runtime,'app-test'),driver,port:0,allowFixtureWrites:true});
+  const app=await createServer({runtime:path.join(runtime,'app-test'),driver,port:0});
   const page=await driver.context.newPage();
   try {
     await page.goto(app.origin+'/#import='+encodeURIComponent(JSON.stringify(config)));
@@ -82,11 +112,13 @@ async function checkApplication(driver,config,runtime) {
     assert.equal(new URL(page.url()).hash,'');
     await page.locator('#sample').click();await page.locator('#date').fill('2026-09-05');
     await page.locator('#dataForm button[type=submit]').click();
-    await page.locator('#check').click();await page.locator('#execute:not([disabled])').waitFor();
+    await page.locator('#check').click();
+    await page.waitForFunction(()=>!document.getElementById('check').disabled,undefined,{polling:100,timeout:30000});
+    assert.equal(await page.locator('#execute').isDisabled(),false,await page.locator('#status').innerText());
     await page.locator('#execute').click();await page.locator('#confirmWrite').waitFor({state:'visible'});
     assert.match(await page.locator('#writeSummary').innerText(),/J9 = 42.35/);
     await page.locator('#submitWrite').click();
-    await page.waitForFunction(()=>document.getElementById('status').textContent !== '正在执行，请等待；不要操作专用浏览器…');
+    await page.waitForFunction(()=>document.getElementById('status').textContent !== '正在执行，请等待；不要操作专用浏览器…',undefined,{polling:100,timeout:30000});
     assert.equal(await page.locator('#status').innerText(),'真实填报完成，刷新后回读一致。');
     await page.screenshot({path:path.resolve(__dirname,'../../../artifacts/tencent-docs-demo-preview.png'),fullPage:true});
     await page.setViewportSize({width:390,height:844});

@@ -87,7 +87,7 @@ async function operation(action) {
 }
 async function save(next) {
   next = api.validate(next);
-  if(service) {const result=await request('config',next);next=result.config;writeEnabled=result.writeEnabled===true;}
+  if(service) {const result=await request('config',next);next=result.config;writeEnabled=result.writeEnabled===true && result.protocol==='keyboard-edit-v2';}
   let localWarning = '';
   try { localStorage.setItem(storageKey,JSON.stringify(next)); }
   catch { if(!service) throw Error('浏览器不允许保存本地配置，请导出配置备份'); localWarning = '；浏览器缓存不可用，但本机服务已保存'; }
@@ -169,7 +169,7 @@ $('check').onclick = () => operation(async()=> {
     $('connection').textContent='已读取目标文档';
     if(result.conflict) throw Error('已有值冲突，未写入任何单元格');
     inspectionId=result.inspectionId; inspectionRows=result.rows; step(3);
-    log('真实检查通过：已读取 '+result.anchors.length+' 个校验格和 4 个目标格。检查结果 2 分钟内有效。');
+    log('真实检查通过：已读取 '+result.anchors.length+' 个校验格，并验证 4 个目标格的实际选区、编辑焦点和原值。检查结果 2 分钟内有效。');
   } else {
     const rows=api.preflight(pending,cells(),$('scenario').value);render(rows);
     if(rows.some(r=>r.action==='conflict'))throw Error('发现已有值冲突，整批停止，未写入。');
@@ -205,18 +205,24 @@ $('readCell').onclick=()=>operation(async()=> {
   $('readResult').textContent=`${result.sheet} / ${result.address} = ${result.value===''?'（空）':result.value}`;log('已从真实网页读取 '+result.address+'，未写入。');
   $('connection').textContent='已读取目标文档';
 });
+$('diagnoseCell').onclick=()=>operation(async()=> {
+  if(dirty)throw Error('请先保存设置');invalidate();
+  const result=await request('diagnose',{date:$('date').value,address:$('readAddress').value.trim().toUpperCase()});
+  $('readResult').textContent=`选区验证：${result.address} → ${result.neighbour} → ${result.returnedAddress}；编辑原值：${result.editorValue===''?'（空）':result.editorValue}。已退出编辑，未输入数据。`;
+  log(result.message);
+});
 async function initialize() {
   let warning='';
   try {const stored=localStorage.getItem(storageKey);if(stored)config=api.validate(JSON.parse(stored));}catch{warning='本地浏览器配置读取失败，请导入备份。';}
   const today=new Date();$('date').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   if(service) {
     try {
-      const saved=await request('config');config=saved.config;warning=saved.warning;writeEnabled=saved.writeEnabled===true;
+      const saved=await request('config');config=saved.config;warning=saved.warning;writeEnabled=saved.writeEnabled===true && saved.protocol==='keyboard-edit-v2';
       if(location.hash.startsWith('#import=')) {
         const imported=JSON.parse(decodeURIComponent(location.hash.slice(8)));
         history.replaceState(null,'',location.pathname);await save(imported);warning='原 Demo 配置已迁移。网页操作设置可在此继续补充。';
       }
-      $('mode').value='real';$('serviceLabel').textContent='本机浏览器服务已连接';
+      $('mode').value='real';$('serviceLabel').textContent=writeEnabled?'本机服务 · 键盘定位验证 v2':'服务版本过旧，请重启 start.cmd';
     } catch(e) {warning='本机服务初始化失败：'+e.message;}
   } else $('serviceLabel').textContent='文件预览 · 请运行 start.cmd 启用真实操作';
   $('migrate').hidden=!!service;configToForm();modeChanged();if(warning)status(warning);

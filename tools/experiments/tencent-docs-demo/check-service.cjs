@@ -19,10 +19,10 @@ async function main() {
   let writes=0;
   const driver = {
     async close(){},async open(){return {message:'test open'};},
-    async inspect(c,p){return {rows:core.preflight(p,{},'ready'),anchors:anchorSpecs.map(([label])=>({label})),conflict:false};},
+    async inspect(c,p){return {rows:core.preflight(p,{},'ready'),anchors:anchorSpecs.map(([label])=>({label})),conflict:false,editingVerified:true};},
     async write(c,p,b){writes++;return {completed:b.rows,message:'test written'};}
   };
-  const app = await createServer({runtime,driver,port:0,allowFixtureWrites:true});
+  const app = await createServer({runtime,driver,port:0});
   const headers={'X-Demo-Token':app.token,'Content-Type':'application/json','Origin':app.origin};
   const post=async(route,body={})=> {const r=await fetch(app.origin+'/api/'+route,{method:'POST',headers,body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
   try {
@@ -55,14 +55,10 @@ async function main() {
     assert.equal((await post('write',{inspectionId:third.body.inspectionId})).status,400);
     console.log('PASS: loopback host/origin/token, config persistence, serialization, one-use preview, stale config, partial-result reporting');
     await checkRealUI(app.origin,app.token,config);
-    await post('config',{...config,documentUrl:'https://example.test/sheet/test'});
-    const blocked=await post('write',{});assert.equal(blocked.status,400);assert.match(blocked.body.error,/真实写入已暂停/);
-    const stopped=await createServer({runtime:path.join(runtime,'blocked'),driver,port:0});
-    try {
-      const blockedResponse=await fetch(stopped.origin+'/api/write',{method:'POST',headers:{'X-Demo-Token':stopped.token,'Content-Type':'application/json'},body:'{}'});
-      assert.equal(blockedResponse.status,400);assert.match((await blockedResponse.json()).error,/真实写入已暂停/);
-    } finally {await stopped.close();}
-    console.log('PASS: real writes blocked by default and fixture override cannot target external documents');
+    driver.inspect=async(c,p)=>({rows:core.preflight(p,{},'ready'),anchors:[],conflict:false,editingVerified:false});
+    const blocked=await post('inspect',input);assert.equal(blocked.status,400);assert.match(blocked.body.error,/编辑关联未通过验证/);
+    assert.equal((await post('write',{})).status,400);
+    console.log('PASS: failed edit-target verification cannot issue a write preview or reach the writer');
   } finally {await app.close();}
 }
 async function checkRealUI(origin,token,config) {
