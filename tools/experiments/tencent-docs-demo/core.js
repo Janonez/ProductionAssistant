@@ -53,11 +53,16 @@
     if (new Set(rows.map(r => r.address)).size !== rows.length) throw Error('目标单元格重复，请检查行号配置');
     return { sheet, date, rows };
   }
+  function cellText(value) {
+    const text=String(value ?? '');
+    // Blank contenteditable controls can expose line breaks or invisible placeholders.
+    return /^[\s\u200B\uFEFF]*$/.test(text) ? '' : text;
+  }
   function preflight(plan, cells, scenario) {
     const failures = { login: '模拟登录已失效，需要重新扫码', permission: '模拟账号没有编辑权限', anchor: '模拟日期 / 公司 / 材料锚点不匹配', sheet: '模拟目标工作表不存在' };
     if (failures[scenario]) throw Error(failures[scenario]);
     return plan.rows.map(r => {
-      const current = String(cells[r.address] ?? '');
+      const current = cellText(cells[r.address]);
       return { ...r, current, action: current === '' ? 'write' : 'conflict' };
     });
   }
@@ -70,7 +75,7 @@
     if (!rows.every(r => Number(next[r.address]) === r.value)) throw Error('模拟回读不一致');
     return { cells: next, rows };
   }
-  const api = { defaults, validate, plan, preflight, simulate, columnName };
+  const api = { defaults, validate, plan, preflight, simulate, columnName, cellText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TencentDemo = api;
 })(globalThis);

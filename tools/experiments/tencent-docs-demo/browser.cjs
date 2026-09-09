@@ -120,7 +120,7 @@ class BrowserSession {
   }
   async text(locator,trim=true) {
     const value=await locator.evaluate(el => /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) ? el.value : el.innerText ?? el.textContent ?? '');
-    return trim?value.trim():value;
+    return trim?value.trim():core.cellText(value);
   }
   async ready(config) {
     this.requirePage(config);
@@ -183,7 +183,8 @@ class BrowserSession {
     const current=await this.read(config,address);
     try {
       const {evidence}=await this.prepareEdit(config,address,current);
-      return {...evidence,message:'名称框定位、内容编辑区焦点和原值验证通过；未输入或提交填报数据。'};
+      const raw=await (await this.control(config,'valueBox')).evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.innerText??el.textContent??'');
+      return {...evidence,rawEditorValue:raw,rawCodePoints:[...raw].map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')),message:'名称框定位、内容编辑区焦点和原值验证通过；未输入或提交填报数据。'};
     } finally {await this.page.keyboard.press('Escape').catch(()=>{});}
   }
   async anchors(config, plan) {

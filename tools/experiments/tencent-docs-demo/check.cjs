@@ -22,7 +22,8 @@ for (const scenario of ['login','permission','anchor','sheet']) assert.throws(()
 const result = api.simulate(plan,{},'ready');
 assert.equal(result.cells.J9,'0');
 assert.throws(() => api.simulate(plan,result.cells,'ready'), /整批停止/);
-assert.throws(() => api.simulate(plan,{J9:' '},'ready'), /整批停止/);
+for(const blank of [' ', '\n', '\r\n', '\u00a0', '\u200b', '\ufeff'])assert.equal(api.preflight(plan,{J9:blank},'ready')[0].action,'write');
+for(const value of ['0','42.35','=""','文字',' \n0'])assert.equal(api.preflight(plan,{J9:value},'ready')[0].action,'conflict');
 const html = fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
 const inline = fs.readFileSync(path.join(__dirname,'app.js'),'utf8');
 new vm.Script(inline);

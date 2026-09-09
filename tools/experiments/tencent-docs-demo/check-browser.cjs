@@ -50,6 +50,12 @@ async function main() {
   try {
     await driver.open(config);
     driver.page.on('pageerror',error=>{throw error;});
+    await driver.page.locator('body').evaluate(el=>{const editor=el.ownerDocument.createElement('div');editor.id='blankEditor';editor.contentEditable='true';editor.innerHTML='<div><br></div>';el.append(editor);});
+    const blankEditor=driver.page.locator('#blankEditor');
+    assert.equal(await driver.text(blankEditor,false),'');
+    await blankEditor.evaluate(el=>el.textContent='\u200b');assert.equal(await driver.text(blankEditor,false),'');
+    await blankEditor.evaluate(el=>el.textContent='0');assert.equal(await driver.text(blankEditor,false),'0');
+    await blankEditor.evaluate(el=>el.remove());
     const diagnosis=await driver.diagnose(config,'N9');assert.equal(diagnosis.returnedAddress,'N9');assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');
     await driver.page.locator('#grid').evaluate(el=>el.onkeydown=null);
     await assert.rejects(driver.diagnose(config,'N9'),/未获得焦点/);
