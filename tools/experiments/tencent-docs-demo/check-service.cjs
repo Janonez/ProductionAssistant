@@ -19,7 +19,7 @@ async function main() {
   let writes=0;
   const driver = {
     async close(){},async open(){return {message:'test open'};},
-    async inspect(c,p){return {rows:core.preflight(p,{},'ready'),anchors:anchorSpecs.map(([label])=>({label})),conflict:false,editingVerified:true};},
+    async inspect(c,p){return {rows:core.preflight(p,{},'ready'),anchors:anchorSpecs.map(([label])=>({label})),conflict:false,prewriteVerified:true};},
     async write(c,p,b){writes++;return {completed:b.rows,message:'test written'};}
   };
   const app = await createServer({runtime,driver,port:0});
@@ -55,10 +55,10 @@ async function main() {
     assert.equal((await post('write',{inspectionId:third.body.inspectionId})).status,400);
     console.log('PASS: loopback host/origin/token, config persistence, serialization, one-use preview, stale config, partial-result reporting');
     await checkRealUI(app.origin,app.token,config);
-    driver.inspect=async(c,p)=>({rows:core.preflight(p,{},'ready'),anchors:[],conflict:false,editingVerified:false});
-    const blocked=await post('inspect',input);assert.equal(blocked.status,400);assert.match(blocked.body.error,/编辑关联未通过验证/);
+    driver.inspect=async(c,p)=>({rows:core.preflight(p,{},'ready'),anchors:[],conflict:false,prewriteVerified:false});
+    const blocked=await post('inspect',input);assert.equal(blocked.status,400);assert.match(blocked.body.error,/地址与原值未通过检查/);
     assert.equal((await post('write',{})).status,400);
-    console.log('PASS: failed edit-target verification cannot issue a write preview or reach the writer');
+    console.log('PASS: failed prewrite check cannot issue a write preview or reach the writer');
   } finally {await app.close();}
 }
 async function checkRealUI(origin,token,config) {

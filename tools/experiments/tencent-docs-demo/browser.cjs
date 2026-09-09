@@ -165,31 +165,22 @@ class BrowserSession {
   async selectedAddress(config) {
     return (await this.text(await this.control(config,'nameBox'))).replace(/\$/g,'').toUpperCase();
   }
-  async editorFocused(editor) {
-    return editor.evaluate(el=>el===el.ownerDocument.activeElement || el.contains(el.ownerDocument.activeElement));
-  }
   async prepareEdit(config,address,expected) {
     const valueBox=await this.locate(config,address);
     const before=await this.text(valueBox,false);
     if(before!==expected)throw Error(address+' 写前原值不一致：期望「'+expected+'」，实际「'+before+'」。未输入填报值。');
     await this.page.keyboard.press('F2');
-    // F2 opens an in-cell editor; the formula/content bar remains a read source.
-    const focused=this.scope(config).locator(':is('+textControls+'):focus');
-    try {await focused.waitFor({state:'attached',timeout:Math.min(config.timeout*1000,3000)});}
-    catch {throw Error('按 F2 后单元格编辑器未获得焦点。未输入填报值。');}
-    const editor=await focused.elementHandle();
-    if(!editor || !await editor.isEditable() || await this.editorFocused(await this.control(config,'nameBox')))throw Error('按 F2 后焦点未进入可输入的单元格编辑器。未输入填报值。');
-    const actualAddress=await this.selectedAddress(config), actualValue=await this.text(editor,false);
-    if(actualAddress!==address)throw Error('聚焦后地址变成 '+actualAddress+'，目标应为 '+address+'。未输入填报值。');
-    if(actualValue!==expected)throw Error(address+' 聚焦后的原值不一致：期望「'+expected+'」，实际「'+actualValue+'」。未输入填报值。');
-    return {editor,evidence:{address,returnedAddress:actualAddress,editorValue:actualValue,editingVerified:true}};
+    const actualAddress=await this.selectedAddress(config), actualValue=await this.text(valueBox,false);
+    if(actualAddress!==address)throw Error('按 F2 后地址变成 '+actualAddress+'，目标应为 '+address+'。未输入填报值。');
+    if(actualValue!==expected)throw Error(address+' 按 F2 后的原值不一致：期望「'+expected+'」，实际「'+actualValue+'」。未输入填报值。');
+    return {valueBox,evidence:{address,returnedAddress:actualAddress,editorValue:actualValue,prewriteVerified:true}};
   }
   async diagnose(config,address) {
     const current=await this.read(config,address);
     try {
       const {evidence}=await this.prepareEdit(config,address,current);
       const raw=await (await this.control(config,'valueBox')).evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.innerText??el.textContent??'');
-      return {...evidence,rawEditorValue:raw,rawCodePoints:[...raw].map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')),message:'名称框定位、单元格编辑焦点和原值验证通过；未输入或提交填报数据。'};
+      return {...evidence,rawEditorValue:raw,rawCodePoints:[...raw].map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')),message:'名称框地址与原值检查通过，已发送 F2；尚未验证实际输入效果；未输入或提交填报数据。'};
     } finally {await this.page.keyboard.press('Escape').catch(()=>{});}
   }
   async anchors(config, plan) {
@@ -215,7 +206,7 @@ class BrowserSession {
       try {editing.push((await this.prepareEdit(config,row.address,row.current)).evidence);}
       finally {await this.page.keyboard.press('Escape').catch(()=>{});}
     }
-    return {sheet:plan.sheet,rows,anchors,conflict,editing,editingVerified:!conflict && editing.length===rows.length};
+    return {sheet:plan.sheet,rows,anchors,conflict,editing,prewriteVerified:!conflict && editing.length===rows.length};
   }
   async write(config, plan, baseline) {
     const completed = [];
@@ -232,11 +223,11 @@ class BrowserSession {
         const current = await this.read(config,row.address);
         if (current !== row.current) throw Error(row.address+' 在执行期间被修改，停止后续写入');
         if (current !== '') throw Error(row.address+' 已有内容，停止填报；未清空或覆盖。');
-        const {editor}=await this.prepareEdit(config,row.address,current);
-        if(!await this.editorFocused(editor) || await this.selectedAddress(config)!==row.address)throw Error(row.address+' 输入前焦点或选区发生变化，未输入填报值。');
-        if(await this.text(editor,false)!=='')throw Error(row.address+' 输入前内容不为空，停止填报；未清空或覆盖。');
+        const {valueBox}=await this.prepareEdit(config,row.address,current);
+        if(await this.selectedAddress(config)!==row.address)throw Error(row.address+' 输入前地址发生变化，未输入填报值。');
+        if(await this.text(valueBox,false)!=='')throw Error(row.address+' 输入前内容不为空，停止填报；未清空或覆盖。');
         attempted = row.address;
-        await this.page.keyboard.insertText(String(row.value));
+        await this.page.keyboard.type(String(row.value));
         await this.page.keyboard.press('Enter');
         if(config.adapter.stateMode==='selectors')await this.one(config,'saved');
         // Navigate away and back so this is a fresh formula-bar read, not the text just typed.

@@ -30,7 +30,7 @@ async function createServer(options = {}) {
   const driver = options.driver || new BrowserSession(path.join(runtime,'edge-profile'));
   const token = crypto.randomBytes(32).toString('hex');
   let busy = false, preview = null, version = 0;
-  const protocol='content-edit-v3.2';
+  const protocol='keyboard-write-v4';
   function send(res,status,body,type='application/json; charset=utf-8') {
     res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer'});
     res.end(type.startsWith('application/json')?JSON.stringify(body):body);
@@ -99,13 +99,13 @@ async function createServer(options = {}) {
           preview = null;
           const plan = core.plan(config,body.date,body.values);
           const result = await driver.inspect(config,plan);
-          if(!result.conflict && result.editingVerified!==true)throw Error('目标单元格的定位与编辑关联未通过验证，不能生成填报确认。');
+          if(!result.conflict && result.prewriteVerified!==true)throw Error('目标单元格的地址与原值未通过检查，不能生成填报确认。');
           if(!result.conflict) preview = {id:crypto.randomUUID(),version,created:Date.now(),plan,result};
           return send(res,200,{...result,inspectionId:preview?.id || null});
         }
         if(url.pathname==='/api/write') {
           const saved = preview; preview = null;
-          if(!saved || saved.result.editingVerified!==true || saved.id !== body.inspectionId || saved.version !== version || Date.now()-saved.created > 120000) throw Error('检查结果已失效或未验证编辑关联，请重新检查真实目标');
+          if(!saved || saved.result.prewriteVerified!==true || saved.id !== body.inspectionId || saved.version !== version || Date.now()-saved.created > 120000) throw Error('检查结果已失效或未完成写前检查，请重新检查真实目标');
           return send(res,200,await driver.write(config,saved.plan,saved.result));
         }
         return send(res,404,{error:'操作不存在'});
@@ -122,7 +122,7 @@ async function createServer(options = {}) {
 }
 if (require.main === module) {
   createServer().then(app => {
-    console.log(`Tencent Docs Demo [content-edit-v3.2]: ${app.origin}\nOpen this address to configure and operate the test page.\nPress Ctrl+C to stop.`);
+    console.log(`Tencent Docs Demo [keyboard-write-v4]: ${app.origin}\nOpen this address to configure and operate the test page.\nPress Ctrl+C to stop.`);
     for (const signal of ['SIGINT','SIGTERM']) process.once(signal,async()=>{await app.close();process.exit(0);});
   }).catch(e => { console.error(e.code === 'EADDRINUSE' ? 'Port 43128 is in use. Open http://127.0.0.1:43128 if the demo is already running.' : e.message); process.exitCode=1; });
 }
