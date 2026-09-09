@@ -26,18 +26,16 @@ async function main() {
       <div id="ordinary">普通页面区域</div><div id="nameWrap"><label>名称框<input id="name" value="A1"></label></div><label>公式栏<input id="value" ${denyEdit?'readonly':''}></label>
       <div id="grid" role="grid" tabindex="0">表格键盘操作区</div>
       <script>
-      const cells=${JSON.stringify(cells)},nameBox=document.querySelector('#name'),valueBox=document.querySelector('#value'),grid=document.querySelector('#grid');let address='N2',editAddress='N2',editing=false,buffer='';
+      const cells=${JSON.stringify(cells)},nameBox=document.querySelector('#name'),valueBox=document.querySelector('#value'),grid=document.querySelector('#grid');let address='N2',editAddress='N2';
       function render(){nameBox.value=address;valueBox.value=cells[address]??'';}
       render();
       document.querySelectorAll('[role=tab]').forEach(tab=>tab.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(t=>t.setAttribute('aria-selected','false'));tab.setAttribute('aria-selected','true');});
       nameBox.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();address=nameBox.value;render();grid.focus();}};
-      // No focused input/contenteditable: the grid consumes real keyboard events.
-      document.addEventListener('keydown',e=>{if(['Tab','ArrowDown','ArrowUp','Backspace','Delete'].includes(e.key))throw Error('Unexpected navigation key: '+e.key);});
-      grid.onkeydown=async e=>{
-        if(e.key==='F2'){e.preventDefault();editAddress=address;buffer=cells[address]??'';editing=true;}
-        if(e.key==='Escape'){e.preventDefault();editing=false;render();}
-        if(editing && /^[0-9.]$/.test(e.key)){e.preventDefault();buffer+=e.key;}
-        if(e.key==='Enter' && editing){e.preventDefault();editing=false;document.querySelector('#saved').hidden=true;cells[editAddress]=buffer;await fetch('/',{method:'POST',body:JSON.stringify({address:editAddress,value:buffer})});document.querySelector('#saved').hidden=false;render();}
+      valueBox.onfocus=()=>{editAddress=address;};
+      document.addEventListener('keydown',e=>{if(['F2','Tab','ArrowDown','ArrowUp','Backspace','Delete'].includes(e.key))throw Error('Unexpected navigation key: '+e.key);});
+      valueBox.onkeydown=async e=>{
+        if(e.key==='Escape'){e.preventDefault();render();grid.focus();}
+        if(e.key==='Enter'){e.preventDefault();document.querySelector('#saved').hidden=true;cells[editAddress]=valueBox.value;await fetch('/',{method:'POST',body:JSON.stringify({address:editAddress,value:valueBox.value})});document.querySelector('#saved').hidden=false;render();grid.focus();}
       };
       </script>`);
   });
@@ -60,13 +58,17 @@ async function main() {
     const diagnosis=await driver.diagnose(config,'N9');assert.equal(diagnosis.returnedAddress,'N9');assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');
     await assert.rejects(driver.prepareEdit(config,'N2','unexpected'),/写前原值不一致/);
     assert.equal(writes,0);
-    await driver.page.locator('#grid').evaluate(el=>el.addEventListener('keydown',e=>{if(e.key==='F2')el.ownerDocument.querySelector('#value').value='stale';}));
-    await assert.rejects(driver.diagnose(config,'N9'),/按 F2 后的原值不一致/);
+    await driver.page.locator('#value').evaluate(el=>el.addEventListener('focus',()=>{el.value='stale';}));
+    await assert.rejects(driver.diagnose(config,'N9'),/聚焦内容编辑区后的原值不一致/);
     assert.equal(writes,0);await driver.page.reload();
-    await driver.page.locator('#grid').evaluate(el=>el.addEventListener('keydown',e=>{if(e.key==='F2')el.ownerDocument.querySelector('#name').value='N2';}));
-    await assert.rejects(driver.diagnose(config,'N9'),/按 F2 后地址变成/);
+    await driver.page.locator('#value').evaluate(el=>el.addEventListener('focus',()=>{el.ownerDocument.querySelector('#name').value='N2';}));
+    await assert.rejects(driver.diagnose(config,'N9'),/聚焦内容编辑区后地址变成/);
     assert.equal(writes,0);await driver.page.reload();
-    console.log('PASS: F2 without focused editable DOM; changed value/address stops before input');
+    console.log('PASS: Direct content editor input without F2; changed value/address stops before input');
+    const inputBaseline=await driver.inspect(config,plan);
+    await driver.page.locator('#value').evaluate(el=>el.addEventListener('keydown',e=>{if(/^[0-9.]$/.test(e.key))e.preventDefault();}));
+    await assert.rejects(driver.write(config,plan,inputBaseline),/内容编辑区输入未生效/);
+    assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');await driver.page.reload();
     if(process.argv.includes('--location-only'))return;
     assert.equal(config.adapter.stateMode,'auto');
     await driver.ready(config);
