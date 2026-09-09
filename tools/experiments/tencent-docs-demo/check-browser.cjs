@@ -24,19 +24,19 @@ async function main() {
       <button role="tab" aria-selected="true">其他工作表</button><button role="tab" aria-selected="false">下料、装焊（26年9月）</button>
       <span id="editable" ${denyEdit?'hidden':''}>可编辑</span><span id="saved">已保存</span>
       <div id="ordinary">普通页面区域</div><div id="nameWrap"><label>名称框<input id="name" value="A1"></label></div><label>公式栏<input id="value" ${denyEdit?'readonly':''}></label>
-      <div id="grid" role="grid" tabindex="0">表格键盘操作区</div>
+      <input id="cellEditor" aria-label="单元格编辑器"><div id="grid" role="grid" tabindex="0">表格键盘操作区</div>
       <script>
-      const cells=${JSON.stringify(cells)},nameBox=document.querySelector('#name'),valueBox=document.querySelector('#value'),grid=document.querySelector('#grid');let address='N2',editAddress='N2';
+      const cells=${JSON.stringify(cells)},nameBox=document.querySelector('#name'),valueBox=document.querySelector('#value'),grid=document.querySelector('#grid'),cellEditor=document.querySelector('#cellEditor');let address='N2',editAddress='N2';
       function render(){nameBox.value=address;valueBox.value=cells[address]??'';}
       render();
       document.querySelectorAll('[role=tab]').forEach(tab=>tab.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(t=>t.setAttribute('aria-selected','false'));tab.setAttribute('aria-selected','true');});
       nameBox.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();address=nameBox.value;render();grid.focus();}};
-      grid.onkeydown=e=>{if(e.key==='F2'){e.preventDefault();editAddress=address;valueBox.focus();}};
+      grid.onkeydown=e=>{if(e.key==='F2'){e.preventDefault();editAddress=address;cellEditor.value=cells[address]??'';cellEditor.focus();}};
       // The tested page contract uses F2 editor entry; no grid navigation is needed.
       document.addEventListener('keydown',e=>{if(['Tab','ArrowDown','ArrowUp','Backspace','Delete'].includes(e.key))throw Error('Unexpected navigation key: '+e.key);});
-      valueBox.onkeydown=async e=>{
+      cellEditor.onkeydown=async e=>{
         if(e.key==='Escape'){e.preventDefault();render();grid.focus();}
-        if(e.key==='Enter'){e.preventDefault();document.querySelector('#saved').hidden=true;cells[editAddress]=valueBox.value;await fetch('/',{method:'POST',body:JSON.stringify({address:editAddress,value:valueBox.value})});document.querySelector('#saved').hidden=false;render();grid.focus();}
+        if(e.key==='Enter'){e.preventDefault();document.querySelector('#saved').hidden=true;cells[editAddress]=cellEditor.value;await fetch('/',{method:'POST',body:JSON.stringify({address:editAddress,value:cellEditor.value})});document.querySelector('#saved').hidden=false;render();grid.focus();}
       };
       </script>`);
   });
@@ -62,10 +62,10 @@ async function main() {
     assert.equal(writes,0);await driver.page.reload();
     await assert.rejects(driver.prepareEdit(config,'N2','unexpected'),/写前原值不一致/);
     assert.equal(writes,0);
-    await driver.page.locator('#value').evaluate(el=>el.addEventListener('focus',()=>{el.value='stale';}));
+    await driver.page.locator('#cellEditor').evaluate(el=>el.addEventListener('focus',()=>{el.value='stale';}));
     await assert.rejects(driver.diagnose(config,'N9'),/聚焦后的原值不一致/);
     assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');await driver.page.reload();
-    await driver.page.locator('#value').evaluate(el=>el.addEventListener('focus',()=>{el.ownerDocument.querySelector('#name').value='N2';}));
+    await driver.page.locator('#cellEditor').evaluate(el=>el.addEventListener('focus',()=>{el.ownerDocument.querySelector('#name').value='N2';}));
     await assert.rejects(driver.diagnose(config,'N9'),/聚焦后地址变成/);
     assert.equal(writes,0);await driver.page.reload();
     console.log('PASS: F2 editor entry diagnosis writes nothing; original-value and address changes stop before input');

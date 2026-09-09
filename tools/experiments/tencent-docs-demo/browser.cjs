@@ -169,11 +169,16 @@ class BrowserSession {
     return editor.evaluate(el=>el===el.ownerDocument.activeElement || el.contains(el.ownerDocument.activeElement));
   }
   async prepareEdit(config,address,expected) {
-    const editor=await this.locate(config,address);
-    const before=await this.text(editor,false);
+    const valueBox=await this.locate(config,address);
+    const before=await this.text(valueBox,false);
     if(before!==expected)throw Error(address+' 写前原值不一致：期望「'+expected+'」，实际「'+before+'」。未输入填报值。');
     await this.page.keyboard.press('F2');
-    if(!await this.editorFocused(editor))throw fieldError('valueBox','按 F2 后内容编辑区未获得焦点。未输入填报值。');
+    // F2 opens an in-cell editor; the formula/content bar remains a read source.
+    const focused=this.scope(config).locator(':is('+textControls+'):focus');
+    try {await focused.waitFor({state:'attached',timeout:Math.min(config.timeout*1000,3000)});}
+    catch {throw Error('按 F2 后单元格编辑器未获得焦点。未输入填报值。');}
+    const editor=await focused.elementHandle();
+    if(!editor || !await editor.isEditable() || await this.editorFocused(await this.control(config,'nameBox')))throw Error('按 F2 后焦点未进入可输入的单元格编辑器。未输入填报值。');
     const actualAddress=await this.selectedAddress(config), actualValue=await this.text(editor,false);
     if(actualAddress!==address)throw Error('聚焦后地址变成 '+actualAddress+'，目标应为 '+address+'。未输入填报值。');
     if(actualValue!==expected)throw Error(address+' 聚焦后的原值不一致：期望「'+expected+'」，实际「'+actualValue+'」。未输入填报值。');
@@ -184,7 +189,7 @@ class BrowserSession {
     try {
       const {evidence}=await this.prepareEdit(config,address,current);
       const raw=await (await this.control(config,'valueBox')).evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.innerText??el.textContent??'');
-      return {...evidence,rawEditorValue:raw,rawCodePoints:[...raw].map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')),message:'名称框定位、内容编辑区焦点和原值验证通过；未输入或提交填报数据。'};
+      return {...evidence,rawEditorValue:raw,rawCodePoints:[...raw].map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')),message:'名称框定位、单元格编辑焦点和原值验证通过；未输入或提交填报数据。'};
     } finally {await this.page.keyboard.press('Escape').catch(()=>{});}
   }
   async anchors(config, plan) {

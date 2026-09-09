@@ -87,7 +87,7 @@ async function operation(action) {
 }
 async function save(next) {
   next = api.validate(next);
-  if(service) {const result=await request('config',next);next=result.config;writeEnabled=result.writeEnabled===true && result.protocol==='content-edit-v3.1';}
+  if(service) {const result=await request('config',next);next=result.config;writeEnabled=result.writeEnabled===true && result.protocol==='content-edit-v3.2';}
   let localWarning = '';
   try { localStorage.setItem(storageKey,JSON.stringify(next)); }
   catch { if(!service) throw Error('浏览器不允许保存本地配置，请导出配置备份'); localWarning = '；浏览器缓存不可用，但本机服务已保存'; }
@@ -217,12 +217,12 @@ async function initialize() {
   const today=new Date();$('date').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   if(service) {
     try {
-      const saved=await request('config');config=saved.config;warning=saved.warning;writeEnabled=saved.writeEnabled===true && saved.protocol==='content-edit-v3.1';
+      const saved=await request('config');config=saved.config;warning=saved.warning;writeEnabled=saved.writeEnabled===true && saved.protocol==='content-edit-v3.2';
       if(location.hash.startsWith('#import=')) {
         const imported=JSON.parse(decodeURIComponent(location.hash.slice(8)));
         history.replaceState(null,'',location.pathname);await save(imported);warning='原 Demo 配置已迁移。网页操作设置可在此继续补充。';
       }
-      $('mode').value='real';$('serviceLabel').textContent=writeEnabled?'本机服务 · 内容编辑区写入 v3.1':'服务版本过旧，请重启 start.cmd';
+      $('mode').value='real';$('serviceLabel').textContent=writeEnabled?'本机服务 · 单元格编辑写入 v3.2':'服务版本过旧，请重启 start.cmd';
     } catch(e) {warning='本机服务初始化失败：'+e.message;}
   } else $('serviceLabel').textContent='文件预览 · 请运行 start.cmd 启用真实操作';
   $('migrate').hidden=!!service;configToForm();modeChanged();if(warning)status(warning);
