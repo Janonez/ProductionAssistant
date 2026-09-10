@@ -15,6 +15,8 @@
 .tencent-sheet-panel .tencent-sheet-date-mode { display: flex; align-items: center; gap: 8px; }
 .tencent-sheet-guidance { display: grid; gap: 12px; background: #F5F5F4; padding: 16px; border-radius: 14px; }
 .tencent-sheet-guidance > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.tencent-sheet-guidance > button { justify-self: start; }
+.tencent-control-state { display: block; margin-top: 4px; color: var(--text-muted); font-size: 14px; }
 .tencent-sheet-table { overflow-x: auto; }
 .tencent-sheet-table table { width: 100%; border-collapse: collapse; text-align: left; }
 .tencent-sheet-table th, .tencent-sheet-table td { padding: 12px; border-bottom: 1px solid #E7E5E4; }

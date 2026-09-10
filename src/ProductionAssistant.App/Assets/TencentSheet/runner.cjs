@@ -84,6 +84,12 @@ async function dispatch(request) {
   if(operation==='recognize'){confirmation=null;teaching=null;return client.recognize(config);}
   if(operation==='pick'){confirmation=null;teaching=null;const result=await client.pick(config,request.key);config.adapter[request.key]=result.selector;return {config,message:result.warning||'已记住位置。'};}
   if(operation==='teach')return teach(request,config);
+  if(operation==='captureSheet') {
+    confirmation=null;teaching=null;
+    await client.ready(config);
+    const sheet=await client.text(await client.one(config,'activeSheet'));
+    return {config:normalize({...config,...core.sheetBinding(sheet)}),sheet,message:'已记住工作表「'+sheet+'」。'};
+  }
   teaching=null;
   const plan=core.plan(config,request.date,request.values);
   if(operation==='inspect') {

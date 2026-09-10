@@ -32,7 +32,8 @@ async function main(){
     await page.setViewportSize({width:1100,height:700});
     await page.screenshot({path:path.resolve(__dirname,'../../artifacts/tencent-sheet-integrated-minimum.png'),fullPage:true});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-    assert.equal(await page.getByText('调整模板与高级设置',{exact:true}).evaluate(el=>el.parentElement.open),false);
+    assert.equal(await page.getByText('调整模板与高级设置',{exact:true}).count(),0);
+    assert.equal(await page.getByText('记住网页当前工作表',{exact:true}).count(),1);
     await page.getByRole('button',{name:'开始示范此项目',exact:true}).scrollIntoViewIfNeeded();
     await page.locator('.tencent-teaching').screenshot({path:path.resolve(__dirname,'../../artifacts/tencent-template-teaching-setup.png')});
     await page.getByRole('button',{name:'开始示范此项目',exact:true}).click();
@@ -42,7 +43,7 @@ async function main(){
     assert.equal(await page.getByRole('button',{name:'检查本次数据与位置',exact:true}).isDisabled(),true);
     await page.locator('.tencent-teaching').screenshot({path:path.resolve(__dirname,'../../artifacts/tencent-template-teaching-confirm.png')});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-    console.log('PASS: formal route, dedicated task editor, collapsed advanced settings, 1100px layout');
+    console.log('PASS: formal route, visual-only configuration without advanced settings, 1100px layout');
     console.log('PASS: teaching setup, four captures, third-date preview and write controls disabled during teaching');
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 }

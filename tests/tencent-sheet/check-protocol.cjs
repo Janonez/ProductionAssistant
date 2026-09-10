@@ -26,6 +26,12 @@ async function main() {
   TencentSheetClient.prototype.text=async()=>selected.sheet;
   TencentSheetClient.prototype.captureSelection=async(_,sheet)=>{if(sheet!==selected.sheet)throw Error('工作表发生变化');return {...selected};};
   TencentSheetClient.prototype.read=async(_,address)=>{selected.address=address;return cells[address]||'';};
+  const monthlySheet=await dispatch({operation:'captureSheet',config});
+  assert.equal(monthlySheet.config.sheetMode,'monthly');
+  selected.sheet='生产明细';
+  const fixedSheet=await dispatch({operation:'captureSheet',config});
+  assert.equal(fixedSheet.config.sheetName,'生产明细');assert.equal(fixedSheet.config.sheetMode,'fixed');
+  selected.sheet='下料、装焊（26年9月）';
   const teachingRequest={operation:'teach',config,jobId:'job',metric:'cutting',firstDate:'2026-09-01',secondDate:'2026-09-02'};
   const start=await dispatch({...teachingRequest,stage:'start'});
   const continuing={...teachingRequest,sessionToken:start.sessionToken};

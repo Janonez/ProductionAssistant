@@ -30,7 +30,7 @@ public static class PrototypeBridgeProtocol
         "automation.setEnabled",
         "automation.delete",
         "tencentSheet.defaults", "tencentSheet.create", "tencentSheet.get", "tencentSheet.save",
-        "tencentSheet.open", "tencentSheet.recognize", "tencentSheet.pick", "tencentSheet.teach", "tencentSheet.inspect", "tencentSheet.write", "tencentSheet.runs",
+        "tencentSheet.open", "tencentSheet.recognize", "tencentSheet.pick", "tencentSheet.teach", "tencentSheet.captureSheet", "tencentSheet.inspect", "tencentSheet.write", "tencentSheet.runs",
         "notionFill.create",
         "notionFill.get",
         "notionFill.save",

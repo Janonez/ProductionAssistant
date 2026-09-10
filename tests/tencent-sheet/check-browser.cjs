@@ -86,6 +86,21 @@ async function main() {
     await driver.page.getByText('填报配置引导：',{exact:false}).waitFor();
     await driver.page.locator('#name').click();
     assert.equal((await picking).selector,'#name');
+    await driver.page.locator('body').evaluate(body=>{
+      const tabs=body.ownerDocument.createElement('div');tabs.id='plain-tabs';
+      tabs.innerHTML='<div aria-label="当前月份" aria-selected="true"><span>无角色当前标签</span></div><div aria-label="其他月份" aria-selected="false"><span>无角色其他标签</span></div>';
+      body.append(tabs);
+    });
+    const activePick=driver.pick(config,'activeSheet');
+    await driver.page.getByText('填报配置引导：',{exact:false}).waitFor();
+    await driver.page.getByText('无角色当前标签',{exact:true}).click();
+    const activeSelector=(await activePick).selector;
+    assert.equal(await driver.page.locator(activeSelector).getAttribute('aria-label'),'当前月份');
+    const wrongPick=driver.pick(config,'activeSheet');
+    const wrongCheck=assert.rejects(wrongPick,/当前高亮/);
+    await driver.page.getByText('填报配置引导：',{exact:false}).waitFor();
+    await driver.page.getByText('无角色其他标签',{exact:true}).click();await wrongCheck;
+    await driver.page.locator('#plain-tabs').evaluate(el=>el.remove());
     console.log('PASS: automatic state checks with empty/legacy markers, wrapper recovery, invalid picker rejection and Chinese field errors');
     const discovered=await driver.discover(config);assert.ok(discovered.frames[0].controls.some(c=>c.id==='name'));
     const check=await driver.inspect(config,plan);assert.equal(check.anchors.length,9);assert.equal(writes,0);
