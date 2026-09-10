@@ -60,6 +60,12 @@ internal sealed partial class PrototypeBridge
         var request = new JsonObject { ["operation"] = operation, ["config"] = job["config"]!.DeepClone(), ["date"] = date.ToString("yyyy-MM-dd") };
         if (payload.TryGetProperty("values", out var values)) request["values"] = JsonNode.Parse(values.GetRawText());
         if (operation == "pick") request["key"] = ReadString(payload, "key");
+        if (operation == "teach")
+        {
+            request["jobId"] = (string)job["id"]!;
+            foreach (var key in new[] { "stage", "metric", "firstDate", "secondDate", "sessionToken", "previewToken", "slot" })
+                request[key] = ReadString(payload, key);
+        }
         var response = await handler.Service.CallAsync(request, cancellationToken);
         if (response.TryGetProperty("config", out var updated)) { job["config"] = JsonNode.Parse(updated.GetRawText()); job["validated"] = false; TencentSheetTaskHandler.Save(job); }
         if (operation == "inspect") { job["validated"] = response.GetProperty("prewriteVerified").GetBoolean(); TencentSheetTaskHandler.Save(job); }

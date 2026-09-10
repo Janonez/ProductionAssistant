@@ -141,6 +141,41 @@ class TencentSheetClient {
   async selectedAddress(config) {
     return (await this.text(await this.control(config,'nameBox'))).replace(/\$/g,'').toUpperCase();
   }
+  async captureSelection(config, expectedSheet) {
+    await this.ready(config);
+    const sheet = await this.text(await this.one(config,'activeSheet'));
+    if (!sheet || (expectedSheet && sheet !== expectedSheet)) throw Error('示范期间工作表发生变化，请回到原工作表后再记住位置');
+    const address = await this.selectedAddress(config);
+    core.addressParts(address);
+    const value = await this.read(config,address);
+    return { sheet, address, value };
+  }
+  async verifyTeaching(config, rule) {
+    await this.ready(config);
+    const sheet = core.plan(config,rule.samples[0].date,{cutting:0,welding:0,section:0,plate:0}).sheet;
+    if (await this.text(await this.one(config,'activeSheet')) !== sheet) throw Error('请回到示范时选中的工作表');
+    let formats = core.dateFormats;
+    const checks = [];
+    for (const sample of [...rule.samples,rule.confirmation]) {
+      const address = core.ruleAddress(rule,sample.date,rule.dateAnchor.address);
+      const actual = await this.read(config,address);
+      formats = formats.filter(format => core.formatDate(sample.date,format) === actual);
+      if (!formats.length) throw Error('日期校验未通过：'+sample.date+' 对应 '+address+'，读到「'+actual+'」。请确认日期表头也按相同间隔排列，并重新示范');
+      checks.push({date:sample.date,address,actual});
+    }
+    const label = await this.read(config,rule.labelAnchor.address);
+    if (label !== rule.labelAnchor.expected) throw Error('项目名称或公司表头在示范期间发生变化，请重新示范');
+    rule.dateAnchor.format = formats[0];
+    // Date/identity cells must never also be target cells for this metric.
+    const parts=core.dateParts(rule.samples[0].date);
+    for(let day=1;day<=parts.days;day++) {
+      const date=parts.monthKey+'-'+String(day).padStart(2,'0'),target=core.ruleAddress(rule,date);
+      if(target===core.ruleAddress(rule,date,rule.dateAnchor.address)||target===rule.labelAnchor.address)
+        throw Error('填报位置与日期或项目名称重叠，请重新示范');
+    }
+    await this.read(config,rule.confirmation.address);
+    return {rule:core.normalizeRule(rule),checks};
+  }
   async prepareEdit(config,address,expected) {
     const valueBox=await this.locate(config,address);
     const before=await this.text(valueBox,false);
@@ -161,7 +196,21 @@ class TencentSheetClient {
   }
   async anchors(config, plan) {
     const results = [];
-    for (const [key,label] of anchorSpecs) {
+    const legacyKeys = new Set();
+    const owned = {cutting:['cuttingDate','cuttingCompany'],welding:['weldingDate','weldingCompany'],section:['sectionDate','park','sectionType'],plate:['plateDate','park','plateType']};
+    for (const row of plan.rows) {
+      const rule=config.rules?.[row.key];
+      if(!rule) {owned[row.key].forEach(key=>legacyKeys.add(key));continue;}
+      for(const check of [
+        {label:row.label+'日期',address:core.ruleAddress(rule,plan.date,rule.dateAnchor.address),expected:core.formatDate(plan.date,rule.dateAnchor.format)},
+        {label:row.label+'项目标志',...rule.labelAnchor}
+      ]) {
+        const actual=await this.read(config,check.address);
+        if(actual!==check.expected)throw Error(check.label+'校验失败：'+check.address+' 期望「'+check.expected+'」，实际「'+actual+'」；未开始填报');
+        results.push({...check,actual});
+      }
+    }
+    for (const [key,label] of anchorSpecs.filter(([key])=>legacyKeys.has(key))) {
       const item = config.adapter.anchors[key];
       if (!item?.address || !item?.expected) throw Error('请配置校验格：'+label);
       const address = a1(expand(item.address,config,plan));

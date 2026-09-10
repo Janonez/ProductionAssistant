@@ -46,7 +46,7 @@ async function main() {
   const driver=new TencentSheetClient(browser);
   const adapter=normalizeAdapter({nameBox:'#name',valueBox:'#value',sheetTabs:'[role=tab]',activeSheet:'[aria-selected=true]',ready:'',saved:''});
   for(const [key,address] of Object.entries({cuttingDate:'J8',weldingDate:'J18',sectionDate:'N34',plateDate:'O34',cuttingCompany:'B9',weldingCompany:'B19',park:'B35',sectionType:'N33',plateType:'O33'}))adapter.anchors[key].address=address;
-  const config={...core.defaults,timeout:5,documentUrl:`http://127.0.0.1:${fixture.address().port}/`,adapter};
+  const config={...core.defaults,timeout:15,documentUrl:`http://127.0.0.1:${fixture.address().port}/`,adapter};
   const plan=core.plan(config,'2026-09-05',{cutting:0,welding:2,section:3,plate:4});
   try {
     await browser.open(config);
@@ -103,6 +103,41 @@ async function main() {
     denyEdit=true;await driver.page.reload();await assert.rejects(driver.ready(config));
     console.log('PASS: actual DOM navigation, 9 anchors, read-only inspect, write and reload verification, occupied-cell rejection, conflict, anchor failure, unsaved data and permission failure');
     failedSave=false;denyEdit=false;for(const row of plan.rows)delete cells[row.address];await driver.page.reload();
+    for(let day=1;day<=30;day++)cells['A'+(day+3)]='2026/9/'+day;
+    const rules={};
+    for(const [key,column,label] of [['cutting','C','下料量'],['welding','D','装焊量'],['section','E','型材'],['plate','F','板材']]) {
+      cells[column+'2']=label;
+      const rule=core.inferRule([{date:'2026-09-01',address:column+'4'},{date:'2026-09-02',address:column+'5'}]);
+      rules[key]=core.normalizeRule({...rule,confirmation:core.prediction(rule),dateAnchor:{address:'A4',format:'{yyyy}/{M}/{d}'},labelAnchor:{address:column+'2',expected:label}});
+    }
+    await driver.page.reload();await driver.selectSheet(config,plan.sheet);
+    await driver.read(config,'C4');
+    assert.equal((await driver.captureSelection(config,plan.sheet)).address,'C4');
+    await assert.rejects(driver.captureSelection(config,'错误工作表'),/工作表发生变化/);
+    const proof=await driver.verifyTeaching(config,rules.cutting);
+    assert.equal(proof.rule.confirmation.address,'C6');
+    assert.equal(await driver.selectedAddress(config),'C6');
+    const learnedConfig=core.validate({...config,rules});
+    const learnedPlan=core.plan(learnedConfig,'2026-09-05',{cutting:1,welding:2,section:3,plate:4});
+    assert.deepEqual(learnedPlan.rows.map(row=>row.address),['C8','D8','E8','F8']);
+    const beforeWrites=writes;
+    const learnedPreview=await driver.inspect(learnedConfig,learnedPlan);
+    assert.equal(learnedPreview.anchors.length,8);assert.equal(writes,beforeWrites);
+    await driver.write(learnedConfig,learnedPlan,learnedPreview);
+    assert.equal(writes,beforeWrites+4);assert.equal(cells.C8,'1');assert.equal(cells.F8,'4');assert.equal(cells.A8,'2026/9/5');
+    cells.A8='日期错误';await driver.page.reload();
+    await assert.rejects(driver.inspect(learnedConfig,learnedPlan),/日期校验失败/);
+    assert.equal(writes,beforeWrites+4);
+    cells.A8='2026/9/5';delete cells.C8;await driver.page.reload();
+    const mixedConfig=core.validate({...config,rules:{cutting:rules.cutting}});
+    const mixedPlan=core.plan(mixedConfig,'2026-09-05',{cutting:5,welding:6,section:7,plate:8});
+    assert.deepEqual(mixedPlan.rows.map(row=>row.address),['C8','J19','N35','O35']);
+    const mixedPreview=await driver.inspect(mixedConfig,mixedPlan);
+    await driver.write(mixedConfig,mixedPlan,mixedPreview);
+    assert.equal(cells.C8,'5');assert.equal(cells.J19,'6');assert.equal(cells.N35,'7');assert.equal(cells.O35,'8');
+    assert.equal(writes,beforeWrites+8);
+    console.log('PASS: actual selection capture, third-cell preview, vertical date anchors and four persisted vertical writes');
+    console.log('PASS: learned vertical metric mixed with unchanged legacy horizontal metrics');
 
   } finally {await browser.close();await new Promise(resolve=>fixture.close(resolve));}
 }

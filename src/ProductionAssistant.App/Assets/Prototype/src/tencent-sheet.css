@@ -19,4 +19,14 @@
 .tencent-sheet-table table { width: 100%; border-collapse: collapse; text-align: left; }
 .tencent-sheet-table th, .tencent-sheet-table td { padding: 12px; border-bottom: 1px solid #E7E5E4; }
 .tencent-sheet-progress { display: flex; gap: 8px; align-items: center; }
+.tencent-teaching p { margin: 0; line-height: 1.6; }
+.tencent-teaching-rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.tencent-teaching-rules > div { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; }
+.tencent-teaching-rules span { color: var(--text-muted); font-size: 14px; }
+.tencent-teaching-steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.tencent-teaching-steps li { display: flex; justify-content: space-between; gap: 16px; padding: 10px 14px; border-left: 3px solid var(--border); color: var(--text-muted); }
+.tencent-teaching-steps li[aria-current=step] { border-color: var(--primary); color: var(--text); background: var(--primary-soft); }
+.tencent-teaching-steps li.done { color: var(--text); }
+.tencent-teaching-prompt { display: grid; gap: 16px; padding: 20px; border-radius: var(--radius-control); background: var(--surface-muted); }
+.tencent-teaching-prompt > button { justify-self: start; }
 @media(max-width: 700px) { .tencent-sheet-grid { grid-template-columns: 1fr; } .tencent-sheet-intro { flex-direction: column; gap: 8px; } .tencent-sheet-panel { padding: 16px; } }

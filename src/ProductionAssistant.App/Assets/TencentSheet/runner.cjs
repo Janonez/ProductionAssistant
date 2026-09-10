@@ -7,6 +7,7 @@ const core=require('./core.js');
 const browser=new TencentDocsBrowser(process.argv[2]);
 const client=new TencentSheetClient(browser);
 let confirmation=null;
+let teaching=null;
 const signature=(config,plan)=>JSON.stringify({config,plan});
 const defaultAnchors={cuttingDate:['{cuttingColumn}2','{date}'],weldingDate:['{weldingColumn}2','{date}'],sectionDate:['{sectionColumn}24','{date}'],plateDate:['{sectionColumn}24','{date}'],cuttingCompany:['C9','{company}'],weldingCompany:['C19','{company}'],park:['B35','{park}'],sectionType:['{sectionColumn}25','型材'],plateType:['{plateColumn}25','板材']};
 function normalize(raw={}) {
@@ -22,13 +23,68 @@ async function readRetry(action) {
     await new Promise(resolve=>setTimeout(resolve,(attempt+1)*1000));
   }
 }
+async function teach(request,config) {
+  confirmation=null;
+  const {stage}=request;
+  if(stage==='cancel'){teaching=null;return {message:'已取消本次示范，原模板保持不变。'};}
+  if(stage==='start') {
+    teaching=null;
+    if(!core.metricKeys.includes(request.metric))throw Error('请选择要示范的填报项目');
+    const first=core.dateParts(request.firstDate),second=core.dateParts(request.secondDate);
+    if(first.monthKey!==second.monthKey||second.day<=first.day)throw Error('请选择同一个月的两个日期，第二个日期须晚于第一个');
+    await client.ready(config);
+    const sheet=await client.text(await client.one(config,'activeSheet'));
+    const binding=core.sheetBinding(sheet), candidate={...config,...binding};
+    if(core.plan({...candidate,rules:{}},request.firstDate,{cutting:0,welding:0,section:0,plate:0}).sheet!==sheet)
+      throw Error('示范日期与当前月份工作表不一致，请选择该工作表中的日期');
+    teaching={id:crypto.randomUUID(),jobId:request.jobId,signature:JSON.stringify(config),candidate,sheet,metric:request.metric,dates:[request.firstDate,request.secondDate],captures:{},expires:Date.now()+600000};
+    return {sessionToken:teaching.id,step:'firstTarget',sheet,sheetMode:binding.sheetMode,message:'请在网页中选中第一个日期的填报格，然后记住位置。'};
+  }
+  const draft=teaching;
+  if(!draft||draft.id!==request.sessionToken||draft.jobId!==request.jobId||draft.signature!==JSON.stringify(config)||draft.expires<Date.now())
+    throw Error('示范已失效，请重新开始；已保存的模板未改变');
+  if(stage==='capture') {
+    const order=['firstTarget','secondTarget','dateHeader','label'];
+    const slot=order.find(key=>!draft.captures[key]);
+    if(!slot||request.slot!==slot)throw Error('请按引导顺序记住位置');
+    const capture=await client.captureSelection(config,draft.sheet);
+    if(slot==='secondTarget')core.inferRule([{date:draft.dates[0],address:draft.captures.firstTarget.address},{date:draft.dates[1],address:capture.address}]);
+    if(slot==='dateHeader'&&!core.dateFormats.some(format=>core.formatDate(draft.dates[0],format)===capture.value))
+      throw Error('此单元格未显示第一个示范日期，请选中对应的日期表头');
+    if(slot==='label'&&(!capture.value.trim()||capture.value.length>300||/^\d+(?:\.\d+)?$/.test(capture.value.trim())))
+      throw Error('请选择带文字的项目名称、公司或材料表头，不要选择数字或空白格');
+    draft.captures[slot]=capture;
+    return {step:order.find(key=>!draft.captures[key])||'preview',capture,slot,message:'已记住 '+capture.address+'，未填写数据。'};
+  }
+  if(stage==='preview') {
+    const c=draft.captures;
+    if(!c.firstTarget||!c.secondTarget||!c.dateHeader||!c.label)throw Error('请先完成四次位置示范');
+    const inferred=core.inferRule([{date:draft.dates[0],address:c.firstTarget.address},{date:draft.dates[1],address:c.secondTarget.address}]);
+    const rule={...inferred,confirmation:core.prediction(inferred),dateAnchor:{address:c.dateHeader.address},labelAnchor:{address:c.label.address,expected:c.label.value}};
+    const proof=await client.verifyTeaching({...draft.candidate,rules:{}},rule);
+    draft.proof=proof;draft.previewToken=crypto.randomUUID();
+    return {...proof,prediction:proof.rule.confirmation,previewToken:draft.previewToken,step:'confirm',message:'程序已选中第三个日期的预测位置，请检查后确认。'};
+  }
+  if(stage==='confirm') {
+    if(!draft.proof||!request.previewToken||request.previewToken!==draft.previewToken)throw Error('请先查看第三个日期的预测位置');
+    const selected=await client.captureSelection(config,draft.sheet);
+    if(selected.address!==draft.proof.rule.confirmation.address)throw Error('当前选区与预测位置不一致，请重新查看预测位置，或重新示范');
+    const proof=await client.verifyTeaching({...draft.candidate,rules:{}},draft.proof.rule);
+    const updated=normalize({...draft.candidate,rules:{...config.rules,[draft.metric]:proof.rule}});
+    teaching=null;
+    return {config:updated,message:'已保存此项目的排列规则。其他项目仍沿用各自配置；填报前会再次校验日期和项目标志。'};
+  }
+  throw Error('不支持的示范步骤');
+}
 async function dispatch(request) {
   const {operation}=request;
   const config=normalize(request.config);
-  if(operation==='validate')return {config};
-  if(operation==='open'){confirmation=null;return browser.open(config);}
-  if(operation==='recognize'){confirmation=null;return client.recognize(config);}
-  if(operation==='pick'){confirmation=null;const result=await client.pick(config,request.key);config.adapter[request.key]=result.selector;return {config,message:result.warning||'已记住位置。'};}
+  if(operation==='validate'){confirmation=null;teaching=null;return {config};}
+  if(operation==='open'){confirmation=null;teaching=null;return browser.open(config);}
+  if(operation==='recognize'){confirmation=null;teaching=null;return client.recognize(config);}
+  if(operation==='pick'){confirmation=null;teaching=null;const result=await client.pick(config,request.key);config.adapter[request.key]=result.selector;return {config,message:result.warning||'已记住位置。'};}
+  if(operation==='teach')return teach(request,config);
+  teaching=null;
   const plan=core.plan(config,request.date,request.values);
   if(operation==='inspect') {
     confirmation=null;

@@ -18,6 +18,38 @@ async function main() {
   await dispatch({...request,operation:'write',token:preview.token});
   await assert.rejects(dispatch({...request,operation:'write',token:preview.token}),/预览已失效/);
   assert.equal(writes,1);
+  const core=require('../../src/ProductionAssistant.App/Assets/TencentSheet/core.js');
+  let selected={sheet:'下料、装焊（26年9月）',address:'C4',value:''};
+  const cells={A4:'2026/9/1',A5:'2026/9/2',A6:'2026/9/3',C2:'下料量'};
+  TencentSheetClient.prototype.ready=async()=>{};
+  TencentSheetClient.prototype.one=async()=>({});
+  TencentSheetClient.prototype.text=async()=>selected.sheet;
+  TencentSheetClient.prototype.captureSelection=async(_,sheet)=>{if(sheet!==selected.sheet)throw Error('工作表发生变化');return {...selected};};
+  TencentSheetClient.prototype.read=async(_,address)=>{selected.address=address;return cells[address]||'';};
+  const teachingRequest={operation:'teach',config,jobId:'job',metric:'cutting',firstDate:'2026-09-01',secondDate:'2026-09-02'};
+  const start=await dispatch({...teachingRequest,stage:'start'});
+  const continuing={...teachingRequest,sessionToken:start.sessionToken};
+  await assert.rejects(dispatch({...continuing,stage:'capture',slot:'secondTarget'}),/顺序/);
+  await assert.rejects(dispatch({...continuing,jobId:'other',stage:'capture',slot:'firstTarget'}),/失效/);
+  for(const [slot,address,value] of [['firstTarget','C4',''],['secondTarget','C5',''],['dateHeader','A4','2026/9/1'],['label','C2','下料量']]){
+    selected={...selected,address,value};await dispatch({...continuing,stage:'capture',slot});
+  }
+  cells.A5='wrong date';
+  await assert.rejects(dispatch({...continuing,stage:'preview'}),/日期校验未通过/);
+  cells.A5='2026/9/2';
+  const proof=await dispatch({...continuing,stage:'preview'});
+  assert.equal(proof.prediction.address,'C6');assert.equal(proof.rule.rowStep,1);
+  selected.address='D6';
+  await assert.rejects(dispatch({...continuing,stage:'confirm',previewToken:proof.previewToken}),/选区/);
+  selected.address='C6';
+  const saved=await dispatch({...continuing,stage:'confirm',previewToken:proof.previewToken});
+  assert.equal(core.plan(saved.config,'2026-09-09',request.values).rows[0].address,'C12');
+  await assert.rejects(dispatch({...continuing,stage:'confirm',previewToken:proof.previewToken}),/失效/);
+  assert.equal(writes,1,'teaching must never write');
+  const restarted=await dispatch({...teachingRequest,stage:'start'});
+  await dispatch({...teachingRequest,stage:'cancel',sessionToken:restarted.sessionToken});
+  await assert.rejects(dispatch({...teachingRequest,stage:'capture',slot:'firstTarget',sessionToken:restarted.sessionToken}),/失效/);
   console.log('PASS: URL boundary, merged anchor, changed values and one-use confirmation');
+  console.log('PASS: teaching stages, job binding, date failure, third-cell confirmation, cancellation and no writes');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

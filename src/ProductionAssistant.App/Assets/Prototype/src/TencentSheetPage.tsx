@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { invoke } from "./bridge";
 import DatePicker from "./DatePicker";
+import { TencentTemplateTeaching, type LearnedRule } from "./TencentTemplateTeaching";
 import type { AutomationTaskCreateProps } from "./automationTaskTypes";
 import "./tencent-sheet.css";
 
 type Config = {
   documentUrl: string; sheetPattern: string; company: string; park: string; startColumn: string;
   cuttingRow: number; weldingRow: number; inboundRow: number;
+  sheetMode?: "monthly" | "fixed"; sheetName?: string; rules?: Record<string, LearnedRule>;
   adapter: { anchors: Record<string, { address: string; expected: string }>; [key: string]: unknown };
 };
 type Job = { id: string; config: Config; validated?: boolean };
@@ -40,6 +42,7 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
   const [manual, setManual] = useState(false), [date, setDate] = useState("");
   const [values, setValues] = useState<Record<string, string>>({ cutting: "", welding: "", section: "", plate: "" });
   const [preview, setPreview] = useState<Preview>(), [dirty, setDirty] = useState(false);
+  const [teaching, setTeaching] = useState(false);
   const load = () => invoke<Job>("tencentSheet.get", { id }).then(setJob);
   useEffect(() => { load().catch(error => { setFailed(true); setNotice(message(error)); }); }, [id]);
   async function action(name: string, run: () => Promise<void>) {
@@ -62,14 +65,15 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
   return <div className="tencent-sheet-workbench" aria-busy={!!busy}>
     <div className="tencent-sheet-intro"><div><h2>腾讯文档生产填报</h2><p>连接一次，检查本次数据，再确认填报。目标格已有内容时会停止。</p></div><span>Development 测试</span></div>
     {notice && <div className={`notice ${failed ? "error" : "info"}`} role={failed ? "alert" : "status"}><div><strong>{failed ? "操作未完成" : "操作结果"}</strong><span>{notice}</span></div></div>}
-    <fieldset disabled={!!busy} className="tencent-sheet-panel"><legend>1 · 连接文档</legend>
+    <fieldset disabled={!!busy || teaching} className="tencent-sheet-panel"><legend>1 · 连接文档</legend>
       <label>文档链接<input type="url" value={config.documentUrl} onChange={event => edit({ ...config, documentUrl: event.target.value })} /></label>
       <div className="tencent-sheet-actions"><button className="secondary" onClick={() => action("打开文档", () => connect("open"))}>打开文档 / 扫码登录</button><button className="primary" onClick={() => action("识别页面", () => connect("recognize"))}>识别并检查</button></div>
       <p className="tencent-sheet-help">首次使用扫码登录。识别过程只获取网页控件位置，不填写数据。</p>
       {missing.length > 0 && <div className="tencent-sheet-guidance"><strong>按提示点选，程序会记住位置</strong>{missing.map(key => <div key={key}><span>{controlLabels[key]}</span><button className="secondary" onClick={() => action("选取控件", () => connect("pick", key))}>去网页点一下</button></div>)}</div>}
-      {sheets.length > 0 && <label>工作表<select defaultValue="" onChange={event => { const name = event.target.value; if (name) edit({ ...config, sheetPattern: name.replace(/(\d{2}|\d{4})年\d{1,2}月/, (_, year: string) => `${year.length === 4 ? "{yyyy}" : "{yy}"}年{M}月`) }); }}><option value="">选择月份工作表</option>{sheets.map(name => <option key={name}>{name}</option>)}</select></label>}
-      <p className="tencent-sheet-help">填报范围：{config.company} / {config.park}。工作表月份随业务日期自动切换。</p>
+      {sheets.length > 0 && <label>工作表<select defaultValue="" onChange={event => { const name = event.target.value; if (name) { const monthly = /(\d{4}|\d{2})年\d{1,2}月/.test(name); edit({ ...config, sheetMode: monthly ? "monthly" : "fixed", sheetName: name, sheetPattern: monthly ? name.replace(/(\d{4}|\d{2})年\d{1,2}月/, (_, year: string) => `${year.length === 4 ? "{yyyy}" : "{yy}"}年{M}月`) : config.sheetPattern }); } }}><option value="">选择工作表</option>{sheets.map(name => <option key={name}>{name}</option>)}</select></label>}
+      <p className="tencent-sheet-help">{config.sheetMode === "fixed" ? `固定工作表：${config.sheetName}` : "工作表月份随业务日期自动切换。"} 已示范项目按各自记录的日期和文字标志校验。</p>
       <details><summary>调整模板与高级设置</summary><div className="tencent-sheet-grid">
+        <p className="tencent-sheet-help">已示范的项目优先使用学习到的排列规则，下面的原模板行列只对未示范项目生效。</p>
         {([["sheetPattern", "月份工作表名称"], ["company", "公司"], ["park", "园区"], ["startColumn", "1 日起始列"]] as const).map(([key, label]) => <label key={key}>{label}<input value={config[key]} onChange={event => edit({ ...config, [key]: event.target.value })} /></label>)}
         {([["cuttingRow", "下料行"], ["weldingRow", "装焊行"], ["inboundRow", "入库行"]] as const).map(([key, label]) => <label key={key}>{label}<input type="number" min="1" value={config[key]} onChange={event => edit({ ...config, [key]: Number(event.target.value) })} /></label>)}
         {Object.entries(config.adapter.anchors).map(([key, anchor]) => <label key={key}>{anchorLabels[key] || key}<input value={anchor.address} onChange={event => edit({ ...config, adapter: { ...config.adapter, anchors: { ...config.adapter.anchors, [key]: { ...anchor, address: event.target.value } } } })} /></label>)}
@@ -77,7 +81,9 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
       </div></details>
       {dirty && <button className="primary" onClick={() => action("保存配置", async () => { await save(); setNotice("配置已保存，请重新检查本次数据。"); })}>保存配置</button>}
     </fieldset>
-    <fieldset disabled={!!busy} className="tencent-sheet-panel"><legend>2 · 本次填报数据</legend>
+    <TencentTemplateTeaching key={`${id}:${JSON.stringify(config)}`} id={id} rules={config.rules} fixedSheet={config.sheetMode === "fixed"} disabled={!!busy || dirty} run={action}
+      onActive={active => { setTeaching(active); if (active) setPreview(undefined); }} onSaved={async () => { await load(); setPreview(undefined); setNotice("排列规则已保存，可以继续示范其他项目，或检查本次填报数据。"); changed(); }} />
+    <fieldset disabled={!!busy || teaching} className="tencent-sheet-panel"><legend>2 · 本次填报数据</legend>
       <label className="tencent-sheet-date-mode"><input type="checkbox" checked={manual} onChange={event => { setManual(event.target.checked); setPreview(undefined); }} />指定补填日期</label>
       {manual ? <DatePicker label="业务日期" disabled={!!busy} value={date} onChange={value => { setDate(value); setPreview(undefined); }} /> : <p>默认填报前一天，按北京时间计算。</p>}
       <div className="tencent-sheet-grid">{fields.map(([key, label]) => <label key={key}>{label}（吨）<input type="number" min="0" step="any" inputMode="decimal" value={values[key]} placeholder="输入本次实际数据" onChange={event => { setValues({ ...values, [key]: event.target.value }); setPreview(undefined); }} /></label>)}</div>
