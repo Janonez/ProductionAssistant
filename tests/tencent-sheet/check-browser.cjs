@@ -94,7 +94,9 @@ async function main() {
     const activePick=driver.pick(config,'activeSheet');
     await driver.page.getByText('填报配置引导：',{exact:false}).waitFor();
     await driver.page.getByText('无角色当前标签',{exact:true}).click();
-    const activeSelector=(await activePick).selector;
+    const picked=await activePick;
+    const activeSelector=picked.selector;
+    assert.equal(await driver.page.locator(picked.sheetTabs).count(),2);
     assert.equal(await driver.page.locator(activeSelector).getAttribute('aria-label'),'当前月份');
     const wrongPick=driver.pick(config,'activeSheet');
     const wrongCheck=assert.rejects(wrongPick,/当前高亮/);

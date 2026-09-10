@@ -15,6 +15,8 @@ it('never opens on entry, requires preview and discards confirmation when inputs
   expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get']);
   expect(container.textContent).not.toMatch(/高级设置|CSS|起始列|月份工作表名称/);
   expect(container.textContent).toContain('记住网页当前工作表');
+  expect(container.querySelectorAll('button[aria-label^=点选]')).toHaveLength(3);
+  expect(container.textContent).not.toContain('当前选中的工作表标签');
   expect(container.querySelectorAll('input[type=number]')).toHaveLength(4);
   const button = (text: string) => [...container.querySelectorAll('button')].find(button => button.textContent === text)!;
   const inputs = [...container.querySelectorAll<HTMLInputElement>('input[placeholder="输入本次实际数据"]')];

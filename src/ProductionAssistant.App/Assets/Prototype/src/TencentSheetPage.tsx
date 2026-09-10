@@ -15,7 +15,7 @@ type Config = {
 type Job = { id: string; config: Config; validated?: boolean };
 type Preview = { date: string; sheet: string; token?: string; conflict: boolean; message: string; rows: { label: string; address: string; value: number; current: string; action: string }[] };
 const fields = [["cutting", "下料量"], ["welding", "装焊量"], ["section", "型材入库量"], ["plate", "板材入库量"]] as const;
-const controlLabels: Record<string, string> = { nameBox: "左上角显示单元格地址的输入框", valueBox: "显示单元格内容的编辑区", sheetTabs: "底部工作表标签", activeSheet: "当前选中的工作表标签" };
+const controlLabels: Record<string, string> = { nameBox: "左上角显示单元格地址的输入框", valueBox: "显示单元格内容的编辑区", activeSheet: "底部工作表标签" };
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 export function TencentSheetCreate({ onCreated, onCancel }: AutomationTaskCreateProps) {
@@ -56,11 +56,12 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
     setPreview(undefined);
     const result = await invoke<{ message: string; sheets?: string[]; missing?: string[] }>(`tencentSheet.${operation}`, { id, key }, 300000);
     setNotice(result.message); if (result.missing) setMissing(result.missing);
-    if (operation === "pick" && key) setMissing(current => current.filter(value => value !== key));
+    if (operation === "pick" && key) setMissing(current => current.filter(value => value !== key && !(key === "activeSheet" && value === "sheetTabs")));
     await load();
   }
   if (!job) return <div className="notice" role="status">{notice || "正在读取填报配置…"}</div>;
   const config = job.config;
+  const controlRecorded = (key: string) => (key === "activeSheet" ? ["activeSheet", "sheetTabs"] : [key]).every(part => !missing.includes(part) && !!config.adapter[part]);
   return <div className="tencent-sheet-workbench" aria-busy={!!busy}>
     <div className="tencent-sheet-intro"><div><h2>腾讯文档生产填报</h2><p>连接一次，检查本次数据，再确认填报。目标格已有内容时会停止。</p></div><span>Development 测试</span></div>
     {notice && <div className={`notice ${failed ? "error" : "info"}`} role={failed ? "alert" : "status"}><div><strong>{failed ? "操作未完成" : "操作结果"}</strong><span>{notice}</span></div></div>}
@@ -68,7 +69,7 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
       <label>文档链接<input type="url" value={config.documentUrl} onChange={event => edit({ ...config, documentUrl: event.target.value })} /></label>
       <div className="tencent-sheet-actions"><button className="secondary" onClick={() => action("打开文档", () => connect("open"))}>打开文档 / 扫码登录</button><button className="primary" onClick={() => action("识别页面", () => connect("recognize"))}>识别并检查</button></div>
       <p className="tencent-sheet-help">首次使用扫码登录。识别过程只获取网页控件位置，不填写数据。</p>
-      <div className="tencent-sheet-guidance"><strong>网页识别位置</strong><p className="tencent-sheet-help">识别不准时，点击对应项目重新选取。程序会自动记住，不需要填写代码或行列。</p>{Object.entries(controlLabels).map(([key, label]) => <div key={key}><span>{label}<small className="tencent-control-state">{missing.includes(key) || !config.adapter[key] ? "待选取" : "已记录"}</small></span><button className="secondary" aria-label={`点选${label}`} onClick={() => action("选取网页位置", () => connect("pick", key))}>{config.adapter[key] ? "重新点选" : "去网页点选"}</button></div>)}</div>
+      <div className="tencent-sheet-guidance"><strong>网页识别位置</strong><p className="tencent-sheet-help">识别不准时，点击对应项目重新选取。工作表只需点选当前高亮的标签，即可同时记住标签组和选中状态。程序会自动记住，不需要填写代码或行列。</p>{Object.entries(controlLabels).map(([key, label]) => <div key={key}><span>{label}<small className="tencent-control-state">{controlRecorded(key) ? "已记录" : "待选取"}</small></span><button className="secondary" aria-label={`点选${label}`} onClick={() => action("选取网页位置", () => connect("pick", key))}>{controlRecorded(key) ? "重新点选" : "去网页点选"}</button></div>)}</div>
       <div className="tencent-sheet-guidance"><strong>填报工作表</strong><p className="tencent-sheet-help">在网页底部点击要填写的工作表，再记住当前选择。带年月的名称会自动随月份切换。</p><button className="secondary" onClick={() => action("记住工作表", () => connect("captureSheet"))}>记住网页当前工作表</button><span>{config.sheetMode === "fixed" ? `固定工作表：${config.sheetName}` : "按业务月份选择工作表"}</span></div>
       {dirty && <button className="primary" onClick={() => action("保存配置", async () => { await save(); setNotice("配置已保存，请重新检查本次数据。"); })}>保存文档链接</button>}
     </fieldset>

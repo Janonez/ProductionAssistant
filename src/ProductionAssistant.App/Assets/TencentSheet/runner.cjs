@@ -82,7 +82,7 @@ async function dispatch(request) {
   if(operation==='validate'){confirmation=null;teaching=null;return {config};}
   if(operation==='open'){confirmation=null;teaching=null;return browser.open(config);}
   if(operation==='recognize'){confirmation=null;teaching=null;return client.recognize(config);}
-  if(operation==='pick'){confirmation=null;teaching=null;const result=await client.pick(config,request.key);config.adapter[request.key]=result.selector;return {config,message:result.warning||'已记住位置。'};}
+  if(operation==='pick'){confirmation=null;teaching=null;const result=await client.pick(config,request.key);config.adapter[request.key]=result.selector;if(request.key==='activeSheet')config.adapter.sheetTabs=result.sheetTabs;return {config,message:result.warning||'已记住位置。'};}
   if(operation==='teach')return teach(request,config);
   if(operation==='captureSheet') {
     confirmation=null;teaching=null;

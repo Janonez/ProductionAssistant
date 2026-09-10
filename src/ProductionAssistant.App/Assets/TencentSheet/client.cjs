@@ -397,7 +397,9 @@ class TencentSheetClient {
             node=node.parentElement;
           }
         }
-        finish(selector?{selector,warning:''}:{error:'未能记住这个位置，请重新点选更具体的网页控件。'});
+        const sheetTabs=kind==='activeSheet'?(el.getAttribute('role')==='tab'?'[role="tab"]':'[aria-selected][aria-label]'):undefined;
+        if(sheetTabs && (document.querySelectorAll(selector).length!==1 || document.querySelector(selector)!==el)) {finish({error:'找到多个选中标签，无法确认工作表，请重新选择。'});return;}
+        finish(selector?{selector,sheetTabs,warning:''}:{error:'未能记住这个位置，请重新点选更具体的网页控件。'});
       }
       for(const type of ['pointerdown','mousedown','pointerup','mouseup'])document.addEventListener(type,block,true);
       document.addEventListener('click',click,true);document.addEventListener('keydown',keydown,true);
