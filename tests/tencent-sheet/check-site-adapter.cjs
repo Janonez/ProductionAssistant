@@ -55,6 +55,23 @@ async function main() {
       await page.locator('#tabs').evaluate(parent=>parent.append(parent.firstElementChild.cloneNode(true)));
       await assert.rejects(client.selectSheet(config,'项目月报 10月'),/Sheet 标签定位失败|唯一/);
     }
+    for(const styleOnly of [false,true]) {
+      await page.setContent(`<div id="tabs"><div class="leaf extra"><span>甲表</span></div><div class="leaf"><span>乙表</span></div></div><input id="address" value="A1"><style>.leaf{display:inline-block;padding:12px}</style>`);
+      await page.locator('#tabs').evaluate((parent,styleOnly)=>{
+        const select=chosen=>{for(const node of parent.children){const text=node.querySelector('span');if(styleOnly)text.style.color=node===chosen?'rgb(1, 90, 200)':'rgb(30, 30, 30)';else text.setAttribute('data-mode',node===chosen?'x1':'x0');}};
+        select(parent.firstElementChild);parent.onclick=e=>select(e.target.closest('.leaf'));
+      },styleOnly);
+      const sheetTab=await pick(page,'sheetTab',page.getByText('甲表',{exact:true}));
+      assert.equal(sheetTab.strategies[0].selectedSelector,'');
+      const cellAddressBox=await pick(page,'cellAddressBox',page.locator('#address'));
+      const profile=site.normalizeProfile({name:'未知状态',siteType:'TencentDocs',controls:{sheetTab,cellAddressBox}});
+      await site.testProfile(page,profile);
+      if(styleOnly)assert.ok(profile.controls.sheetTab.strategies[0].selectedStyle);
+      else assert.match(profile.controls.sheetTab.strategies[0].selectedSelector,/:has/);
+      const persisted=site.normalizeProfile(JSON.parse(JSON.stringify(profile)));
+      await page.getByText('乙表',{exact:true}).click();
+      assert.equal(await (await site.resolveControl(page,persisted.controls.sheetTab,'sheetTab',true)).innerText(),'乙表');
+    }
     await page.setContent(fixture());
     const cancelling=site.recordControl(page,'sheetTab');
     const rejected=assert.rejects(cancelling,/取消/);

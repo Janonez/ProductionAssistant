@@ -16,9 +16,10 @@ function normalizeProfile(raw) {
     if (value.frame.some(selector => !short(selector))) throw Error('表格所在框架定位信息无效。');
     const strategies = value.strategies.map(strategy => {
       if (key === 'sheetTab') {
-        if (strategy.type !== 'collection' || !short(strategy.parentSelector) || !short(strategy.itemSelector) || !short(strategy.selectedSelector))
+        if (strategy.type !== 'collection' || !short(strategy.parentSelector) || !short(strategy.itemSelector) || (typeof strategy.selectedSelector !== 'string' || strategy.selectedSelector.length > 1000))
           throw Error('Sheet 标签集合规则无效，请重新录制。');
-        return {type:'collection',parentSelector:strategy.parentSelector,itemSelector:strategy.itemSelector,selectedSelector:strategy.selectedSelector};
+        if(strategy.selectedStyle && (![':scope','span','div','button','a','label'].includes(strategy.selectedStyle.selector) || !['backgroundColor','color','borderBottomColor','borderBottomWidth','fontWeight','boxShadow'].includes(strategy.selectedStyle.property) || !short(strategy.selectedStyle.value)))throw Error('选中状态规则无效，请重新测试适配。');
+        return {type:'collection',parentSelector:strategy.parentSelector,itemSelector:strategy.itemSelector,selectedSelector:strategy.selectedSelector,...(strategy.selectedStyle?{selectedStyle:strategy.selectedStyle}:{})};
       }
       if (!['css','role','placeholder'].includes(strategy.type) || !short(strategy.value) || (strategy.type === 'role' && !short(strategy.name)))
         throw Error('单元格名称框定位规则无效，请重新录制。');
@@ -36,7 +37,7 @@ function scopeFor(page, frame) {
   return frame.reduce((scope, selector) => scope.frameLocator(selector), page);
 }
 
-async function resolveControl(page, binding, key, active = false) {
+async function resolveControl(page, binding, key, active = false, collectionOnly = false) {
   if (!binding) throw Error('尚未录制'+controlNames[key]+'，请先配置网页适配。');
   const scope = scopeFor(page,binding.frame);
   for (const strategy of binding.strategies) {
@@ -46,7 +47,16 @@ async function resolveControl(page, binding, key, active = false) {
         if (await parent.count() !== 1 || !await parent.isVisible()) continue;
         const items = parent.locator(strategy.itemSelector).filter({visible:true});
         if (!await items.count()) continue;
-        const selected = items.and(parent.locator(strategy.selectedSelector));
+        if(collectionOnly)return items;
+        let selected;
+        if(strategy.selectedStyle) {
+          const matches=await items.evaluateAll((elements,rule)=>elements.map((el,index)=>({index,match:(rule.selector===':scope'?[el]:[...el.querySelectorAll(rule.selector)]).some(node=>getComputedStyle(node)[rule.property]===rule.value)})).filter(item=>item.match).map(item=>item.index),strategy.selectedStyle);
+          if(matches.length!==1)continue;
+          selected=items.nth(matches[0]);
+        } else {
+          if(!strategy.selectedSelector)continue;
+          selected=items.and(parent.locator(strategy.selectedSelector));
+        }
         if (await selected.count() !== 1) continue;
         return active ? selected : items;
       }
@@ -103,23 +113,27 @@ function ElementPicker({kind,session}) {
     return strategies.slice(0,12);
   }
   function collection(target) {
-    for(let el=target,depth=0;el && el!==document.body && depth<5;el=el.parentElement,depth++) {
+    for(let el=target,depth=0;el && el!==document.body && depth<8;el=el.parentElement,depth++) {
       const parent=el.parentElement;if(!parent)continue;
-      const classes=stableClasses(el),role=el.getAttribute('role');
-      const siblings=[...parent.children].filter(node=>node.tagName===el.tagName && node.getAttribute('role')===role && JSON.stringify(stableClasses(node))===JSON.stringify(classes));
+      const ownClasses=stableClasses(el),role=el.getAttribute('role');
+      const shape=node=>[...node.children].map(child=>child.tagName).join(',');
+      const siblings=[...parent.children].filter(node=>node.tagName===el.tagName && node.getAttribute('role')===role && node.textContent.trim() && (role==='tab' || stableClasses(node).some(c=>ownClasses.includes(c)) || (shape(el) && shape(node)===shape(el))));
+      const classes=ownClasses.filter(c=>siblings.every(node=>stableClasses(node).includes(c)));
       if(siblings.length<2)continue;
       const itemSelector=':scope > '+el.tagName.toLowerCase()+(role?attr('role',role):'')+classes.map(value=>'.'+CSS.escape(value)).join('');
+      const matched=[...parent.querySelectorAll(itemSelector)];
+      if(matched.length!==siblings.length || matched.some(node=>!siblings.includes(node)))continue;
       const selectors=['[aria-selected="true"]','[aria-current]:not([aria-current="false"]):not([aria-current=""])'];
       for(const node of siblings)for(const c of node.classList)
         if(/active|selected|current/i.test(c) && !/inactive|unselected|(?:not|non)[-_]?(?:active|selected|current)/i.test(c))selectors.push('.'+CSS.escape(c));
       const selectedSelector=selectors.find(selector=>siblings.filter(node=>node.matches(selector)).length===1);
-      if(!selectedSelector)continue;
-      const strategies=LocatorBuilder(parent,true).filter(value=>value.type==='css').map(value=>({type:'collection',parentSelector:value.value,itemSelector,selectedSelector}));
+      // Selection is learned by switching tabs during the explicit adapter test.
+      const strategies=LocatorBuilder(parent,true).filter(value=>value.type==='css').map(value=>({type:'collection',parentSelector:value.value,itemSelector,selectedSelector:selectedSelector || ''}));
       if(!strategies.length)continue;
       if(!el.textContent.trim())continue;
       return {strategies,sampleText:el.textContent.trim().slice(0,300),evidence:ElementAnalyzer(el),count:siblings.length};
     }
-    throw Error('没有识别出 Sheet 标签集合和唯一选中状态。请让至少两个底部标签可见，再点击其中一个标签。');
+    throw Error('标签集合识别失败：未找到有共同结构的标签及可复用的父容器。请点击标签文字或其外层区域；选中状态将在测试时单独学习。');
   }
   return new Promise(resolve=>{
     const banner=document.createElement('div'),outline=document.createElement('div');
@@ -187,7 +201,7 @@ async function recordControl(page, kind) {
     const {result,frame}=await Promise.race(frames.map(async frame=>({frame,result:await frame.evaluate(ElementPicker,{kind,session})})));
     if(result.error)throw Error(result.error);
     result.binding.frame=await framePath(frame);
-    await resolveControl(page,result.binding,kind);
+    await resolveControl(page,result.binding,kind,false,kind==='sheetTab');
     return result.binding;
   } finally {
     await Promise.allSettled(frames.map(frame=>frame.evaluate(session=>window[session]?.(),session)));
@@ -205,9 +219,47 @@ async function assertNoLogin(page) {
   }
 }
 
+async function learnSelection(page, binding) {
+  const tabs=await resolveControl(page,binding,'sheetTab',false,true);
+  const names=(await tabs.allTextContents()).map(text=>text.trim());
+  const first=names.indexOf(binding.sampleText),second=names.findIndex((name,index)=>index!==first && name && names.filter(value=>value===name).length===1);
+  if(first<0 || names.filter(value=>value===binding.sampleText).length!==1 || second<0)throw Error('标签集合已找到，但需要两个名称不同且唯一的可见标签才能学习选中状态。');
+  async function snapshot(index) {
+    const current=await resolveControl(page,binding,'sheetTab',false,true);
+    if(JSON.stringify((await current.allTextContents()).map(text=>text.trim()))!==JSON.stringify(names))throw Error('学习期间标签集合发生变化，请重新测试适配。');
+    await assertNoLogin(page);
+    await current.nth(index).click();
+    await current.nth(index).evaluate(el=>el.blur());
+    await page.mouse.move(0,0);
+    await page.waitForTimeout(250);
+    await assertNoLogin(page);
+    return current.evaluateAll(elements=>elements.map(el=>{
+      const rules=[];
+      for(const node of [el,...el.querySelectorAll('*')].slice(0,25)) {
+        const self=node===el,tag=node.tagName.toLowerCase();
+        const css=selector=>rules.push(JSON.stringify({selectedSelector:self?selector:':has('+tag+selector+')'}));
+        for(const c of node.classList)css('.'+CSS.escape(c));
+        for(const attr of node.attributes)if(/^(aria-|data-)/.test(attr.name) && attr.value.length<200)css('['+CSS.escape(attr.name)+'='+JSON.stringify(attr.value)+']');
+        if(self || ['span','div','button','a','label'].includes(tag))for(const property of ['backgroundColor','color','borderBottomColor','borderBottomWidth','fontWeight','boxShadow'])
+          rules.push(JSON.stringify({selectedStyle:{selector:self?':scope':tag,property,value:getComputedStyle(node)[property]}}));
+      }
+      return [...new Set(rules)];
+    }));
+  }
+  const a=await snapshot(first),b=await snapshot(second),again=await snapshot(first);
+  const unique=(states,index,key)=>states[index].includes(key) && states.every((keys,i)=>i===index || !keys.includes(key));
+  const candidates=a[first].filter(key=>unique(a,first,key) && unique(b,second,key) && unique(again,first,key));
+  candidates.sort((left,right)=>Number(left.includes('selectedStyle'))-Number(right.includes('selectedStyle')));
+  if(!candidates.length)throw Error('标签集合已找到，但切换前后没有发现可验证的选中状态。已切回录制标签；请重新录制或反馈此状态识别失败。');
+  const learned=JSON.parse(candidates[0]);
+  for(const strategy of binding.strategies) {delete strategy.selectedStyle;strategy.selectedSelector=learned.selectedSelector || '';if(learned.selectedStyle)strategy.selectedStyle=learned.selectedStyle;}
+  await resolveControl(page,binding,'sheetTab',true);
+}
+
 async function testProfile(page, profile) {
   const steps=[];
   await assertNoLogin(page);
+  await learnSelection(page,profile.controls.sheetTab);
   const tabs=await resolveControl(page,profile.controls.sheetTab,'sheetTab');
   steps.push({label:'找到 Sheet 标签集合',detail:`${await tabs.count()} 个标签`});
   const sample=profile.controls.sheetTab.sampleText;

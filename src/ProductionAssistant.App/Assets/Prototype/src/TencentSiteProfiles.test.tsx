@@ -12,7 +12,7 @@ it('records two controls, gates save on test, invalidates test on edit, and sele
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
     if (operation === 'tencentSite.list') return { profiles: [] };
     if (operation === 'tencentSite.pick') return { profile: { ...payload.profile, controls: { ...payload.profile.controls, [payload.key]: { frame: [], sampleText: '', strategies: [{}] } } }, message: '已录制' };
-    if (operation === 'tencentSite.test') return { token: 'tested', steps: [{ label: '名称框定位 J9', detail: '通过' }], message: '通过' };
+    if (operation === 'tencentSite.test') return { profile: { ...payload.profile, controls: { ...payload.profile.controls, sheetTab: { ...payload.profile.controls.sheetTab, sampleText: 'learned' } } }, token: 'tested', steps: [{ label: '名称框定位 J9', detail: '通过' }], message: '通过' };
     if (operation === 'tencentSite.save') return { profile: { ...payload.profile, id: 'saved' }, message: '保存成功' };
     return { message: '已打开' };
   });
@@ -34,7 +34,7 @@ it('records two controls, gates save on test, invalidates test on edit, and sele
   expect(button('保存适配配置').disabled).toBe(true);
   await act(async () => button('测试适配').click());
   await act(async () => button('保存适配配置').click());
-  expect(invoke.mock.calls.find(call => call[0] === 'tencentSite.save')?.[1]).toMatchObject({ token: 'tested' });
+  expect(invoke.mock.calls.find(call => call[0] === 'tencentSite.save')?.[1]).toMatchObject({ token: 'tested', profile: { controls: { sheetTab: { sampleText: 'learned' } } } });
   expect(changed).toHaveBeenLastCalledWith('saved');
   expect(active).toHaveBeenLastCalledWith(false);
 });

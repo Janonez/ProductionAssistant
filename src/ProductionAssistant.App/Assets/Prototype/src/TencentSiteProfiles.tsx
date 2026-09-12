@@ -32,7 +32,7 @@ export function TencentSiteProfiles({ value, documentUrl, disabled, allowLegacy 
       setNotice(reply.message);
       if (operation === "open") setOpened(true);
       if (operation === "pick" && reply.profile) setDraft({ ...reply.profile, id: draft.id, revision: draft.revision });
-      if (operation === "test") { setToken(reply.token ?? ""); setSteps(reply.steps); }
+      if (operation === "test") { if (reply.profile) setDraft({ ...reply.profile, id: draft.id, revision: draft.revision }); setToken(reply.token ?? ""); setSteps(reply.steps); }
       if (operation === "save" && reply.profile?.id) {
         await reload(); setDraft(undefined); onActive(false); onChange(reply.profile.id);
       }
@@ -52,10 +52,10 @@ export function TencentSiteProfiles({ value, documentUrl, disabled, allowLegacy 
         <button className="primary" disabled={!draft.name.trim() || !url.trim()} onClick={() => run("open")}>{opened ? "重新打开配置文档" : "开始配置"}</button>
         <div className="tencent-site-recording">
           <div className="tencent-site-controls">{controls.map(control => <div key={control.key}><strong>{control.title}</strong><span className="tencent-control-state">{draft.controls[control.key] ? "已录制" : "未配置"}</span><button className="secondary" disabled={!opened} onClick={() => run("pick", control.key)}>录制{control.key === "sheetTab" ? " Sheet 标签" : "单元格名称框"}</button></div>)}</div>
-          <div className="tencent-site-instructions"><strong>{busy === "sheetTab" || busy === "cellAddressBox" ? "正在等待网页点选" : "控件录制模式"}</strong><p>点击左侧录制按钮后，在打开的浏览器中选择控件。鼠标悬停时高亮，点击只记录位置，不执行页面原动作。按 Esc 取消。</p><p>Sheet 标签按集合识别，切换月份不必重新录制。登录提示自动发现，无需录制。</p></div>
+          <div className="tencent-site-instructions"><strong>{busy === "sheetTab" || busy === "cellAddressBox" ? "正在等待网页点选" : "控件录制模式"}</strong><p>点击左侧录制按钮后，在打开的浏览器中选择控件。鼠标悬停时高亮，点击只记录位置，不执行页面原动作。按 Esc 取消。</p><p>录制时先识别标签集合；测试时自动切换两个标签并切回，学习选中状态。登录提示自动发现，无需录制。</p></div>
         </div>
         {!!steps?.length && <ol className="tencent-site-results">{steps.map(step => <li key={step.label}><strong>{step.label}</strong><span>{step.detail}</span></li>)}</ol>}
-        <p className="tencent-sheet-help">测试会切换到录制时的工作表，并通过名称框定位 J9。不会向业务单元格填写数值。全部通过后才可保存。</p>
+        <p className="tencent-sheet-help">测试会在两个标签间切换、学习选中状态，再切回录制标签并定位 J9。不会向业务单元格填写数值。全部通过后才可保存。</p>
         {draft.id && <p className="tencent-sheet-help">保存更新后，引用此适配的文档会使用新控件规则，各自的业务填报位置保持不变。</p>}
         <div className="tencent-sheet-actions"><button className="secondary" disabled={!opened || !draft.controls.sheetTab || !draft.controls.cellAddressBox} onClick={() => run("test")}>测试适配</button><button className="primary" disabled={!token} onClick={() => run("save")}>保存适配配置</button><button className="secondary" onClick={() => { setDraft(undefined); onActive(false); invalidate(); setNotice(""); }}>取消</button></div>
       </fieldset>

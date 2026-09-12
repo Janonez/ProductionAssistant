@@ -104,8 +104,8 @@ async function dispatch(request) {
     }
     if(operation==='siteTest') {
       const steps=await site.testProfile(browser.page,profile);
-      const token=crypto.randomUUID();siteValidation={token,proof,expires:Date.now()+600000};
-      return {steps,token,message:'5 项适配测试全部通过，可以保存。'};
+      const token=crypto.randomUUID();siteValidation={token,proof:JSON.stringify({profile,url:config.documentUrl,id:request.profile.id??'',revision:request.profile.revision??0}),expires:Date.now()+600000};
+      return {steps,token,profile,message:'已通过切换学习选中状态，5 项适配测试全部通过，可以保存。'};
     }
     throw Error('不支持的适配操作。');
   }
