@@ -7,7 +7,7 @@ import { TencentSiteProfiles } from './TencentSiteProfiles';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | undefined;
 afterEach(() => { if (root) act(() => root!.unmount()); document.body.innerHTML = ''; });
-it('records two controls, gates save on test, invalidates test on edit, and selects the saved shared profile', async () => {
+it('records three controls, gates save on test, invalidates test on edit, and selects the saved shared profile', async () => {
   const changed = vi.fn(), active = vi.fn();
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
     if (operation === 'tencentSite.list') return { profiles: [] };
@@ -26,6 +26,8 @@ it('records two controls, gates save on test, invalidates test on edit, and sele
   await act(async () => button('开始配置').click());
   await act(async () => button('录制 Sheet 标签').click());
   await act(async () => button('录制单元格名称框').click());
+  expect(button('测试适配').disabled).toBe(true);
+  await act(async () => button('录制内容编辑区').click());
   expect(button('保存适配配置').disabled).toBe(true);
   await act(async () => button('测试适配').click());
   expect(button('保存适配配置').disabled).toBe(false);

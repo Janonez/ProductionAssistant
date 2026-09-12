@@ -1,6 +1,6 @@
 'use strict';
 
-const controlNames = {sheetTab:'Sheet 标签',cellAddressBox:'单元格名称框'};
+const controlNames = {sheetTab:'Sheet 标签',cellAddressBox:'单元格名称框',cellEditor:'内容编辑区／公式栏'};
 const editable = 'input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
 
 function normalizeProfile(raw) {
@@ -65,11 +65,11 @@ async function resolveControl(page, binding, key, active = false, collectionOnly
       if (await locator.count() !== 1) continue;
       if (!await locator.evaluate((el,selector)=>el.matches(selector) && !el.disabled && !el.readOnly && el.getAttribute('aria-readonly')!=='true',editable)) continue;
       const address = await locator.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
-      if(!/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(String(address).trim()))continue;
+      if(key==='cellAddressBox' && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(String(address).trim()))continue;
       return locator;
     } catch { /* A stale candidate may fail; try the next recorded, independently validated candidate. */ }
   }
-  throw Error(controlNames[key]+'定位失败，请重新录制'+(key==='sheetTab'?'一个 Sheet 标签。':'左上角显示单元格地址的输入框。'));
+  throw Error(controlNames[key]+'定位失败，请重新录制对应网页控件。');
 }
 
 // Runs in each visible document. Analysis and locator construction stay next to the picker
@@ -137,7 +137,7 @@ function ElementPicker({kind,session}) {
   }
   return new Promise(resolve=>{
     const banner=document.createElement('div'),outline=document.createElement('div');
-    banner.textContent=kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
+    banner.textContent=kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
     banner.dataset.paSitePicker=session;
     Object.assign(banner.style,{position:'fixed',top:'0',left:'0',right:'0',padding:'14px',background:'#292524',color:'#fff',zIndex:'2147483647',pointerEvents:'none'});
     Object.assign(outline.style,{position:'fixed',border:'2px solid #C2703D',background:'#C2703D18',zIndex:'2147483646',pointerEvents:'none',display:'none'});
@@ -158,9 +158,9 @@ function ElementPicker({kind,session}) {
           if(children.length!==1)throw Error('请点击左上角显示单元格地址的输入框，不要选择普通页面区域。');
           el=children[0];
         }
-        if(el.disabled || el.readOnly)throw Error('单元格名称框不可编辑，请先确认登录状态和文档权限。');
+        if(el.disabled || el.readOnly)throw Error('此控件不可编辑，请先确认登录状态和文档权限。');
         const value=/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent;
-        if(!/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(value.trim()))throw Error('此控件没有显示单元格地址，请点击真正的名称框。');
+        if(kind==='cellAddressBox' && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(value.trim()))throw Error('此控件没有显示单元格地址，请点击真正的名称框。');
         const strategies=LocatorBuilder(el);if(!strategies.length)throw Error('无法生成稳定的名称框定位规则，请重新选择。');
         finish({binding:{strategies,sampleText:'',evidence:ElementAnalyzer(el),count:1}});
       } catch(error){finish({error:error.message});}
@@ -281,6 +281,15 @@ async function testProfile(page, profile) {
   const value=await resolved.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
   if(String(value).replaceAll('$','').trim().toUpperCase()!=='J9')throw Error('名称框定位测试失败：离开输入框后不是 J9，请重新录制名称框。');
   steps.push({label:'核对名称框地址',detail:'J9'});
+  const editor=await resolveControl(page,profile.controls.cellEditor,'cellEditor');
+  const nameHandle=await resolved.elementHandle(),editorHandle=await editor.elementHandle();
+  try {
+    if(await nameHandle.ownerFrame()===await editorHandle.ownerFrame() && await nameHandle.evaluate((el,other)=>el===other,editorHandle))throw Error('编辑区与名称框录成了同一控件，请重新录制内容编辑区。');
+  } finally {await nameHandle.dispose();await editorHandle.dispose();}
+  const readEditor=()=>editor.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.innerText??el.textContent??'');
+  const before=await readEditor();await editor.focus();await assertNoLogin(page);
+  if(await readEditor()!==before || (await resolved.evaluate(el=>el.value??el.textContent)).replaceAll('$','').trim().toUpperCase()!=='J9')throw Error('聚焦编辑区后内容或单元格地址发生变化，请重新录制编辑区。');
+  steps.push({label:'找到并检查内容编辑区',detail:'聚焦后原值与地址保持一致，未输入数据'});
   return steps;
 }
 

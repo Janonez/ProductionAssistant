@@ -32,13 +32,13 @@ async function teach(request,config) {
   if(stage==='cancel'){teaching=null;return {message:'已取消本次示范，原模板保持不变。'};}
   if(stage==='start') {
     teaching=null;
-    if(!core.metricKeys.includes(request.metric))throw Error('请选择要示范的填报项目');
+    if(!core.fieldKeys(config).includes(request.metric))throw Error('请选择要示范的业务字段');
     const first=core.dateParts(request.firstDate),second=core.dateParts(request.secondDate);
     if(first.monthKey!==second.monthKey||second.day<=first.day)throw Error('请选择同一个月的两个日期，第二个日期须晚于第一个');
     await client.ready(config);
     const sheet=await client.text(await client.one(config,'activeSheet'));
-    const binding=core.sheetBinding(sheet), candidate={...config,...binding};
-    if(core.plan({...candidate,rules:{}},request.firstDate,{cutting:0,welding:0,section:0,plate:0}).sheet!==sheet)
+    const binding=core.sheetBinding(sheet), candidate={...config,...binding,capturedSheet:sheet};
+    if(core.sheetName(candidate,request.firstDate)!==sheet)
       throw Error('示范日期与当前月份工作表不一致，请选择该工作表中的日期');
     teaching={id:crypto.randomUUID(),jobId:request.jobId,signature:JSON.stringify(config),candidate,sheet,metric:request.metric,dates:[request.firstDate,request.secondDate],captures:{},expires:Date.now()+600000};
     return {sessionToken:teaching.id,step:'firstTarget',sheet,sheetMode:binding.sheetMode,message:'请在网页中选中第一个日期的填报格，然后记住位置。'};
@@ -91,7 +91,7 @@ async function dispatch(request) {
       browser.requirePage(config);
       if(!tested || tested.token!==request.token || tested.proof!==proof || tested.expires<Date.now())throw Error('适配测试已失效，请重新测试后保存。');
       await site.assertNoLogin(browser.page);
-      for(const key of ['sheetTab','cellAddressBox'])await site.resolveControl(browser.page,profile.controls[key],key);
+      for(const key of ['sheetTab','cellAddressBox','cellEditor'])await site.resolveControl(browser.page,profile.controls[key],key);
       return {profile,message:'适配测试通过，可以保存。'};
     }
     if(operation==='siteOpen')return browser.open(config);
@@ -100,12 +100,12 @@ async function dispatch(request) {
       await site.assertNoLogin(browser.page);
       const binding=await site.recordControl(browser.page,request.key);
       profile.controls[request.key]=binding;
-      return {profile:site.normalizeProfile(profile),count:binding.count,message:request.key==='sheetTab'?`已识别 ${binding.count} 个同类 Sheet 标签。`:'已录制单元格名称框。'};
+      return {profile:site.normalizeProfile(profile),count:binding.count,message:request.key==='sheetTab'?`已识别 ${binding.count} 个同类 Sheet 标签。`:request.key==='cellEditor'?'已录制内容编辑区。':'已录制单元格名称框。'};
     }
     if(operation==='siteTest') {
       const steps=await site.testProfile(browser.page,profile);
       const token=crypto.randomUUID();siteValidation={token,proof:JSON.stringify({profile,url:config.documentUrl,id:request.profile.id??'',revision:request.profile.revision??0}),expires:Date.now()+600000};
-      return {steps,token,profile,message:'已通过切换学习选中状态，5 项适配测试全部通过，可以保存。'};
+      return {steps,token,profile,message:`已通过切换学习选中状态，${steps.length} 项适配测试全部通过，可以保存。`};
     }
     throw Error('不支持的适配操作。');
   }
@@ -120,7 +120,7 @@ async function dispatch(request) {
     confirmation=null;teaching=null;
     await client.ready(config);
     const sheet=await client.text(await client.one(config,'activeSheet'));
-    return {config:normalize({...config,...core.sheetBinding(sheet)}),sheet,message:'已记住工作表「'+sheet+'」。'};
+    return {config:normalize({...config,...core.sheetBinding(sheet),capturedSheet:sheet}),sheet,message:'已记住工作表「'+sheet+'」。'};
   }
   teaching=null;
   const plan=core.plan(config,request.date,request.values);

@@ -16,7 +16,7 @@ type Reply = {
   rule?: LearnedRule; prediction?: { date: string; address: string }; message: string;
   sheetMode?: string;
 };
-const metrics = [ { value: "cutting", label: "下料量" }, { value: "welding", label: "装焊量" }, { value: "section", label: "型材入库量" }, { value: "plate", label: "板材入库量" } ];
+
 const slots = ["firstTarget", "secondTarget", "dateHeader", "label"];
 const direction = (rule: LearnedRule) => rule.rowStep ? `每天向下 ${rule.rowStep} 行` : `每天向右 ${rule.columnStep} 列`;
 function currentMonth() {
@@ -24,16 +24,17 @@ function currentMonth() {
   return `${parts.find(part => part.type === "year")!.value}-${parts.find(part => part.type === "month")!.value}`;
 }
 
-export function TencentTemplateTeaching({ id, rules, requireTeaching = false, fixedSheet, disabled, run, onActive, onSaved }: {
+export function TencentTemplateTeaching({ id, metrics, initialMetric, rules, requireTeaching = false, fixedSheet, disabled, run, onActive, onSaved }: {
+  metrics: { value: string; label: string }[]; initialMetric?: string;
   id: string; rules?: Record<string, LearnedRule>; requireTeaching?: boolean; fixedSheet: boolean; disabled: boolean;
   run: (name: string, work: () => Promise<void>) => Promise<void>;
   onActive: (active: boolean) => void; onSaved: () => Promise<void>;
 }) {
-  const [metric, setMetric] = useState("cutting"), [month] = useState(currentMonth);
+  const [metric, setMetric] = useState(initialMetric || metrics[0]?.value || ""), [month] = useState(currentMonth);
   const [firstDate, setFirstDate] = useState(`${month}-01`), [secondDate, setSecondDate] = useState(`${month}-02`);
   const [draft, setDraft] = useState<Reply>(), [captures, setCaptures] = useState<Record<string, { address: string; value: string }>>({});
   const [error, setError] = useState("");
-  const active = !!draft, label = metrics.find(item => item.value === metric)!.label;
+  const active = !!draft, label = metrics.find(item => item.value === metric)?.label || "业务字段";
   const labels: Record<string, string> = { firstTarget: `${firstDate} 的${label}填报格`, secondTarget: `${secondDate} 的${label}填报格`, dateHeader: `${firstDate} 的日期单元格`, label: "项目名称、公司或材料表头" };
   async function call(stage: string) {
     setError("");
@@ -57,7 +58,7 @@ export function TencentTemplateTeaching({ id, rules, requireTeaching = false, fi
       <label>要示范哪个项目？<ChoicePicker value={metric} options={metrics} placeholder="选择项目" disabled={disabled} ariaLabel="要示范的项目" onChange={setMetric} /></label>
       <div className="tencent-sheet-grid"><DatePicker value={firstDate} onChange={setFirstDate} label="第一个示范日期" disabled={disabled} /><DatePicker value={secondDate} onChange={setSecondDate} label="第二个示范日期" disabled={disabled} /></div>
       <p className="tencent-sheet-help">先在网页选中要配置的工作表。两个日期必须在同一个月，建议使用 1 日和 2 日。</p>
-      <button className="secondary" disabled={disabled || !firstDate || !secondDate} onClick={() => call("start")}>{rules?.[metric] ? "重新示范此项目" : "开始示范此项目"}</button>
+      <button className="secondary" disabled={disabled || !metric || !firstDate || !secondDate} onClick={() => call("start")}>{rules?.[metric] ? "重新示范此项目" : "开始示范此项目"}</button>
     </> : <>
       <ol className="tencent-teaching-steps" aria-label="示范进度">{slots.map((slot, index) => <li key={slot} aria-current={draft.step === slot ? "step" : undefined} className={captures[slot] ? "done" : ""}><span>{index + 1}. {labels[slot]}</span><strong>{captures[slot]?.address || "待选取"}</strong></li>)}</ol>
       {slots.includes(draft.step) && <div className="tencent-teaching-prompt"><strong>请在网页中单击：{labels[draft.step]}</strong><p>{draft.step === "dateHeader" ? "选择显示该日期的单元格，程序会检查后续日期是否按同样间隔排列。" : draft.step === "label" ? "选择一处固定的文字标志，用于确认每次填写的仍是这个项目。" : "只选中单元格即可，不需要输入数据。已有数据的格子也可用于示范。"}</p><button className="primary" onClick={() => call("capture")}>记住当前选中的单元格</button></div>}

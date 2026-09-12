@@ -6,11 +6,12 @@ internal static class AppServices
 {
     internal static INotionImportService Notion { get; } = new NotionImportService();
     internal static IDatabaseQueryProvider DatabaseProvider { get; } = new NotionDatabaseQueryProvider(notion: Notion);
+    internal static TencentSheetNotionService TencentNotion { get; } = new(DatabaseProvider);
     internal static DatabaseQueryService DatabaseQueries { get; } = new(DatabaseProvider);
     internal static DailyReportService DailyReports { get; } = new(database: DatabaseProvider);
     internal static DailyReportTaskHandler DailyReportTasks { get; } = new();
     internal static NotionFillTaskHandler NotionFillTasks { get; } = new();
-    internal static TencentSheetTaskHandler TencentSheetTasks { get; } = new();
+    internal static TencentSheetTaskHandler TencentSheetTasks { get; } = new(TencentNotion);
     internal static AutomationTaskHandlerRegistry AutomationTaskHandlers { get; } = new(RuntimeEnvironment.Current.IsDevelopment
         ? [DailyReportTasks, NotionFillTasks, TencentSheetTasks] : [DailyReportTasks, NotionFillTasks]);
     internal static AutomationTaskRunner AutomationTasks { get; } = new(AutomationTaskHandlers);

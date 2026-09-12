@@ -62,7 +62,7 @@ function a1(value) {
   return value;
 }
 function sameNumber(current, expected) {
-  return /^(?:\d+\.?\d*|\.\d+)$/.test(String(current).trim()) && Number(current) === expected;
+  return /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(String(current).trim()) && Number(current) === expected;
 }
 
 class TencentSheetClient {
@@ -74,10 +74,10 @@ class TencentSheetClient {
     return config.adapter.frame ? this.page.frameLocator(config.adapter.frame) : this.page;
   }
   async one(config, key) {
-    if(config.siteProfile && ['nameBox','activeSheet'].includes(key))
-      return site.resolveControl(this.page,config.siteProfile.controls[key==='nameBox'?'cellAddressBox':'sheetTab'],key==='nameBox'?'cellAddressBox':'sheetTab',key==='activeSheet');
-    if(config.siteProfile && key==='valueBox' && !config.adapter.valueBox)
-      return this.one({...config,adapter:{...config.adapter,valueBox:'#alloy-simple-text-editor'}},key);
+    if(config.siteProfile && ['nameBox','activeSheet','valueBox'].includes(key)) {
+      const role={nameBox:'cellAddressBox',activeSheet:'sheetTab',valueBox:'cellEditor'}[key];
+      return site.resolveControl(this.page,config.siteProfile.controls[role],role,key==='activeSheet');
+    }
     const label=fieldLabels[key];
     if (!config.adapter[key]) throw fieldError(key,'尚未设置「'+label+'」。请在“网页识别位置”中点选对应位置。');
     const locator = this.scope(config).locator(config.adapter[key]);
@@ -163,7 +163,7 @@ class TencentSheetClient {
   }
   async verifyTeaching(config, rule) {
     await this.ready(config);
-    const sheet = core.plan(config,rule.samples[0].date,{cutting:0,welding:0,section:0,plate:0}).sheet;
+    const sheet = core.sheetName(config,rule.samples[0].date);
     if (await this.text(await this.one(config,'activeSheet')) !== sheet) throw Error('请回到示范时选中的工作表');
     let formats = core.dateFormats;
     const checks = [];
@@ -211,7 +211,7 @@ class TencentSheetClient {
     const owned = {cutting:['cuttingDate','cuttingCompany'],welding:['weldingDate','weldingCompany'],section:['sectionDate','park','sectionType'],plate:['plateDate','park','plateType']};
     for (const row of plan.rows) {
       const rule=config.rules?.[row.key];
-      if(!rule) {owned[row.key].forEach(key=>legacyKeys.add(key));continue;}
+      if(!rule) {if(!owned[row.key])throw Error(row.label+'尚未示范位置');owned[row.key].forEach(key=>legacyKeys.add(key));continue;}
       for(const check of [
         {label:row.label+'日期',address:core.ruleAddress(rule,plan.date,rule.dateAnchor.address),expected:core.formatDate(plan.date,rule.dateAnchor.format)},
         {label:row.label+'项目标志',...rule.labelAnchor}
@@ -233,7 +233,7 @@ class TencentSheetClient {
     return results;
   }
   async inspect(config, plan) {
-    if(config.requireTeaching && core.metricKeys.some(key=>!config.rules?.[key]))throw Error('这份新文档尚未完成所有项目的位置示范。公共网页适配不包含业务填报位置，请先逐项示范。');
+    if(config.requireTeaching && core.fieldKeys(config).some(key=>!config.rules?.[key] && !config.fields?.find(field=>field.id===key)?.legacyKey))throw Error('这份新文档尚未完成所有字段的位置示范。公共网页适配不包含业务填报位置，请先逐项示范。');
     await this.selectSheet(config,plan.sheet);
     const anchors = await this.anchors(config,plan), cells = {};
     for (const row of plan.rows) cells[row.address] = await this.read(config,row.address);
@@ -269,7 +269,8 @@ class TencentSheetClient {
         if(!sameNumber(entered,row.value))throw Error(row.address+' 内容编辑区输入未生效：期望「'+row.value+'」，实际「'+entered+'」。未按 Enter 提交。');
         await valueBox.press('Enter');
         // Navigate away and back so this is a fresh formula-bar read, not the text just typed.
-        const other = inspection.rows.find(r => r.address !== row.address).address;
+        const other = inspection.rows.find(r => r.address !== row.address)?.address || inspection.anchors.find(anchor=>anchor.address!==row.address)?.address;
+        if(!other)throw Error('缺少用于离开单元格并回读的校验位置');
         await this.read(config,other);
         const actual = await this.read(config,row.address);
         if (!sameNumber(actual,row.value)) throw Error(row.address+' 写后回读不一致：期望「'+row.value+'」，实际「'+actual+'」');
@@ -330,8 +331,9 @@ class TencentSheetClient {
       activeSheet:['[role="tab"][aria-selected="true"]','[aria-selected="true"][aria-label]'],
       sheetTabs:['[role="tab"]','[aria-selected][aria-label]']
     })) {
-      if(config.siteProfile && key!=='valueBox') {
-        try {await site.resolveControl(this.page,config.siteProfile.controls[key==='nameBox'?'cellAddressBox':'sheetTab'],key==='nameBox'?'cellAddressBox':'sheetTab',key==='activeSheet');}
+      if(config.siteProfile) {
+        const role=key==='nameBox'?'cellAddressBox':key==='valueBox'?'cellEditor':'sheetTab';
+        try {await site.resolveControl(this.page,config.siteProfile.controls[role],role,key==='activeSheet');}
         catch {missing.push(key);}
         continue;
       }

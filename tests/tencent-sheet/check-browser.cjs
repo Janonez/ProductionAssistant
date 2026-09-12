@@ -153,6 +153,13 @@ async function main() {
     await driver.write(mixedConfig,mixedPlan,mixedPreview);
     assert.equal(cells.C8,'5');assert.equal(cells.J19,'6');assert.equal(cells.N35,'7');assert.equal(cells.O35,'8');
     assert.equal(writes,beforeWrites+8);
+    const customConfig=core.validate({...config,requireTeaching:true,fields:[{id:'quality',name:'合格数量',unit:'件'}],rules:{quality:rules.cutting}});
+    const customPlan=core.plan(customConfig,'2026-09-06',{quality:-2.5});
+    assert.deepEqual(customPlan.rows.map(row=>row.address),['C9']);
+    const customPreview=await driver.inspect(customConfig,customPlan);
+    await driver.write(customConfig,customPlan,customPreview);
+    assert.equal(cells.C9,'-2.5');assert.equal(cells.A9,'2026/9/6');assert.equal(writes,beforeWrites+9);
+    console.log('PASS: single custom field uses learned rule and anchor for leave-and-return verification, preserving signed decimal value');
     console.log('PASS: actual selection capture, third-cell preview, vertical date anchors and four persisted vertical writes');
     console.log('PASS: learned vertical metric mixed with unchanged legacy horizontal metrics');
 

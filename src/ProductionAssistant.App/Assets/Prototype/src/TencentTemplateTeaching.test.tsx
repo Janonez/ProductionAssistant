@@ -20,7 +20,7 @@ async function mount() {
     return { message: '已完成' };
   });
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
-  await act(async () => root!.render(<TencentTemplateTeaching id="job" fixedSheet={false} disabled={false} run={async (_, work) => work()} onActive={active} onSaved={saved} />));
+  await act(async () => root!.render(<TencentTemplateTeaching id="job" metrics={[{ value: 'cutting', label: '下料量' }]} fixedSheet={false} disabled={false} run={async (_, work) => work()} onActive={active} onSaved={saved} />));
 }
 it('requires four captures, read-only prediction and explicit confirmation before saving', async () => {
   await mount(); expect(invoke).not.toHaveBeenCalled();

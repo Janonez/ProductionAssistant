@@ -16,6 +16,11 @@
     return s;
   }
   const metricKeys = ['cutting', 'welding', 'section', 'plate'];
+  function fieldKeys(config) { return config.fields ? config.fields.map(field=>field.id) : metricKeys; }
+  function sheetName(config, date) {
+    const {year,month}=dateParts(date);
+    return config.sheetMode==='fixed'?config.sheetName:config.sheetPattern.replace(/\{yyyy\}/g,String(year)).replace(/\{yy\}/g,String(year).slice(-2)).replace(/\{M\}/g,String(month));
+  }
   const dateFormats = ['{yyyy}/{M}/{d}', '{yyyy}/{MM}/{dd}', '{yyyy}-{MM}-{dd}', '{yyyy}-{M}-{d}', '{yyyy}年{M}月{d}日', '{M}月{d}日', '{M}/{d}', '{MM}/{dd}', '{M}.{d}', '{d}日', '{dd}日', '{d}', '{dd}'];
   function dateParts(date) {
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw Error('请选择完整业务日期');
@@ -108,8 +113,18 @@
       if (!Number.isInteger(c[key]) || c[key] < 1 || c[key] > 1048576) throw Error('目标行必须为 1–1048576 的整数');
     }
     if (!Number.isInteger(c.timeout) || c.timeout < 5 || c.timeout > 120) throw Error('超时时间须为 5–120 秒的整数');
+    if(c.fields!==undefined) {
+      if(!Array.isArray(c.fields) || c.fields.length>100)throw Error('业务字段列表无效');
+      const ids=new Set();
+      for(const field of c.fields) {
+        if(!field || typeof field.id!=='string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/.test(field.id) || ['__proto__','constructor','prototype'].includes(field.id) || ids.has(field.id))throw Error('业务字段标识无效或重复');
+        ids.add(field.id);
+        if(typeof field.name!=='string' || !field.name.trim() || field.name.length>80 || (field.unit!==undefined && (typeof field.unit!=='string' || field.unit.length>20)))throw Error('请填写有效的业务名称和单位');
+        if(field.legacyKey && (field.legacyKey!==field.id || !metricKeys.includes(field.id)))throw Error('原业务位置引用无效');
+      }
+    }
     if (c.rules !== undefined) {
-      if (!c.rules || typeof c.rules !== 'object' || Array.isArray(c.rules) || Object.keys(c.rules).some(key => !metricKeys.includes(key))) throw Error('填报项目的示范规则无效');
+      if (!c.rules || typeof c.rules !== 'object' || Array.isArray(c.rules) || Object.keys(c.rules).some(key => !fieldKeys(c).includes(key))) throw Error('填报项目的示范规则无效');
       c.rules = Object.fromEntries(Object.entries(c.rules).map(([key, rule]) => [key, normalizeRule(rule)]));
     }
     return c;
@@ -117,7 +132,7 @@
   function plan(config, date, values) {
     const c = validate(config);
     const { year, month, day, monthKey } = dateParts(date);
-    const sheet = c.sheetMode === 'fixed' ? c.sheetName : c.sheetPattern.replace(/\{yyyy\}/g, String(year)).replace(/\{yy\}/g, String(year).slice(-2)).replace(/\{M\}/g, String(month));
+    const sheet = sheetName(c,date);
     const start = columnNumber(c.startColumn);
     const specs = [
       ['cutting', '下料量', start + day - 1, c.cuttingRow, c.company],
@@ -125,13 +140,20 @@
       ['section', '型材入库量', start + (day - 1) * 2, c.inboundRow, c.park],
       ['plate', '板材入库量', start + (day - 1) * 2 + 1, c.inboundRow, c.park]
     ];
-    const rows = specs.map(([key, label, col, row, owner]) => {
+    const definitions=c.fields?c.fields.map(field=>{
+      const legacy=field.legacyKey?specs.find(spec=>spec[0]===field.legacyKey):null;
+      if(!c.rules?.[field.id] && !legacy)throw Error(field.name+'尚未示范填报位置');
+      return [field.id,field.name,legacy?.[2],legacy?.[3],legacy?.[4] || '',field.unit || ''];
+    }):specs;
+    if(!definitions.length)throw Error('请先新增业务字段并录制填报位置');
+    const rows = definitions.map(([key, label, col, row, owner, unit]) => {
       const raw = String(values[key] ?? '').trim();
-      if (!/^(?:\d+\.?\d*|\.\d+)$/.test(raw) || !Number.isFinite(Number(raw))) throw Error(label + '必须填写非负数字，空值不会视为 0');
+      const numeric=c.fields?/^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/:/^(?:\d+\.?\d*|\.\d+)$/;
+      if (!numeric.test(raw) || !Number.isFinite(Number(raw))) throw Error(label + '必须提供有效数字，空值不会视为 0');
       const rule = c.rules?.[key];
       if (rule && c.sheetMode === 'fixed' && !rule.dateAnchor.format.includes('{yyyy}') && monthKey !== dateParts(rule.samples[0].date).monthKey)
         throw Error(label + '的日期表头不含完整年月，固定工作表跨月前请重新示范并确认');
-      return { key, label, address: rule ? ruleAddress(rule, date) : columnName(col) + row, owner: rule ? rule.labelAnchor.expected : owner, value: Number(raw) };
+      return { key, label, address: rule ? ruleAddress(rule, date) : columnName(col) + row, owner: rule ? rule.labelAnchor.expected : owner, value: Number(raw),unit:unit || '' };
     });
     if (new Set(rows.map(r => r.address)).size !== rows.length) throw Error('目标单元格重复，请检查行号配置');
     return { sheet, date, rows };
@@ -158,7 +180,7 @@
     if (!rows.every(r => Number(next[r.address]) === r.value)) throw Error('模拟回读不一致');
     return { cells: next, rows };
   }
-  const api = { defaults, validate, plan, preflight, simulate, columnName, cellText, metricKeys, dateFormats, dateParts, addressParts, inferRule, ruleAddress, prediction, formatDate, normalizeRule, sheetBinding };
+  const api = { defaults, validate, plan, preflight, simulate, columnName, cellText, metricKeys, fieldKeys, sheetName, dateFormats, dateParts, addressParts, inferRule, ruleAddress, prediction, formatDate, normalizeRule, sheetBinding };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TencentDemo = api;
 })(globalThis);

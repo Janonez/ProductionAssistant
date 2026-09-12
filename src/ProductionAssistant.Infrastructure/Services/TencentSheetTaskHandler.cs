@@ -4,7 +4,7 @@ using ProductionAssistant.Automation;
 
 namespace ProductionAssistant.Services;
 
-public sealed class TencentSheetTaskHandler : IAutomationTaskHandler
+public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = null) : IAutomationTaskHandler
 {
     public const string Type = "tencent_sheet_fill";
     public string TaskType => Type;
@@ -60,6 +60,9 @@ public sealed class TencentSheetTaskHandler : IAutomationTaskHandler
         var record = new JsonObject { ["id"] = Guid.NewGuid().ToString("N"), ["time"] = context.StartedAt.ToString("yyyy-MM-dd HH:mm:ss"), ["source"] = context.Trigger, ["businessDate"] = date.ToString("yyyy-MM-dd") };
         try
         {
+            if (TencentSheetNotionService.RequiresFetch(job["config"]!.AsObject()))
+                job["values"] = (notion ?? throw new InvalidOperationException("Notion 取数服务不可用。"))
+                    .RequireValues(context.TaskId, job["config"]!.AsObject(), date, (string?)job["dataToken"] ?? "");
             var request = new JsonObject { ["operation"] = "write", ["config"] = TencentSiteProfileStore.Resolve(job["config"]!), ["date"] = date.ToString("yyyy-MM-dd"), ["values"] = job["values"]?.DeepClone(), ["token"] = (string?)job["confirmationToken"] };
             var result = await Service.CallAsync(request, cancellationToken);
             record["status"] = "成功";
