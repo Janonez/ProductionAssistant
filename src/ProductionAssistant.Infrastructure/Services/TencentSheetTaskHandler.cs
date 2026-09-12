@@ -60,7 +60,7 @@ public sealed class TencentSheetTaskHandler : IAutomationTaskHandler
         var record = new JsonObject { ["id"] = Guid.NewGuid().ToString("N"), ["time"] = context.StartedAt.ToString("yyyy-MM-dd HH:mm:ss"), ["source"] = context.Trigger, ["businessDate"] = date.ToString("yyyy-MM-dd") };
         try
         {
-            var request = new JsonObject { ["operation"] = "write", ["config"] = job["config"]!.DeepClone(), ["date"] = date.ToString("yyyy-MM-dd"), ["values"] = job["values"]?.DeepClone(), ["token"] = (string?)job["confirmationToken"] };
+            var request = new JsonObject { ["operation"] = "write", ["config"] = TencentSiteProfileStore.Resolve(job["config"]!), ["date"] = date.ToString("yyyy-MM-dd"), ["values"] = job["values"]?.DeepClone(), ["token"] = (string?)job["confirmationToken"] };
             var result = await Service.CallAsync(request, cancellationToken);
             record["status"] = "成功";
             record["message"] = result.GetProperty("message").GetString();

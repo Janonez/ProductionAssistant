@@ -12,7 +12,7 @@ it('never opens on entry, requires preview and discards confirmation when inputs
   invoke.mockReset().mockImplementation(async (operation: string) => operation === 'tencentSheet.get' ? job : { date: '2026-09-08', sheet: '测试月报', token: 'one-use', conflict: false, rows: [{ label: '下料量', address: 'M9', current: '', value: 1 }], message: '检查通过' });
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root!.render(<TencentSheetPage id="job" changed={() => {}} />));
-  expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get']);
+  expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get', 'tencentSite.list']);
   expect(container.textContent).not.toMatch(/高级设置|CSS|起始列|月份工作表名称/);
   expect(container.textContent).toContain('记住网页当前工作表');
   expect(container.querySelectorAll('button[aria-label^=点选]')).toHaveLength(3);

@@ -1,4 +1,5 @@
 using ProductionAssistant.Services;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace ProductionAssistant.Tests;
@@ -21,5 +22,23 @@ public sealed class TencentSheetTests
         var manual = new DateOnly(2026, 8, 31);
         Assert.Equal(manual, TencentSheetService.ResolveBusinessDate(started, "previous_day", manual));
         Assert.Throws<InvalidOperationException>(() => TencentSheetService.ResolveBusinessDate(started, "invalid"));
+    }
+
+    [Fact]
+    public void Document_storage_keeps_profile_reference_and_business_rules_without_an_embedded_site_snapshot()
+    {
+        var config = JsonNode.Parse("""
+            {"siteProfileId":"shared","documentUrl":"https://docs.qq.com/sheet/document",
+             "siteProfile":{"name":"untrusted snapshot"},"rules":{"cutting":{"rowStep":3}}}
+            """)!;
+        var stored = TencentSiteProfileStore.ForStorage(config);
+        Assert.Equal("shared", (string?)stored["siteProfileId"]);
+        Assert.Null(stored["siteProfile"]);
+        Assert.Equal(3, (int?)stored["rules"]?["cutting"]?["rowStep"]);
+        Assert.NotNull(config["siteProfile"]);
+        var legacy = JsonNode.Parse("""{"adapter":{"nameBox":"#legacy"},"siteProfile":{"name":"ignored"}}""")!;
+        var resolved = TencentSiteProfileStore.Resolve(legacy);
+        Assert.Null(resolved["siteProfile"]);
+        Assert.Equal("#legacy", (string?)resolved["adapter"]?["nameBox"]);
     }
 }

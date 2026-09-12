@@ -4,10 +4,12 @@ const crypto=require('node:crypto');
 const {TencentDocsBrowser}=require('./browser.cjs');
 const {TencentSheetClient,normalizeAdapter,explainError}=require('./client.cjs');
 const core=require('./core.js');
+const site=require('./site-adapter.cjs');
 const browser=new TencentDocsBrowser(process.argv[2]);
 const client=new TencentSheetClient(browser);
 let confirmation=null;
 let teaching=null;
+let siteValidation=null;
 const signature=(config,plan)=>JSON.stringify({config,plan});
 const defaultAnchors={cuttingDate:['{cuttingColumn}2','{date}'],weldingDate:['{weldingColumn}2','{date}'],sectionDate:['{sectionColumn}24','{date}'],plateDate:['{sectionColumn}24','{date}'],cuttingCompany:['C9','{company}'],weldingCompany:['C19','{company}'],park:['B35','{park}'],sectionType:['{sectionColumn}25','型材'],plateType:['{plateColumn}25','板材']};
 function normalize(raw={}) {
@@ -15,6 +17,7 @@ function normalize(raw={}) {
   const url=new URL(config.documentUrl);
   if(url.protocol!=='https:'||!['doc.weixin.qq.com','docs.qq.com'].includes(url.hostname))throw Error('请粘贴腾讯文档或企业微信文档的 HTTPS 分享链接。');
   config.adapter=normalizeAdapter({dateFormat:'{yyyy}/{M}/{d}',anchors:Object.fromEntries(Object.entries(defaultAnchors).map(([key,[address,expected]])=>[key,{address,expected}])),...raw.adapter});
+  if(raw.siteProfile)config.siteProfile=site.normalizeProfile(raw.siteProfile);
   return config;
 }
 async function readRetry(action) {
@@ -78,6 +81,35 @@ async function teach(request,config) {
 }
 async function dispatch(request) {
   const {operation}=request;
+  if(operation.startsWith('site')) {
+    confirmation=null;teaching=null;
+    const tested=siteValidation;siteValidation=null;
+    const config=normalize(request.config);
+    const profile=site.normalizeProfile(request.profile);
+    const proof=JSON.stringify({profile,url:config.documentUrl,id:request.profile.id??'',revision:request.profile.revision??0});
+    if(operation==='siteSave') {
+      browser.requirePage(config);
+      if(!tested || tested.token!==request.token || tested.proof!==proof || tested.expires<Date.now())throw Error('适配测试已失效，请重新测试后保存。');
+      await site.assertNoLogin(browser.page);
+      for(const key of ['sheetTab','cellAddressBox'])await site.resolveControl(browser.page,profile.controls[key],key);
+      return {profile,message:'适配测试通过，可以保存。'};
+    }
+    if(operation==='siteOpen')return browser.open(config);
+    browser.requirePage(config);
+    if(operation==='sitePick') {
+      await site.assertNoLogin(browser.page);
+      const binding=await site.recordControl(browser.page,request.key);
+      profile.controls[request.key]=binding;
+      return {profile:site.normalizeProfile(profile),count:binding.count,message:request.key==='sheetTab'?`已识别 ${binding.count} 个同类 Sheet 标签。`:'已录制单元格名称框。'};
+    }
+    if(operation==='siteTest') {
+      const steps=await site.testProfile(browser.page,profile);
+      const token=crypto.randomUUID();siteValidation={token,proof,expires:Date.now()+600000};
+      return {steps,token,message:'5 项适配测试全部通过，可以保存。'};
+    }
+    throw Error('不支持的适配操作。');
+  }
+  siteValidation=null;
   const config=normalize(request.config);
   if(operation==='validate'){confirmation=null;teaching=null;return {config};}
   if(operation==='open'){confirmation=null;teaching=null;return browser.open(config);}

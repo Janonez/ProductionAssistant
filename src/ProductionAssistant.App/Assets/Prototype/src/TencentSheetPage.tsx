@@ -3,6 +3,7 @@ import { LoaderCircle } from "lucide-react";
 import { invoke } from "./bridge";
 import DatePicker from "./DatePicker";
 import { TencentTemplateTeaching, type LearnedRule } from "./TencentTemplateTeaching";
+import { TencentSiteProfiles } from "./TencentSiteProfiles";
 import type { AutomationTaskCreateProps } from "./automationTaskTypes";
 import "./tencent-sheet.css";
 
@@ -10,6 +11,8 @@ type Config = {
   documentUrl: string; sheetPattern: string; company: string; park: string; startColumn: string;
   cuttingRow: number; weldingRow: number; inboundRow: number;
   sheetMode?: "monthly" | "fixed"; sheetName?: string; rules?: Record<string, LearnedRule>;
+  siteProfileId?: string;
+  requireTeaching?: boolean;
   adapter: { anchors: Record<string, { address: string; expected: string }>; [key: string]: unknown };
 };
 type Job = { id: string; config: Config; validated?: boolean };
@@ -20,18 +23,18 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 
 export function TencentSheetCreate({ onCreated, onCancel }: AutomationTaskCreateProps) {
   const [config, setConfig] = useState<Partial<Config>>({ documentUrl: "" });
-  const [imported, setImported] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  useEffect(() => { invoke<{ config: Config; imported: boolean }>("tencentSheet.defaults").then(result => { setConfig(result.config); setImported(result.imported); }).catch(error => setError(message(error))); }, []);
+  const [adapting, setAdapting] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   async function create() {
     setBusy(true); setError("");
     try { await onCreated(await invoke<{ id: string }>("tencentSheet.create", { config })); }
     catch (error) { setError(message(error)); } finally { setBusy(false); }
   }
   return <div className="automation-create-step">
-    <div><h3>连接生产填报文档</h3><p>{imported ? "已找到你在 Demo 中保存的配置，将直接复用。" : "粘贴文档分享链接，下一步打开文档并识别填报位置。"}</p></div>
+    <div><h3>连接生产填报文档</h3><p>先选择或录制公共网页控件，再为这份文档示范业务填报位置。</p></div>
     <label>文档分享链接<input type="url" value={config.documentUrl || ""} onChange={event => setConfig({ ...config, documentUrl: event.target.value })} placeholder="粘贴腾讯文档或企业微信文档链接" /></label>
+    <TencentSiteProfiles value={config.siteProfileId ?? ""} documentUrl={config.documentUrl ?? ""} disabled={busy} onChange={siteProfileId => setConfig(current => ({ ...current, siteProfileId }))} onActive={setAdapting} />
     {error && <p role="alert">{error}</p>}
-    <div className="dialog-actions"><button className="secondary" disabled={busy} onClick={onCancel}>取消</button><button className="primary" disabled={busy || !config.documentUrl?.trim()} onClick={create}>{busy && <LoaderCircle className="spin" />}创建并配置</button></div>
+    <div className="dialog-actions"><button className="secondary" disabled={busy || adapting} onClick={onCancel}>取消</button><button className="primary" disabled={busy || adapting || !config.documentUrl?.trim() || !config.siteProfileId} onClick={create}>{busy && <LoaderCircle className="spin" />}创建并配置</button></div>
   </div>;
 }
 
@@ -42,6 +45,7 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
   const [values, setValues] = useState<Record<string, string>>({ cutting: "", welding: "", section: "", plate: "" });
   const [preview, setPreview] = useState<Preview>(), [dirty, setDirty] = useState(false);
   const [teaching, setTeaching] = useState(false);
+  const [adapting, setAdapting] = useState(false);
   const load = () => invoke<Job>("tencentSheet.get", { id }).then(setJob);
   useEffect(() => { load().catch(error => { setFailed(true); setNotice(message(error)); }); }, [id]);
   async function action(name: string, run: () => Promise<void>) {
@@ -65,17 +69,18 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
   return <div className="tencent-sheet-workbench" aria-busy={!!busy}>
     <div className="tencent-sheet-intro"><div><h2>腾讯文档生产填报</h2><p>连接一次，检查本次数据，再确认填报。目标格已有内容时会停止。</p></div><span>Development 测试</span></div>
     {notice && <div className={`notice ${failed ? "error" : "info"}`} role={failed ? "alert" : "status"}><div><strong>{failed ? "操作未完成" : "操作结果"}</strong><span>{notice}</span></div></div>}
-    <fieldset disabled={!!busy || teaching} className="tencent-sheet-panel"><legend>1 · 连接文档</legend>
+    <TencentSiteProfiles value={config.siteProfileId ?? ""} documentUrl={config.documentUrl} disabled={!!busy || teaching} allowLegacy onChange={siteProfileId => edit({ ...config, siteProfileId })} onActive={setAdapting} />
+    <fieldset disabled={!!busy || teaching || adapting} className="tencent-sheet-panel"><legend>1 · 连接文档</legend>
       <label>文档链接<input type="url" value={config.documentUrl} onChange={event => edit({ ...config, documentUrl: event.target.value })} /></label>
       <div className="tencent-sheet-actions"><button className="secondary" onClick={() => action("打开文档", () => connect("open"))}>打开文档 / 扫码登录</button><button className="primary" onClick={() => action("识别页面", () => connect("recognize"))}>识别并检查</button></div>
       <p className="tencent-sheet-help">首次使用扫码登录。识别过程只获取网页控件位置，不填写数据。</p>
-      <div className="tencent-sheet-guidance"><strong>网页识别位置</strong><p className="tencent-sheet-help">识别不准时，点击对应项目重新选取。工作表只需点选当前高亮的标签，即可同时记住标签组和选中状态。程序会自动记住，不需要填写代码或行列。</p>{Object.entries(controlLabels).map(([key, label]) => <div key={key}><span>{label}<small className="tencent-control-state">{controlRecorded(key) ? "已记录" : "待选取"}</small></span><button className="secondary" aria-label={`点选${label}`} onClick={() => action("选取网页位置", () => connect("pick", key))}>{controlRecorded(key) ? "重新点选" : "去网页点选"}</button></div>)}</div>
+      {config.siteProfileId ? <p className="tencent-sheet-help">Sheet 标签和名称框由网页适配提供。内容编辑区自动识别；识别失败时请检查页面是否已进入可编辑状态。</p> : <div className="tencent-sheet-guidance"><strong>网页识别位置</strong><p className="tencent-sheet-help">本任务保留原有控件配置。也可以在上方录制网页适配，供其他文档复用。</p>{Object.entries(controlLabels).map(([key, label]) => <div key={key}><span>{label}<small className="tencent-control-state">{controlRecorded(key) ? "已记录" : "待选取"}</small></span><button className="secondary" aria-label={`点选${label}`} onClick={() => action("选取网页位置", () => connect("pick", key))}>{controlRecorded(key) ? "重新点选" : "去网页点选"}</button></div>)}</div>}
       <div className="tencent-sheet-guidance"><strong>填报工作表</strong><p className="tencent-sheet-help">在网页底部点击要填写的工作表，再记住当前选择。带年月的名称会自动随月份切换。</p><button className="secondary" onClick={() => action("记住工作表", () => connect("captureSheet"))}>记住网页当前工作表</button><span>{config.sheetMode === "fixed" ? `固定工作表：${config.sheetName}` : "按业务月份选择工作表"}</span></div>
-      {dirty && <button className="primary" onClick={() => action("保存配置", async () => { await save(); setNotice("配置已保存，请重新检查本次数据。"); })}>保存文档链接</button>}
+      {dirty && <button className="primary" onClick={() => action("保存配置", async () => { await save(); setNotice("配置已保存，请重新检查本次数据。"); })}>保存文档配置</button>}
     </fieldset>
-    <TencentTemplateTeaching key={`${id}:${JSON.stringify(config)}`} id={id} rules={config.rules} fixedSheet={config.sheetMode === "fixed"} disabled={!!busy || dirty} run={action}
+    <TencentTemplateTeaching key={`${id}:${JSON.stringify(config)}`} id={id} rules={config.rules} requireTeaching={config.requireTeaching} fixedSheet={config.sheetMode === "fixed"} disabled={!!busy || dirty || adapting} run={action}
       onActive={active => { setTeaching(active); if (active) setPreview(undefined); }} onSaved={async () => { await load(); setPreview(undefined); setNotice("排列规则已保存，可以继续示范其他项目，或检查本次填报数据。"); changed(); }} />
-    <fieldset disabled={!!busy || teaching} className="tencent-sheet-panel"><legend>2 · 本次填报数据</legend>
+    <fieldset disabled={!!busy || teaching || adapting} className="tencent-sheet-panel"><legend>2 · 本次填报数据</legend>
       <label className="tencent-sheet-date-mode"><input type="checkbox" checked={manual} onChange={event => { setManual(event.target.checked); setPreview(undefined); }} />指定补填日期</label>
       {manual ? <DatePicker label="业务日期" disabled={!!busy} value={date} onChange={value => { setDate(value); setPreview(undefined); }} /> : <p>默认填报前一天，按北京时间计算。</p>}
       <div className="tencent-sheet-grid">{fields.map(([key, label]) => <label key={key}>{label}（吨）<input type="number" min="0" step="any" inputMode="decimal" value={values[key]} placeholder="输入本次实际数据" onChange={event => { setValues({ ...values, [key]: event.target.value }); setPreview(undefined); }} /></label>)}</div>

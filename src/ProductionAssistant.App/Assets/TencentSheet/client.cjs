@@ -1,5 +1,6 @@
 'use strict';
 const core = require('./core.js');
+const site = require('./site-adapter.cjs');
 const fieldLabels = {nameBox:'名称框',valueBox:'值编辑区 / 公式栏',sheetTabs:'工作表标签集合',activeSheet:'当前选中的工作表',ready:'编辑状态标志',saved:'已保存状态标志',frame:'表格所在 iframe',dateFormat:'日期表头格式'};
 const textControls = 'input:not([type=hidden]):not([type=password]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=image]),textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
 function fieldError(key,message,details='') {
@@ -13,7 +14,7 @@ function explainError(error) {
   else if (/Timeout \d+ms|TimeoutError/.test(original)) message='等待网页响应超时。请确认页面加载完成，并检查相关控件配置。';
   else if (/net::ERR_/.test(original)) message='网页连接失败。请检查测试地址和网络连接后重试。';
   else if (/(?:locator|page|browserType|frameLocator|browserContext)\.\w+:|Call log:|strict mode violation/.test(original)) message='网页控件操作未完成。请在“网页识别位置”中重新点选对应控件。';
-  return {error:message,details:details || (message!==original?original:''),field:error.field||null};
+  return {error:message,details:details || (message!==original?original:''),field:error.field||null,code:error.code||null};
 }
 
 const anchorSpecs = [
@@ -68,8 +69,15 @@ class TencentSheetClient {
   constructor(browser) {this.browser=browser;}
   get page(){return this.browser.page;}
   requirePage(config){this.browser.requirePage(config);}
-  scope(config) { return config.adapter.frame ? this.page.frameLocator(config.adapter.frame) : this.page; }
+  scope(config) {
+    if(config.siteProfile)return (config.siteProfile.controls.cellAddressBox?.frame || []).reduce((scope,selector)=>scope.frameLocator(selector),this.page);
+    return config.adapter.frame ? this.page.frameLocator(config.adapter.frame) : this.page;
+  }
   async one(config, key) {
+    if(config.siteProfile && ['nameBox','activeSheet'].includes(key))
+      return site.resolveControl(this.page,config.siteProfile.controls[key==='nameBox'?'cellAddressBox':'sheetTab'],key==='nameBox'?'cellAddressBox':'sheetTab',key==='activeSheet');
+    if(config.siteProfile && key==='valueBox' && !config.adapter.valueBox)
+      return this.one({...config,adapter:{...config.adapter,valueBox:'#alloy-simple-text-editor'}},key);
     const label=fieldLabels[key];
     if (!config.adapter[key]) throw fieldError(key,'尚未设置「'+label+'」。请在“网页识别位置”中点选对应位置。');
     const locator = this.scope(config).locator(config.adapter[key]);
@@ -100,6 +108,7 @@ class TencentSheetClient {
   }
   async ready(config) {
     this.requirePage(config);
+    await site.assertNoLogin(this.page);
     if(config.adapter.stateMode==='selectors')await this.one(config,'ready');
     await this.control(config,'nameBox');
     await this.control(config,'valueBox');
@@ -109,9 +118,10 @@ class TencentSheetClient {
     await this.ready(config);
     let active = await this.one(config,'activeSheet');
     if (await this.text(active) !== sheet) {
-      if (!config.adapter.sheetTabs) throw Error('请在“网页识别位置”中点选底部工作表标签');
+      if (!config.siteProfile && !config.adapter.sheetTabs) throw Error('请在“网页识别位置”中点选底部工作表标签');
       const exact = new RegExp('^'+sheet.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$');
-      const tab = this.scope(config).locator(config.adapter.sheetTabs).filter({hasText:exact});
+      const tabs = config.siteProfile ? await site.resolveControl(this.page,config.siteProfile.controls.sheetTab,'sheetTab') : this.scope(config).locator(config.adapter.sheetTabs);
+      const tab = tabs.filter({hasText:exact});
       if (await tab.count() !== 1) throw Error('未找到唯一的月份工作表：'+sheet);
       await tab.click();
       active = await this.one(config,'activeSheet');
@@ -130,6 +140,7 @@ class TencentSheetClient {
     await name.press('Control+A');
     await name.pressSequentially(address);
     await name.press('Enter');
+    await site.assertNoLogin(this.page);
     // Do not await requestAnimationFrame: an occluded/minimized sheet can suspend it indefinitely.
     // The concrete page binding must be validated by reading anchors before any write.
     await new Promise(resolve => setTimeout(resolve,100));
@@ -222,6 +233,7 @@ class TencentSheetClient {
     return results;
   }
   async inspect(config, plan) {
+    if(config.requireTeaching && core.metricKeys.some(key=>!config.rules?.[key]))throw Error('这份新文档尚未完成所有项目的位置示范。公共网页适配不包含业务填报位置，请先逐项示范。');
     await this.selectSheet(config,plan.sheet);
     const anchors = await this.anchors(config,plan), cells = {};
     for (const row of plan.rows) cells[row.address] = await this.read(config,row.address);
@@ -266,6 +278,7 @@ class TencentSheetClient {
       await this.confirmSaved(config,plan,inspection.rows);
       return {completed,message:'真实填报完成，刷新后回读一致。'};
     } catch(error) {
+      try {await site.assertNoLogin(this.page);} catch(login) {if(login.code==='LoginRequired')error=login;}
       await this.page?.keyboard.press('Escape').catch(()=>{});
       error.completed = completed;
       error.uncertainAddress = attempted;
@@ -317,6 +330,11 @@ class TencentSheetClient {
       activeSheet:['[role="tab"][aria-selected="true"]','[aria-selected="true"][aria-label]'],
       sheetTabs:['[role="tab"]','[aria-selected][aria-label]']
     })) {
+      if(config.siteProfile && key!=='valueBox') {
+        try {await site.resolveControl(this.page,config.siteProfile.controls[key==='nameBox'?'cellAddressBox':'sheetTab'],key==='nameBox'?'cellAddressBox':'sheetTab',key==='activeSheet');}
+        catch {missing.push(key);}
+        continue;
+      }
       let found=false;
       for(const selector of [...candidates,config.adapter[key]].filter(Boolean)) {
         const locator=scope.locator(selector),count=await locator.count();
@@ -327,12 +345,12 @@ class TencentSheetClient {
       if(!found)missing.push(key);
     }
     // A visible input containing a single A1 address is only accepted when unique.
-    if(missing.includes('nameBox')) {
+    if(!config.siteProfile && missing.includes('nameBox')) {
       const inputs=scope.locator('input:visible');const matches=[];
       for(let i=0;i<await inputs.count();i++)if(/^[A-Z]{1,3}[1-9]\d*$/.test(await inputs.nth(i).inputValue()))matches.push(i);
       if(matches.length===1){config.adapter.nameBox='input:visible >> nth='+matches[0];missing.splice(missing.indexOf('nameBox'),1);}
     }
-    const sheets=missing.includes('sheetTabs')?[]:await scope.locator(config.adapter.sheetTabs).allTextContents();
+    const sheets=missing.includes('sheetTabs')?[]:await (config.siteProfile?await site.resolveControl(this.page,config.siteProfile.controls.sheetTab,'sheetTab'):scope.locator(config.adapter.sheetTabs)).allTextContents();
     return {config,missing,sheets:sheets.map(s=>s.trim()).filter(Boolean),message:missing.length?'还有 '+missing.length+' 项需要点选，请按页面提示完成。':'已识别网页控件。请检查工作表及填报位置。'};
   }
   async discover(config) {

@@ -24,8 +24,8 @@ function currentMonth() {
   return `${parts.find(part => part.type === "year")!.value}-${parts.find(part => part.type === "month")!.value}`;
 }
 
-export function TencentTemplateTeaching({ id, rules, fixedSheet, disabled, run, onActive, onSaved }: {
-  id: string; rules?: Record<string, LearnedRule>; fixedSheet: boolean; disabled: boolean;
+export function TencentTemplateTeaching({ id, rules, requireTeaching = false, fixedSheet, disabled, run, onActive, onSaved }: {
+  id: string; rules?: Record<string, LearnedRule>; requireTeaching?: boolean; fixedSheet: boolean; disabled: boolean;
   run: (name: string, work: () => Promise<void>) => Promise<void>;
   onActive: (active: boolean) => void; onSaved: () => Promise<void>;
 }) {
@@ -50,8 +50,8 @@ export function TencentTemplateTeaching({ id, rules, fixedSheet, disabled, run, 
   }
   return <fieldset className="tencent-sheet-panel tencent-teaching" disabled={disabled}>
     <legend>示范填报位置</legend>
-    <p className="tencent-sheet-help">为每个项目记录排列规则。示范两个日期的位置，程序学习向右或向下的间隔，再请你确认第三个位置。未示范的项目沿用原模板。</p>
-    <div className="tencent-teaching-rules">{metrics.map(item => <div key={item.value}><strong>{item.label}</strong><span>{rules?.[item.value] ? direction(rules[item.value]) : "沿用原模板"}</span></div>)}</div>
+    <p className="tencent-sheet-help">为每个项目记录排列规则。示范两个日期的位置，程序学习向右或向下的间隔，再请你确认第三个位置。{requireTeaching ? "新文档须完成各项示范，网页适配不会推断业务位置。" : "未示范的项目沿用原模板。"}</p>
+    <div className="tencent-teaching-rules">{metrics.map(item => <div key={item.value}><strong>{item.label}</strong><span>{rules?.[item.value] ? direction(rules[item.value]) : requireTeaching ? "待示范位置" : "沿用原模板"}</span></div>)}</div>
     {error && <div className="notice error" role="alert"><div><strong>示范未完成</strong><span>{error}</span></div></div>}
     {!active ? <>
       <label>要示范哪个项目？<ChoicePicker value={metric} options={metrics} placeholder="选择项目" disabled={disabled} ariaLabel="要示范的项目" onChange={setMetric} /></label>
