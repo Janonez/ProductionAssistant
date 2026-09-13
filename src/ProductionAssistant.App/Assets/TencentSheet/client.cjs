@@ -281,6 +281,10 @@ class TencentSheetClient {
     } catch(error) {
       try {await site.assertNoLogin(this.page);} catch(login) {if(login.code==='LoginRequired')error=login;}
       await this.page?.keyboard.press('Escape').catch(()=>{});
+      if(completed.length===plan.rows.length && !attempted) {
+        const reason=error.message;
+        error=Object.assign(Error(`已填写 ${completed.length} 项，刷新后的保存确认未完成。${error.code==='LoginRequired'?'请完成登录后检查网页。':'请检查网页中的数值及保存状态。'}不会重复写入。`),{code:'SaveConfirmationPending',details:reason});
+      }
       error.completed = completed;
       error.uncertainAddress = attempted;
       throw error;
@@ -311,6 +315,7 @@ class TencentSheetClient {
       }
       if(Date.now()>=deadline)break;
       await this.page.reload({waitUntil:'domcontentloaded',timeout:Math.max(1,deadline-Date.now())});
+      await this.waitForReloadControls(config,deadline);
       await this.selectSheet(config,plan.sheet);
       let consistent=true;
       for(const row of rows) {
@@ -320,6 +325,28 @@ class TencentSheetClient {
       if(consistent)return {transitionObserved:sawSaving};
     }
     throw Error('刷新后回读不一致，服务端保存尚未确认；不会重复写入。');
+  }
+  async waitForReloadControls(config,deadline) {
+    let lastError;
+    try {
+      while(Date.now()<deadline) {
+        // DOMContentLoaded precedes the sheet application's controls and A1 state.
+        // Only retry control discovery here; never replay any part of write().
+        const probe={...config,timeout:Math.min(0.5,(deadline-Date.now())/1000)};
+        this.requirePage(probe);
+        await site.assertNoLogin(this.page);
+        try {
+          await this.ready(probe);
+          await this.one(probe,'activeSheet');
+          return;
+        } catch(error) {
+          if(error.code!=='ControlUnavailable' && !['nameBox','valueBox','activeSheet','ready'].includes(error.field))throw error;
+          lastError=error;
+        }
+        await new Promise(resolve=>setTimeout(resolve,Math.min(200,Math.max(0,deadline-Date.now()))));
+      }
+      throw Object.assign(Error('刷新后等待表格控件恢复超时，保存结果待确认。'),{details:lastError?.message});
+    } finally { if(this.page&&!this.page.isClosed())this.page.setDefaultTimeout(config.timeout*1000); }
   }
   async recognize(config) {
     this.requirePage(config);

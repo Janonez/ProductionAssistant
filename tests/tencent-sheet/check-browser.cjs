@@ -11,7 +11,7 @@ const {TencentDocsBrowser}=require('../../src/ProductionAssistant.App/Assets/Ten
 
 async function main() {
   const cells = {N2:'2026/9/9',J8:'2026年9月5日',J18:'2026年9月5日',N34:'2026年9月5日',O34:'2026年9月5日',B9:'滨海公司',B19:'滨海公司',B35:'滨海园区',N33:'型材',O33:'板材'};
-  let writes = 0, failedSave = false, denyEdit = false, reloads = 0;
+  let writes = 0, failedSave = false, denyEdit = false, reloads = 0, reloadDelay = 0;
   const fixture = http.createServer(async(req,res)=> {
     if(req.method==='POST') {
       let text='';for await(const chunk of req)text+=chunk;
@@ -38,6 +38,7 @@ async function main() {
         if(e.key==='Escape'){e.preventDefault();render();grid.focus();}
         if(e.key==='Enter'){e.preventDefault();document.querySelector('#saved').hidden=true;cells[editAddress]=valueBox.value;await fetch('/',{method:'POST',body:JSON.stringify({address:editAddress,value:valueBox.value})});document.querySelector('#saved').hidden=false;render();grid.focus();}
       };
+      if(${reloadDelay}){nameBox.value='';valueBox.hidden=true;document.querySelectorAll('[role=tab]').forEach(el=>el.hidden=true);setTimeout(()=>{render();valueBox.hidden=false;document.querySelectorAll('[role=tab]').forEach(el=>el.hidden=false);},${reloadDelay});}
       </script>`);
   });
   await new Promise(resolve=>fixture.listen(0,'127.0.0.1',resolve));
@@ -106,7 +107,23 @@ async function main() {
     console.log('PASS: automatic state checks with empty/legacy markers, wrapper recovery, invalid picker rejection and Chinese field errors');
     const discovered=await driver.discover(config);assert.ok(discovered.frames[0].controls.some(c=>c.id==='name'));
     const check=await driver.inspect(config,plan);assert.equal(check.anchors.length,9);assert.equal(writes,0);
-    const result=await driver.write(config,plan,check);assert.equal(result.completed.length,4);assert.equal(writes,4);assert.equal(cells.J9,'0');assert.ok(reloads>=2);
+    const sharedConfig={...config,siteProfile:{controls:{
+      cellAddressBox:{frame:[],strategies:[{type:'css',value:'#name'}]},
+      cellEditor:{frame:[],strategies:[{type:'css',value:'#value'}]},
+      sheetTab:{frame:[],strategies:[{parentSelector:'body',itemSelector:':scope > [role=tab]',selectedSelector:'[aria-selected=true]'}]}
+    }}};
+    reloadDelay=600;
+    const result=await driver.write(sharedConfig,plan,check);assert.equal(result.completed.length,4);assert.equal(writes,4);assert.equal(cells.J9,'0');assert.ok(reloads>=2);
+    reloadDelay=0;
+    const recoveredAddress=await driver.page.locator('#name').inputValue();
+    await driver.page.locator('#name').evaluate(el=>el.value='');
+    await assert.rejects(driver.waitForReloadControls(sharedConfig,Date.now()+250),/恢复超时/);
+    assert.equal(writes,4);
+    await driver.page.locator('#name').evaluate((el,address)=>el.value=address,recoveredAddress);
+    await driver.page.evaluate(()=>{const dialog=document.createElement('div');dialog.setAttribute('role','dialog');dialog.textContent='请先登录';document.body.append(dialog);});
+    await assert.rejects(driver.waitForReloadControls(sharedConfig,Date.now()+1000),error=>error.code==='LoginRequired');
+    await driver.page.locator('[role=dialog]').evaluate(el=>el.remove());
+    console.log('PASS: delayed post-reload A1/editor/tabs recover without duplicate writes; permanent unavailability times out and login stops');
     assert.equal(cells.N2,'2026/9/9');
     await assert.rejects(driver.write(config,plan,await driver.inspect(config,plan)),/冲突/);assert.equal(writes,4);
     cells.J9='99';await driver.page.reload();
@@ -116,7 +133,7 @@ async function main() {
     await assert.rejects(driver.inspect(config,plan),/公司校验失败/);assert.equal(writes,4);
     cells.B9='滨海公司';for(const row of plan.rows)delete cells[row.address];await driver.page.reload();
     const baseline=await driver.inspect(config,plan);failedSave=true;
-    await assert.rejects(driver.write(config,plan,baseline),/刷新后回读不一致/);assert.equal(writes,8);
+    await assert.rejects(driver.write(config,plan,baseline),error=>error.code==='SaveConfirmationPending' && error.completed.length===4 && /已填写 4 项/.test(error.message) && /刷新后回读不一致/.test(error.details));assert.equal(writes,8);
     denyEdit=true;await driver.page.reload();await assert.rejects(driver.ready(config));
     console.log('PASS: actual DOM navigation, 9 anchors, read-only inspect, write and reload verification, occupied-cell rejection, conflict, anchor failure, unsaved data and permission failure');
     failedSave=false;denyEdit=false;for(const row of plan.rows)delete cells[row.address];await driver.page.reload();

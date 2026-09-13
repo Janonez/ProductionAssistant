@@ -69,7 +69,9 @@ async function resolveControl(page, binding, key, active = false, collectionOnly
       return locator;
     } catch { /* A stale candidate may fail; try the next recorded, independently validated candidate. */ }
   }
-  throw Error(controlNames[key]+'定位失败，请重新录制对应网页控件。');
+  const error=Error(controlNames[key]+'定位失败，请重新录制对应网页控件。');
+  error.code='ControlUnavailable';
+  throw error;
 }
 
 // Runs in each visible document. Analysis and locator construction stay next to the picker
