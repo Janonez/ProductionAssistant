@@ -82,6 +82,7 @@ async function teach(request,config) {
 }
 async function dispatch(request) {
   const {operation}=request;
+  if(operation==='close'){confirmation=null;teaching=null;siteValidation=null;await browser.close();return {message:'已结束填报浏览器会话，登录状态已保留。'};}
   if(operation.startsWith('site')) {
     confirmation=null;teaching=null;
     const tested=siteValidation;siteValidation=null;
@@ -125,6 +126,15 @@ async function dispatch(request) {
   }
   teaching=null;
   const plan=core.plan(config,request.date,request.values);
+  if(operation==='background') {
+    confirmation=null;
+    try {
+      await browser.open(config,true);
+      const inspection=await readRetry(()=>client.inspect(config,plan));
+      if(!inspection.prewriteVerified||inspection.conflict)throw Error('后台检查未通过或目标格已有内容，本次未填写。');
+      return await client.write(config,plan,inspection);
+    } finally {await browser.close();}
+  }
   if(operation==='inspect') {
     confirmation=null;
     const inspection=await readRetry(()=>client.inspect(config,plan));

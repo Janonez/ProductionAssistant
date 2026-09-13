@@ -25,6 +25,6 @@ export function TencentExecutionRules({ rule, schedule, disabled, onChange }: {
     {rule.kind === "fixed" && <DatePicker label="固定业务日期" value={rule.date} onChange={date => onChange({ kind: "fixed", date }, schedule)} disabled={disabled} />}
     <div className="tencent-sheet-grid">{schedule.times.map((time, index) => <div key={index}><label>执行时刻 {index + 1}（北京时间）</label><div className="tencent-sheet-actions"><TimePicker value={time} onChange={time => onChange(rule, { ...schedule, times: schedule.times.map((value, position) => position === index ? time : value) })} /><button className="ghost" disabled={schedule.times.length === 1} onClick={() => onChange(rule, { ...schedule, times: schedule.times.filter((_, position) => position !== index) })}>移除时刻 {index + 1}</button></div></div>)}</div>
     <button className="secondary" disabled={schedule.times.length >= 24} onClick={() => { const next = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`).find(time => !schedule.times.includes(time)); if (next) onChange(rule, { ...schedule, times: [...schedule.times, next] }); }}>添加执行时刻</button>
-    <p className="tencent-sheet-help">目前仅保存时间规则，尚未启用定时填报。下方可按此业务日期规则手动验证，也可临时指定补填日期。</p>
+    <p className="tencent-sheet-help">保存规则不会自动启用定时。先完成前台或后台测试；当前配置后台测试通过后，可在任务列表启用定时。临时补填日期只影响本次测试。</p>
   </fieldset>;
 }

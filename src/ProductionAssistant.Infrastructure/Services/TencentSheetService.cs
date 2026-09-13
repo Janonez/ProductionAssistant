@@ -24,6 +24,8 @@ public sealed class TencentSheetService
             throw new InvalidOperationException("已有文档操作正在进行，请等待完成。");
         try
         {
+            Directory.CreateDirectory(RuntimeEnvironment.DataDirectory);
+            using var operationLease = AcquireOperationLease();
             if (_worker is null || _worker.HasExited) StartWorker();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMinutes(5));
@@ -45,6 +47,12 @@ public sealed class TencentSheetService
             return root.GetProperty("data").Clone();
         }
         finally { _gate.Release(); }
+    }
+
+    private static FileStream AcquireOperationLease()
+    {
+        try { return new FileStream(Path.Combine(RuntimeEnvironment.DataDirectory, "tencent-sheet-operation.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+        catch (IOException) { throw new InvalidOperationException("其他进程正在操作填报文档，请等待完成后重试。"); }
     }
 
     private void StartWorker()

@@ -65,6 +65,12 @@ it('starts without preset business and binds a custom data snapshot to inspectio
   await act(async () => button('检查本次数据与位置').click());
   await act(async () => button('确认填报以上 1 项').click());
   expect(invoke.mock.calls.find(call => call[0] === 'tencentSheet.write')?.[1]).toMatchObject({ dataToken: 'source-proof', businessDate: '2026-09-08', token: 'write-proof' });
+  expect(container.textContent).toContain('这会真实写入文档');
+  await act(async () => button('后台自动测试并填写').click());
+  const background = invoke.mock.calls.find(call => call[0] === 'tencentSheet.backgroundTest');
+  expect(background?.[1]).toEqual({ id: 'job', businessDate: undefined });
+  expect(button('确认填报以上 1 项')).toBeUndefined();
+  expect(button('检查本次数据与位置').disabled).toBe(true);
   await act(async () => container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
   expect(container.textContent).not.toContain('质量数据库');
   expect(button('检查本次数据与位置').disabled).toBe(true);

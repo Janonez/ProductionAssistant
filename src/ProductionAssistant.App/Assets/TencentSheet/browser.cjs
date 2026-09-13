@@ -4,16 +4,19 @@ const {chromium}=require('playwright');
 // One owner for the dedicated profile; clients borrow its page and never reopen it on errors.
 class TencentDocsBrowser {
   constructor(profile,options={}) {this.profile=profile;this.options=options;this.context=null;this.page=null;this.documentUrl=null;}
-  async open(config) {
+  async open(config,headless=false) {
+    if(this.context&&this.headless!==headless)await this.close();
     if(!this.context) {
-      this.context=await chromium.launchPersistentContext(this.profile,{channel:'msedge',headless:false,viewport:null,...this.options});
+      this.headless=headless;
+      try {this.context=await chromium.launchPersistentContext(this.profile,{channel:'msedge',headless,viewport:headless?{width:1440,height:1000}:null,...this.options});}
+      catch(error){throw Error('无法打开填报浏览器，请先结束其他填报会话，再重试。'+error.message);}
       this.context.on('close',()=>{this.context=null;this.page=null;this.documentUrl=null;});
     }
     this.page=this.page&&!this.page.isClosed()?this.page:this.context.pages()[0]||await this.context.newPage();
     this.page.setDefaultTimeout(config.timeout*1000);
     await this.page.goto(config.documentUrl,{waitUntil:'domcontentloaded'});
     this.documentUrl=config.documentUrl;
-    await this.page.bringToFront();
+    if(!headless)await this.page.bringToFront();
     return {message:'已打开填报专用浏览器。首次使用请扫码登录，然后点击「识别并检查」。'};
   }
   requirePage(config) {

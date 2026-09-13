@@ -116,6 +116,13 @@ internal sealed partial class PrototypeBridge
             string.IsNullOrEmpty(manualText) ? null : DateOnly.ParseExact(manualText, "yyyy-MM-dd"));
         if (operation == "fetch") return await AppServices.TencentNotion.FetchAsync((string)job["id"]!, job["config"]!.AsObject(), date,
             payload.TryGetProperty("values", out var manualValues) ? JsonNode.Parse(manualValues.GetRawText())?.AsObject() : null, cancellationToken);
+        if (operation == "backgroundTest")
+        {
+            job["manualDate"] = date.ToString("yyyy-MM-dd");
+            var result = await handler.ExecuteAsync(new((string)job["id"]!, TencentSheetTaskHandler.Type, (string)job["name"]!, "background-test", startedAt), JsonSerializer.SerializeToElement(job), cancellationToken);
+            if (!result.Succeeded) throw new InvalidOperationException(result.Message);
+            return new { message = result.Message };
+        }
         var executionValues = operation is "write" or "inspect"
             ? TencentSheetNotionService.RequiresFetch(job["config"]!.AsObject())
                 ? AppServices.TencentNotion.RequireValues((string)job["id"]!, job["config"]!.AsObject(), date, ReadString(payload, "dataToken"))

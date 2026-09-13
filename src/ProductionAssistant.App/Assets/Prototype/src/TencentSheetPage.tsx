@@ -23,7 +23,7 @@ type Config = {
   executionSchedule?: ExecutionSchedule;
   adapter: { anchors: Record<string, { address: string; expected: string }>; [key: string]: unknown };
 };
-type Job = { id: string; config: Config; validated?: boolean; businessDate?: string; dateMode?: string };
+type Job = { id: string; config: Config; validated?: boolean; businessDate?: string; dateMode?: string; enabled?: boolean };
 type Preview = { date: string; sheet: string; token?: string; conflict: boolean; message: string; rows: { label: string; address: string; value: number; current: string; action: string }[] };
 type DataResult = { dataToken: string; date: string; values: Record<string, number>; rows: { id: string; name: string; value: number; unit: string; source: string; period: string; recordCount: number }[] };
 const controlLabels: Record<string, string> = { nameBox: "左上角显示单元格地址的输入框", valueBox: "显示单元格内容的编辑区", activeSheet: "底部工作表标签" };
@@ -103,6 +103,7 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
     <fieldset disabled={blocked} className="tencent-sheet-panel"><legend>1 · 连接文档</legend>
       <label>文档链接<input type="url" value={config.documentUrl} onChange={event => edit({ ...config, documentUrl: event.target.value })} /></label>
       <div className="tencent-sheet-actions"><button className="secondary" onClick={() => action("打开文档", () => connect("open"))}>打开文档 / 扫码登录</button><button className="primary" onClick={() => action("识别页面", () => connect("recognize"))}>识别并检查</button></div>
+      <button className="secondary" onClick={() => action("结束前台会话", async () => { invalidate(); const result = await invoke<{ message: string }>("tencentSheet.close", { id }); setNotice(result.message); })}>结束前台会话</button>
       <p className="tencent-sheet-help">首次使用扫码登录。识别过程只获取网页控件位置，不填写数据。</p>
       {config.siteProfileId ? <p className="tencent-sheet-help">工作表标签、名称框和内容编辑区使用所选网页适配，其他文档可以复用。</p> : <div className="tencent-sheet-guidance"><strong>网页识别位置</strong><p className="tencent-sheet-help">本任务保留原有控件配置。也可在任务列表中录制公共网页适配，供其他文档复用。</p>{Object.entries(controlLabels).map(([key, label]) => <div key={key}><span>{label}<small className="tencent-control-state">{controlRecorded(key) ? "已记录" : "待选取"}</small></span><button className="secondary" aria-label={`点选${label}`} onClick={() => action("选取网页位置", () => connect("pick", key))}>{controlRecorded(key) ? "重新点选" : "去网页点选"}</button></div>)}</div>}
       {!!sheets.length && <label>工作表名称<ChoicePicker value={config.sheetReferenceName ?? config.capturedSheet ?? config.sheetName ?? ""} options={sheets.map(name => ({ value: name, label: name }))} placeholder="选择识别到的工作表名称" disabled={blocked} onChange={sheetReferenceName => edit({ ...config, sheetReferenceName })} /></label>}
@@ -127,6 +128,12 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
       {requiresFetch && <button className="secondary" disabled={!fields.length || (manual && !date) || manualFields.some(field => !values[field.id]?.trim()) || fields.some(field => !field.legacyKey && (!config.rules?.[field.id] || !field.notion))} onClick={() => action("获取 Notion 数据", async () => { invalidate(); setData(await invoke<DataResult>("tencentSheet.fetch", { id, businessDate: manual ? date : undefined, values }, 300000)); setNotice("取数完成，请核对来源、日期和数值后检查网页位置。"); })}>获取本次 Notion 数据</button>}
       {data && <div className="tencent-sheet-table"><p>业务日期：{data.date}</p><table><thead><tr><th>业务字段</th><th>数值</th><th>来源与范围</th><th>记录数</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.value} {row.unit}</td><td>{row.source} · {row.period}</td><td>{row.recordCount}</td></tr>)}</tbody></table></div>}
       <button className="primary" disabled={!fields.length || (manual && !date) || (requiresFetch ? !data : manualFields.some(field => !values[field.id]?.trim()))} onClick={() => action("检查填报位置", async () => { setPreview(undefined); const result = await invoke<Preview>("tencentSheet.inspect", { id, values, dataToken: data?.dataToken, businessDate: data?.date ?? (manual ? date : undefined) }, 300000); setPreview(result); setNotice(result.message); changed(); })}>检查本次数据与位置</button>
+    </fieldset>
+    <fieldset disabled={blocked || dirty} className="tencent-sheet-panel"><legend>5 · 后台自动测试</legend>
+      <p className="tencent-sheet-help">按本次业务日期重新取数，自动检查位置、填写空白格并确认保存。这会真实写入文档。测试时关闭前台填报浏览器，复用登录状态在后台运行；失败后可重新打开文档检查。</p>
+      <p className="tencent-sheet-help">所有字段须绑定 Notion。测试通过后，可在任务列表启用定时；当前环境须开放 Windows 调度，电脑须开机且用户已登录。已有执行记录的业务日期不会由定时再次填写。</p>
+      <button className="primary" disabled={!fields.length || fields.some(field => !field.notion || (!field.legacyKey && !config.rules?.[field.id])) || (manual && !date)} onClick={() => action("后台取数、填报并确认保存", async () => { invalidate(); try { const result = await invoke<{ message: string }>("tencentSheet.backgroundTest", { id, businessDate: manual ? date : undefined }, 600000); setNotice(result.message); } finally { await load(); changed(); } })}>后台自动测试并填写</button>
+      {job.enabled && <p className="tencent-sheet-help">定时填报已启用。修改配置前请先在任务列表停用。</p>}
     </fieldset>
     {preview && <section className="tencent-sheet-panel"><h3>确认填报</h3><p>业务日期：{preview.date} · {preview.sheet}</p><div className="tencent-sheet-table"><table><thead><tr><th>项目</th><th>位置</th><th>原内容</th><th>本次填报</th></tr></thead><tbody>{preview.rows.map(row => <tr key={row.address}><td>{row.label}</td><td>{row.address}</td><td>{row.current || "空白"}</td><td>{row.value}</td></tr>)}</tbody></table></div>
       <p>{preview.conflict ? "目标格已有内容，本次不可写入。" : "将仅填写以上空白单元格。确认有效期为 2 分钟。"}</p>

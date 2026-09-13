@@ -28,6 +28,7 @@ async function main(){
         if(request.operation==='tencentSheet.fetch')data={dataToken:'notion-proof',date:'2026-08-31',values:{custom:12},rows:[{id:'custom',name:'合格数量',unit:'件',value:12,source:'质量数据库',period:'2026-08-31',recordCount:2}]};
         if(request.operation==='tencentSheet.inspect')data={date:'2026-08-31',sheet:'质量月报',token:'write-proof',conflict:false,rows:[{label:'合格数量',address:'F30',value:12,current:''}],message:'本地位置检查通过'};
         if(request.operation==='tencentSheet.write'){window.written=request.payload;data={message:'本地模拟填报完成'};}
+        if(request.operation==='tencentSheet.backgroundTest'){window.backgroundTest=request.payload;data={message:'后台模拟填报完成'};}
         if(request.operation==='tencentSheet.teach') {
           const {stage,slot}=request.payload,order=['firstTarget','secondTarget','dateHeader','label'];
           if(stage==='start'){window.teachingDate=request.payload.firstDate;data={sessionToken:'fixture-session',step:'firstTarget',sheetMode:'monthly'};}
@@ -100,6 +101,10 @@ async function main(){
     await page.getByRole('button',{name:'确认填报以上 1 项',exact:true}).click();
     assert.equal(await page.evaluate(()=>window.written.dataToken),'notion-proof');
     assert.equal(await page.evaluate(()=>window.written.businessDate),'2026-08-31');
+    await page.getByRole('button',{name:'后台自动测试并填写',exact:true}).click();
+    await page.getByText('后台模拟填报完成',{exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.backgroundTest),{id:'fixture',businessDate:undefined});
+    await page.locator('fieldset').filter({has:page.getByRole('button',{name:'后台自动测试并填写',exact:true})}).screenshot({path:path.resolve(__dirname,'../../artifacts/tencent-background-test.png')});
     await page.setViewportSize({width:1100,height:3000});
     await page.locator('.tencent-sheet-workbench').screenshot({path:path.resolve(__dirname,'../../artifacts/tencent-custom-fields.png')});
     console.log('PASS: task first-step control recording, combined timing rules, then business name -> database -> teaching -> frozen business date submission');

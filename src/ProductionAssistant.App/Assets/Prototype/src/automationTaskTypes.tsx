@@ -55,7 +55,7 @@ export const automationTaskTypes: AutomationTaskTypeDefinition[] = [
     resolveSection: () => "configuration",
     issueTitle: () => "请完成文档连接与位置检查",
     renderEditor: props => <TencentSheetPage id={props.id} changed={props.changed} />,
-    loadRuns: id => invoke<{ runs: { id: string; time: string; source: string; status: string; businessDate: string; message?: string; error?: string }[] }>("tencentSheet.runs", { id }).then(({ runs }) => runs.map(run => ({ ...run, title: run.businessDate, details: run.message ? [run.message] : [] }))),
+    loadRuns: id => invoke<{ runs: { id: string; time: string; source: string; status: string; businessDate: string; message?: string; error?: string }[] }>("tencentSheet.runs", { id }).then(({ runs }) => runs.map(run => ({ ...run, source: run.source === "background-test" ? "后台自动测试" : run.source === "automatic" ? "定时填报" : "前台测试", title: run.businessDate, details: run.message ? [run.message] : [] }))),
   },
   {
     taskType: "daily_report",

@@ -101,6 +101,8 @@ internal sealed partial class PrototypeBridge
             "tencentSheet.get" => await TencentSheetAsync("get", payload, cancellationToken),
             "tencentSheet.save" => await TencentSheetAsync("save", payload, cancellationToken),
             "tencentSheet.open" => await TencentSheetAsync("open", payload, cancellationToken),
+            "tencentSheet.close" => await TencentSheetAsync("close", payload, cancellationToken),
+            "tencentSheet.backgroundTest" => await TencentSheetAsync("backgroundTest", payload, cancellationToken),
             "tencentSheet.recognize" => await TencentSheetAsync("recognize", payload, cancellationToken),
             "tencentSheet.pick" => await TencentSheetAsync("pick", payload, cancellationToken),
             "tencentSheet.teach" => await TencentSheetAsync("teach", payload, cancellationToken),
