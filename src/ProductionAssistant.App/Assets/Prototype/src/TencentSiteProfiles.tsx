@@ -7,8 +7,8 @@ type Profile = { id?: string; revision?: number; name: string; siteType: "Tencen
 type Reply = { profile?: Profile; message: string; count?: number; token?: string; steps?: { label: string; detail: string }[] };
 const controls = [{ key: "sheetTab", title: "① Sheet 标签", prompt: "请在浏览器中点击任意一个底部 Sheet 标签。程序会识别它所属的集合。" }, { key: "cellAddressBox", title: "② 单元格名称框", prompt: "请点击左上角显示当前单元格地址的位置。" }, { key: "cellEditor", title: "③ 内容编辑区／公式栏", prompt: "请点击可以读取和输入单元格内容的编辑区，不要选择名称框。" }] as const;
 
-export function TencentSiteProfiles({ value, documentUrl, disabled, allowLegacy = false, onChange, onActive }: {
-  value: string; documentUrl: string; disabled: boolean; allowLegacy?: boolean;
+export function TencentSiteProfiles({ value, documentUrl, disabled, allowLegacy = false, embedded = false, onChange, onActive }: {
+  value: string; documentUrl: string; disabled: boolean; allowLegacy?: boolean; embedded?: boolean;
   onChange: (id: string) => void; onActive: (active: boolean) => void;
 }) {
   const [profiles, setProfiles] = useState<Profile[]>([]), [draft, setDraft] = useState<Profile>();
@@ -41,13 +41,13 @@ export function TencentSiteProfiles({ value, documentUrl, disabled, allowLegacy 
   }
   const selected = profiles.find(profile => profile.id === value);
   return <section className="tencent-site-profiles tencent-sheet-panel" aria-label="网页适配配置" aria-busy={!!busy}>
-    <div><h3>网页适配配置</h3><p className="tencent-sheet-help">相同网页控件录制一次，多份文档复用。具体填报位置由每份文档单独示范。</p></div>
+    <div><h3>{embedded ? "网页控件" : "网页适配配置"}</h3><p className="tencent-sheet-help">{embedded ? "在这里连接网页并录制三个控件，已录制的配置也可以直接使用。工作表按名称识别，无需另外记住当前标签。" : "相同网页控件录制一次，多份文档复用。具体填报位置由每份文档单独示范。"}</p></div>
     {!draft ? <>
-      <label>选择网页适配<ChoicePicker value={value} options={[...(allowLegacy ? [{ value: "", label: "本任务已有控件配置（兼容）" }] : []), ...profiles.map(profile => ({ value: profile.id!, label: profile.name }))]} placeholder="请选择适配，或新建腾讯文档适配" disabled={disabled} ariaLabel="选择网页适配" onChange={onChange} /></label>
-      <div className="tencent-sheet-actions"><button className="secondary" disabled={disabled} onClick={() => begin()}>新建腾讯文档适配</button>{selected && <button className="secondary" disabled={disabled} onClick={() => begin(selected)}>重新录制此适配</button>}</div>
+      <label>{embedded ? "使用已录制控件" : "选择网页适配"}<ChoicePicker value={value} options={[...(allowLegacy ? [{ value: "", label: "本任务已有控件配置（兼容）" }] : []), ...profiles.map(profile => ({ value: profile.id!, label: profile.name + (profile.controls.cellEditor ? "" : " · 待补录编辑区") }))]} placeholder={embedded ? "选择已有配置，或录制网页控件" : "请选择适配，或新建腾讯文档适配"} disabled={disabled} ariaLabel="选择网页适配" onChange={onChange} /></label>
+      <div className="tencent-sheet-actions"><button className="secondary" disabled={disabled || (embedded && !documentUrl.trim())} onClick={() => begin()}>{embedded ? "录制网页控件" : "新建腾讯文档适配"}</button>{selected && <button className="secondary" disabled={disabled} onClick={() => begin(selected)}>{embedded ? "重新录制网页控件" : "重新录制此适配"}</button>}</div>
     </> : <>
       <fieldset className="tencent-site-fields" disabled={disabled || !!busy}>
-        <div className="tencent-sheet-grid"><label>适配名称<input value={draft.name} maxLength={80} onChange={event => { setDraft({ ...draft, name: event.target.value }); invalidate(); }} /></label><label>用于配置的文档地址<input type="url" value={url} placeholder="https://docs.qq.com/sheet/..." onChange={event => { setUrl(event.target.value); setOpened(false); invalidate(); }} /></label></div>
+        <div className="tencent-sheet-grid"><label>{embedded ? "控件配置名称" : "适配名称"}<input value={draft.name} maxLength={80} onChange={event => { setDraft({ ...draft, name: event.target.value }); invalidate(); }} /></label>{!embedded && <label>用于配置的文档地址<input type="url" value={url} placeholder="https://docs.qq.com/sheet/..." onChange={event => { setUrl(event.target.value); setOpened(false); invalidate(); }} /></label>}</div>
         <p className="tencent-sheet-help">这份文档用于录制和测试公共控件；后续可以换另一份文档使用同一适配。</p>
         <button className="primary" disabled={!draft.name.trim() || !url.trim()} onClick={() => run("open")}>{opened ? "重新打开配置文档" : "开始配置"}</button>
         <div className="tencent-site-recording">
@@ -57,19 +57,9 @@ export function TencentSiteProfiles({ value, documentUrl, disabled, allowLegacy 
         {!!steps?.length && <ol className="tencent-site-results">{steps.map(step => <li key={step.label}><strong>{step.label}</strong><span>{step.detail}</span></li>)}</ol>}
         <p className="tencent-sheet-help">测试会在两个标签间切换、学习选中状态，再切回录制标签并定位 J9。不会向业务单元格填写数值。全部通过后才可保存。</p>
         {draft.id && <p className="tencent-sheet-help">保存更新后，引用此适配的文档会使用新控件规则，各自的业务填报位置保持不变。</p>}
-        <div className="tencent-sheet-actions"><button className="secondary" disabled={!opened || !draft.controls.sheetTab || !draft.controls.cellAddressBox || !draft.controls.cellEditor} onClick={() => run("test")}>测试适配</button><button className="primary" disabled={!token} onClick={() => run("save")}>保存适配配置</button><button className="secondary" onClick={() => { setDraft(undefined); onActive(false); invalidate(); setNotice(""); }}>取消</button></div>
+        <div className="tencent-sheet-actions"><button className="secondary" disabled={!opened || !draft.controls.sheetTab || !draft.controls.cellAddressBox || !draft.controls.cellEditor} onClick={() => run("test")}>{embedded ? "测试网页控件" : "测试适配"}</button><button className="primary" disabled={!token} onClick={() => run("save")}>{embedded ? "保存网页控件" : "保存适配配置"}</button><button className="secondary" onClick={() => { setDraft(undefined); onActive(false); invalidate(); setNotice(""); }}>取消</button></div>
       </fieldset>
     </>}
     {notice && <div className={`notice ${failed ? "error" : "info"}`} role={failed ? "alert" : "status"}>{notice}</div>}
   </section>;
-}
-
-export function TencentSiteProfileSelector({ value, disabled, allowLegacy = false, onChange }: { value: string; disabled: boolean; allowLegacy?: boolean; onChange: (value: string) => void }) {
-  const [profiles, setProfiles] = useState<Profile[]>([]), [error, setError] = useState("");
-  useEffect(() => { invoke<{ profiles: Profile[] }>("tencentSite.list").then(result => setProfiles(result.profiles ?? [])).catch(error => setError(String(error))); }, []);
-  return <div><label>网页适配<ChoicePicker value={value} options={[...(allowLegacy ? [{ value: "", label: "本任务原有配置（兼容）" }] : []), ...profiles.map(profile => ({ value: profile.id!, label: profile.name + (profile.controls.cellEditor ? "" : " · 待补录编辑区") }))]} placeholder="选择已配置的网页适配" disabled={disabled} ariaLabel="选择网页适配" onChange={onChange} /></label><p className="tencent-sheet-help">公共控件在自动化任务列表的“网页适配配置”中统一录制；这里仅选择要使用的适配。</p>{error && <p role="alert">{error}</p>}</div>;
-}
-export function TencentSiteProfileManager({ onActive }: { onActive: (value: boolean) => void }) {
-  const [selected, setSelected] = useState("");
-  return <div className="tencent-sheet-workbench"><TencentSiteProfiles value={selected} documentUrl="" disabled={false} onChange={setSelected} onActive={onActive} /></div>;
 }

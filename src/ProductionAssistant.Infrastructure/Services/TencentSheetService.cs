@@ -76,4 +76,45 @@ public sealed class TencentSheetService
         var today = DateOnly.FromDateTime(startedAt.ToOffset(TimeSpan.FromHours(8)).DateTime);
         return mode switch { "previous_day" => today.AddDays(-1), "today" => today, _ => throw new InvalidOperationException("业务日期模式无效。") };
     }
+
+    public static void ValidateExecutionRules(JsonObject config)
+    {
+        if (config["businessDateRule"] is JsonNode rule)
+        {
+            if (rule is not JsonObject) throw new InvalidOperationException("业务日期规则无效。");
+            switch ((string?)rule["kind"])
+            {
+                case "relative":
+                    if (rule["offsetDays"] is not JsonValue offset || !offset.TryGetValue<int>(out var days) || days < -3660 || days > 3660)
+                        throw new InvalidOperationException("业务日期偏移须为 -3660 至 3660 的整数天。");
+                    break;
+                case "fixed":
+                    if (!DateOnly.TryParseExact((string?)rule["date"], "yyyy-MM-dd", out _))
+                        throw new InvalidOperationException("请选择固定业务日期。");
+                    break;
+                default: throw new InvalidOperationException("请选择业务日期规则。");
+            }
+        }
+        if (config["executionSchedule"] is JsonNode schedule)
+        {
+            if (schedule is not JsonObject || schedule["weekdays"] is not JsonArray { Count: > 0 and <= 7 } weekdays ||
+                weekdays.Any(day => day is not JsonValue value || !value.TryGetValue<int>(out var number) || number < 0 || number > 6) ||
+                weekdays.Select(day => (int)day!).Distinct().Count() != weekdays.Count)
+                throw new InvalidOperationException("请选择不重复的执行星期。");
+            if (schedule["times"] is not JsonArray { Count: > 0 and <= 24 } times ||
+                times.Any(time => time is not JsonValue value || !value.TryGetValue<string>(out var text) || !TimeOnly.TryParseExact(text, "HH:mm", out _)) ||
+                times.Select(time => (string)time!).Distinct().Count() != times.Count)
+                throw new InvalidOperationException("请设置 1 至 24 个不重复的执行时刻。");
+        }
+    }
+
+    public static DateOnly ResolveBusinessDate(DateTimeOffset startedAt, JsonObject config, string legacyMode = "previous_day", DateOnly? manualDate = null)
+    {
+        ValidateExecutionRules(config);
+        if (manualDate is not null) return manualDate.Value;
+        if (config["businessDateRule"] is not JsonObject rule) return ResolveBusinessDate(startedAt, legacyMode);
+        return (string?)rule["kind"] == "fixed"
+            ? DateOnly.ParseExact((string)rule["date"]!, "yyyy-MM-dd")
+            : DateOnly.FromDateTime(startedAt.ToOffset(TimeSpan.FromHours(8)).DateTime).AddDays((int)rule["offsetDays"]!);
+    }
 }

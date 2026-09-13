@@ -40,7 +40,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
     public Task<IReadOnlyList<AutomationTaskSummary>> ListTasksAsync()
     {
         IReadOnlyList<AutomationTaskSummary> tasks = Load().OfType<JsonObject>().Select(job => new AutomationTaskSummary(
-            Type, "腾讯文档填报", (string)job["id"]!, (string)job["name"]!, "手动测试 · 默认填报前一天", false, false,
+            Type, "腾讯文档填报", (string)job["id"]!, (string)job["name"]!, "手动验证 · 业务日期 " + TencentSheetService.ResolveBusinessDate(DateTimeOffset.Now, job["config"]!.AsObject(), (string?)job["dateMode"] ?? "previous_day").ToString("yyyy-MM-dd"), false, false,
             (bool?)job["validated"] == true ? "checked" : "pending-test", "测试版暂不启用定时填报", "腾讯文档",
             (string?)job["lastRun"] ?? "暂无运行记录")).ToArray();
         return Task.FromResult(tasks);
@@ -55,7 +55,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
         TencentSheetService.RequireDevelopment();
         var job = JsonNode.Parse(config.GetRawText())!.AsObject();
         if ((string?)job["id"] != context.TaskId) throw new InvalidOperationException("任务配置不匹配。");
-        var date = TencentSheetService.ResolveBusinessDate(context.StartedAt, (string?)job["dateMode"] ?? "previous_day",
+        var date = TencentSheetService.ResolveBusinessDate(context.StartedAt, job["config"]!.AsObject(), (string?)job["dateMode"] ?? "previous_day",
             DateOnly.TryParse((string?)job["manualDate"], out var manual) ? manual : null);
         var record = new JsonObject { ["id"] = Guid.NewGuid().ToString("N"), ["time"] = context.StartedAt.ToString("yyyy-MM-dd HH:mm:ss"), ["source"] = context.Trigger, ["businessDate"] = date.ToString("yyyy-MM-dd") };
         try

@@ -56,10 +56,18 @@ async function main() {
   assert.equal(core.plan(saved.config,'2026-09-09',request.values).rows[0].address,'C12');
   await assert.rejects(dispatch({...continuing,stage:'confirm',previewToken:proof.previewToken}),/失效/);
   assert.equal(writes,1,'teaching must never write');
+  let matchedSheet='';
+  TencentSheetClient.prototype.selectSheet=async(_,sheet)=>{matchedSheet=sheet;selected.sheet=sheet;};
+  const yearBoundary={...teachingRequest,config:saved.config,firstDate:'2027-01-01',secondDate:'2027-01-02'};
+  const nextYear=await dispatch({...yearBoundary,stage:'start'});
+  assert.equal(matchedSheet,'下料、装焊（27年1月）');
+  await dispatch({...yearBoundary,stage:'cancel',sessionToken:nextYear.sessionToken});
+  selected.sheet='下料、装焊（26年9月）';
   const restarted=await dispatch({...teachingRequest,stage:'start'});
   await dispatch({...teachingRequest,stage:'cancel',sessionToken:restarted.sessionToken});
   await assert.rejects(dispatch({...teachingRequest,stage:'capture',slot:'firstTarget',sessionToken:restarted.sessionToken}),/失效/);
   console.log('PASS: URL boundary, merged anchor, changed values and one-use confirmation');
   console.log('PASS: teaching stages, job binding, date failure, third-cell confirmation, cancellation and no writes');
+  console.log('PASS: teaching selects the named business-month sheet before recording, including year changes');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

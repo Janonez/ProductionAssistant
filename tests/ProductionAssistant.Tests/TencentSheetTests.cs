@@ -7,6 +7,36 @@ namespace ProductionAssistant.Tests;
 public sealed class TencentSheetTests
 {
     [Theory]
+    [InlineData("2026-09-01T08:00:00+08:00", -1, "2026-08-31")]
+    [InlineData("2027-01-01T08:00:00+08:00", -1, "2026-12-31")]
+    [InlineData("2024-03-01T08:00:00+08:00", -1, "2024-02-29")]
+    [InlineData("2026-09-01T08:00:00+08:00", 0, "2026-09-01")]
+    [InlineData("2026-09-01T08:00:00+08:00", -7, "2026-08-25")]
+    [InlineData("2026-12-31T16:01:00Z", 2, "2027-01-03")]
+    public void Configured_offset_resolves_business_date_across_calendar_boundaries(string started, int offset, string expected)
+    {
+        var config = new JsonObject { ["businessDateRule"] = new JsonObject { ["kind"] = "relative", ["offsetDays"] = offset } };
+        Assert.Equal(DateOnly.Parse(expected), TencentSheetService.ResolveBusinessDate(DateTimeOffset.Parse(started), config));
+    }
+
+    [Fact]
+    public void Explicit_business_date_is_frozen_independently_of_current_time_and_saved_rule()
+    {
+        var config = JsonNode.Parse("""{"businessDateRule":{"kind":"fixed","date":"2026-08-31"},"executionSchedule":{"weekdays":[1,3,5],"times":["08:00","17:30"]}}""")!.AsObject();
+        Assert.Equal(new DateOnly(2026, 8, 31), TencentSheetService.ResolveBusinessDate(DateTimeOffset.Parse("2027-01-01T08:00:00+08:00"), config));
+        Assert.Equal(new DateOnly(2025, 12, 31), TencentSheetService.ResolveBusinessDate(DateTimeOffset.Parse("2027-01-01T08:00:00+08:00"), config, manualDate: new(2025, 12, 31)));
+    }
+
+    [Theory]
+    [InlineData("{\"businessDateRule\":{\"kind\":\"relative\",\"offsetDays\":0.5}}")]
+    [InlineData("{\"businessDateRule\":{\"kind\":\"fixed\",\"date\":\"2026-02-30\"}}")]
+    [InlineData("{\"executionSchedule\":{\"weekdays\":[],\"times\":[\"08:00\"]}}")]
+    [InlineData("{\"executionSchedule\":{\"weekdays\":[1],\"times\":[\"24:00\"]}}")]
+    [InlineData("{\"executionSchedule\":{\"weekdays\":[1],\"times\":[\"08:00\",\"08:00\"]}}")]
+    public void Invalid_or_duplicate_execution_options_are_rejected(string json) =>
+        Assert.Throws<InvalidOperationException>(() => TencentSheetService.ValidateExecutionRules(JsonNode.Parse(json)!.AsObject()));
+
+    [Theory]
     [InlineData("2026-09-08T15:59:59Z", "previous_day", "2026-09-07")]
     [InlineData("2026-09-08T16:00:00Z", "previous_day", "2026-09-08")]
     [InlineData("2026-01-01T00:00:00+08:00", "previous_day", "2025-12-31")]

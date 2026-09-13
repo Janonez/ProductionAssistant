@@ -24,13 +24,13 @@ function currentMonth() {
   return `${parts.find(part => part.type === "year")!.value}-${parts.find(part => part.type === "month")!.value}`;
 }
 
-export function TencentTemplateTeaching({ id, metrics, initialMetric, rules, requireTeaching = false, fixedSheet, disabled, run, onActive, onSaved }: {
+export function TencentTemplateTeaching({ id, metrics, initialMetric, businessDate, rules, requireTeaching = false, fixedSheet, disabled, run, onActive, onSaved }: {
   metrics: { value: string; label: string }[]; initialMetric?: string;
-  id: string; rules?: Record<string, LearnedRule>; requireTeaching?: boolean; fixedSheet: boolean; disabled: boolean;
+  id: string; businessDate?: string; rules?: Record<string, LearnedRule>; requireTeaching?: boolean; fixedSheet: boolean; disabled: boolean;
   run: (name: string, work: () => Promise<void>) => Promise<void>;
   onActive: (active: boolean) => void; onSaved: () => Promise<void>;
 }) {
-  const [metric, setMetric] = useState(initialMetric || metrics[0]?.value || ""), [month] = useState(currentMonth);
+  const [metric, setMetric] = useState(initialMetric || metrics[0]?.value || ""), [month] = useState(() => businessDate?.slice(0, 7) || currentMonth());
   const [firstDate, setFirstDate] = useState(`${month}-01`), [secondDate, setSecondDate] = useState(`${month}-02`);
   const [draft, setDraft] = useState<Reply>(), [captures, setCaptures] = useState<Record<string, { address: string; value: string }>>({});
   const [error, setError] = useState("");

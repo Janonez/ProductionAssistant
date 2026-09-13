@@ -36,8 +36,9 @@ async function teach(request,config) {
     const first=core.dateParts(request.firstDate),second=core.dateParts(request.secondDate);
     if(first.monthKey!==second.monthKey||second.day<=first.day)throw Error('请选择同一个月的两个日期，第二个日期须晚于第一个');
     await client.ready(config);
+    if(config.sheetReferenceName)await client.selectSheet(config,core.sheetName(config,request.firstDate));
     const sheet=await client.text(await client.one(config,'activeSheet'));
-    const binding=core.sheetBinding(sheet), candidate={...config,...binding,capturedSheet:sheet};
+    const binding=core.sheetBinding(sheet), candidate={...config,...binding,capturedSheet:sheet,sheetReferenceName:sheet};
     if(core.sheetName(candidate,request.firstDate)!==sheet)
       throw Error('示范日期与当前月份工作表不一致，请选择该工作表中的日期');
     teaching={id:crypto.randomUUID(),jobId:request.jobId,signature:JSON.stringify(config),candidate,sheet,metric:request.metric,dates:[request.firstDate,request.secondDate],captures:{},expires:Date.now()+600000};

@@ -1,4 +1,3 @@
-import { TencentSiteProfileManager } from "./TencentSiteProfiles";
 import { MessageTemplatePage } from "./MessageTemplatePage";
 import { NotionFillPage } from "./NotionFillPage";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -24,7 +23,6 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
   const [notice, setNotice] = useState<NoticeValue>();
   const [menu, setMenu] = useState<{ task: AutomationTaskSummary; x: number; y: number }>();
   const [deleteTarget, setDeleteTarget] = useState<AutomationTaskSummary>();
-  const [sitesOpen, setSitesOpen] = useState(false), [recordingSite, setRecordingSite] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createType, setCreateType] = useState("");
   const [availableTypes, setAvailableTypes] = useState(["daily_report", "notion_fill"]);
@@ -88,8 +86,6 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
     finally { setBusy(""); }
   }
 
-  if (sitesOpen) return <div className="page daily-page"><header><div><h1>网页适配配置</h1><p>录制网站共用的控件，供不同文档任务复用。</p></div><button className="secondary" disabled={recordingSite} onClick={() => setSitesOpen(false)}>返回任务列表</button></header><TencentSiteProfileManager onActive={setRecordingSite} /></div>;
-
   if (selected) {
     const definition = findAutomationTaskType(selected.taskType);
     if (definition) return <AutomationTaskDetail openSettings={openSettings} task={selected} definition={definition} focusStep={focusStep} notice={notice} refresh={refresh} back={() => {
@@ -104,7 +100,6 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
     <header>
       <div><h1>自动化任务</h1><p>管理定时推送与自动填报，查看任务配置和运行情况。</p></div>
       <div className="header-actions">
-        {availableTypes.includes("tencent_sheet_fill") && <button className="secondary" onClick={() => setSitesOpen(true)}>网页适配配置</button>}
         <button className="primary" onClick={() => setCreateOpen(true)}><Plus />新建任务</button>
       </div>
     </header>

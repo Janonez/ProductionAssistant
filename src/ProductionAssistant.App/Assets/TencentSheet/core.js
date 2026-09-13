@@ -96,6 +96,7 @@
   }
   function validate(config) {
     const c = { ...defaults, ...config };
+    if (c.sheetReferenceName !== undefined) Object.assign(c, sheetBinding(c.sheetReferenceName));
     if (c.documentUrl) {
       const url = new URL(c.documentUrl);
       if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw Error('文档地址必须为不含账号密码的 HTTP(S) 地址');

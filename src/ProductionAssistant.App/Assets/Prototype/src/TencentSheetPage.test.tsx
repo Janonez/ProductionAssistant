@@ -14,7 +14,7 @@ it('never opens on entry, requires preview and discards confirmation when inputs
   await act(async () => root!.render(<TencentSheetPage id="job" changed={() => {}} />));
   expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get', 'tencentSite.list']);
   expect(container.textContent).not.toMatch(/高级设置|CSS|起始列|月份工作表名称/);
-  expect(container.textContent).toContain('记住网页当前工作表');
+  expect(container.textContent).not.toContain('记住网页当前工作表');
   expect(container.querySelectorAll('button[aria-label^=点选]')).toHaveLength(3);
   expect(container.textContent).not.toContain('当前选中的工作表标签');
   expect(container.querySelectorAll('input[type=number]')).toHaveLength(4);
@@ -39,6 +39,7 @@ it('starts without preset business and binds a custom data snapshot to inspectio
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
     if (operation === 'tencentSite.list') return { profiles: [] };
     if (operation === 'tencentSheet.get') return structuredClone(job);
+    if (operation === 'tencentSheet.sources') return { sources: [] };
     if (operation === 'tencentSheet.addField') { job.config.fields.push({ id: 'custom', name: payload.name, unit: payload.unit }); return structuredClone(job); }
     if (operation === 'tencentSheet.fetch') return { dataToken: 'source-proof', date: '2026-09-08', values: { custom: 8 }, rows: [{ id: 'custom', name: '合格数量', value: 8, unit: '件', source: '质量数据库', period: '业务当天', recordCount: 2 }] };
     if (operation === 'tencentSheet.inspect') return { date: '2026-09-08', sheet: '质量', token: 'write-proof', conflict: false, rows: [{ label: '合格数量', address: 'C8', current: '', value: 8 }], message: '检查通过' };
@@ -51,10 +52,10 @@ it('starts without preset business and binds a custom data snapshot to inspectio
   expect(button('检查本次数据与位置').disabled).toBe(true);
   const input = container.querySelector<HTMLInputElement>('input[placeholder="例如：合格数量"]')!;
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '合格数量'); input.dispatchEvent(new Event('input', { bubbles: true })); });
-  await act(async () => button('新增业务字段').click());
-  expect(button('绑定数据：合格数量').disabled).toBe(true);
+  await act(async () => button('下一步 · 选择数据库').click());
+  expect(container.textContent).toContain('绑定 Notion：合格数量');
   expect(button('获取本次 Notion 数据').disabled).toBe(true);
-  expect(container.textContent).toContain('示范填报位置');
+  expect(container.textContent).not.toContain('示范填报位置');
   // Reload the saved teaching and binding state, then test the actual page's data/confirmation chain.
   job.config.rules.custom = { rowStep: 1, columnStep: 0 };
   job.config.fields[0].notion = { sourceId: 'source', valueFieldId: 'value', queryMode: 'date', dateFieldId: 'date', period: 'day' };

@@ -353,7 +353,11 @@ class TencentSheetClient {
       if(matches.length===1){config.adapter.nameBox='input:visible >> nth='+matches[0];missing.splice(missing.indexOf('nameBox'),1);}
     }
     const sheets=missing.includes('sheetTabs')?[]:await (config.siteProfile?await site.resolveControl(this.page,config.siteProfile.controls.sheetTab,'sheetTab'):scope.locator(config.adapter.sheetTabs)).allTextContents();
-    return {config,missing,sheets:sheets.map(s=>s.trim()).filter(Boolean),message:missing.length?'还有 '+missing.length+' 项需要点选，请按页面提示完成。':'已识别网页控件。请检查工作表及填报位置。'};
+    if(!missing.includes('activeSheet') && !config.sheetReferenceName) {
+      const name=(await this.text(await this.one(config,'activeSheet'))).trim();
+      Object.assign(config,core.sheetBinding(name),{sheetReferenceName:name,capturedSheet:name});
+    }
+    return {config,missing,sheets:sheets.map(s=>s.trim()).filter(Boolean),message:missing.length?'还有 '+missing.length+' 项需要点选，请按页面提示完成。':'已识别网页控件和工作表名称；填报时按业务日期匹配月份。'};
   }
   async discover(config) {
     this.requirePage(config);
