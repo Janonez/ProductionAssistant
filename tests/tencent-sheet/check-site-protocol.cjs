@@ -10,7 +10,7 @@ const controls={
 const config={documentUrl:'https://docs.qq.com/sheet/test'};
 TencentDocsBrowser.prototype.requirePage=()=>{};
 site.assertNoLogin=async()=>{};
-site.resolveControl=async()=>({});
+site.waitForControl=async()=>({});
 site.testControls=async()=>[{label:'fixture'}];
 async function main(){
   await assert.rejects(dispatch({operation:'siteSave',config,controls,token:'invented'}),/测试已失效/);

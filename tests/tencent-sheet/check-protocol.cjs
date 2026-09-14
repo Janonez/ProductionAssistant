@@ -25,6 +25,7 @@ async function main() {
   let selected={sheet:'下料、装焊（26年9月）',address:'C4',value:''};
   const cells={A4:'2026/9/1',A5:'2026/9/2',A6:'2026/9/3',C2:'下料量'};
   TencentSheetClient.prototype.ready=async()=>{};
+  TencentSheetClient.prototype.selectSheet=async(_,sheet)=>{selected.sheet=sheet;};
   TencentSheetClient.prototype.one=async()=>({});
   TencentSheetClient.prototype.text=async()=>selected.sheet;
   TencentSheetClient.prototype.captureSelection=async(_,sheet)=>{if(sheet!==selected.sheet)throw Error('工作表发生变化');return {...selected};};

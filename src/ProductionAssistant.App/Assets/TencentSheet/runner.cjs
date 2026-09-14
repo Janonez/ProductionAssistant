@@ -33,8 +33,8 @@ async function teach(request,config) {
     if(!core.fieldKeys(config).includes(request.metric))throw Error('请选择要示范的业务字段');
     const first=core.dateParts(request.firstDate),second=core.dateParts(request.secondDate);
     if(first.monthKey!==second.monthKey||second.day<=first.day)throw Error('请选择同一个月的两个日期，第二个日期须晚于第一个');
-    await client.ready(config);
     if(config.sheetReferenceName)await client.selectSheet(config,core.sheetName(config,request.firstDate));
+    else await client.ready(config);
     const sheet=await client.text(await client.one(config,'activeSheet'));
     const binding=core.sheetBinding(sheet), candidate={...config,...binding,capturedSheet:sheet,sheetReferenceName:sheet};
     if(core.sheetName(candidate,request.firstDate)!==sheet)
@@ -91,7 +91,7 @@ async function dispatch(request) {
       browser.requirePage(config);
       if(!tested || tested.token!==request.token || tested.proof!==proof() || tested.expires<Date.now())throw Error('控件测试已失效，请重新测试后保存。');
       await site.assertNoLogin(browser.page);
-      for(const key of ['sheetTab','cellAddressBox','cellEditor'])await site.resolveControl(browser.page,controls[key],key);
+      for(const key of ['sheetTab','cellAddressBox','cellEditor'])await site.waitForControl(browser.page,controls[key],key,config.timeout*1000,{active:key==='sheetTab'});
       return {controls,message:'控件测试通过，可以保存。'};
     }
     if(operation==='siteOpen')return browser.open(config);

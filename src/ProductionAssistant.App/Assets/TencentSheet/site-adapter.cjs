@@ -40,30 +40,34 @@ async function resolveControl(page, binding, key, active = false, collectionOnly
   if (!binding) throw Error('尚未录制'+controlNames[key]+'，请先录制网页控件。');
   const scope = scopeFor(page,binding.frame);
   const reasons=new Set();
+  let ambiguous=false;
   for (const strategy of binding.strategies) {
     try {
       if (key === 'sheetTab') {
         const parent = scope.locator(strategy.parentSelector);
-        if (await parent.count() !== 1 || !await parent.isVisible()) continue;
+        const parents=await parent.count();
+        if(parents!==1){ambiguous ||= parents>1;reasons.add(parents?'匹配到了多个标签容器':'标签容器尚未出现');continue;}
+        if(!await parent.isVisible()){reasons.add('标签容器尚不可见');continue;}
         const items = parent.locator(strategy.itemSelector).filter({visible:true});
-        if (!await items.count()) continue;
+        if (!await items.count()) {reasons.add('集合中尚无可见标签');continue;}
         if(collectionOnly)return items;
         let selected;
         if(strategy.selectedStyle) {
           const matches=await items.evaluateAll((elements,rule)=>elements.map((el,index)=>({index,match:(rule.selector===':scope'?[el]:[...el.querySelectorAll(rule.selector)]).some(node=>getComputedStyle(node)[rule.property]===rule.value)})).filter(item=>item.match).map(item=>item.index),strategy.selectedStyle);
-          if(matches.length!==1)continue;
+          if(matches.length!==1){ambiguous ||= matches.length>1;reasons.add(matches.length?'选中状态匹配多个标签':'选中状态尚未匹配任何标签');continue;}
           selected=items.nth(matches[0]);
         } else {
-          if(!strategy.selectedSelector)continue;
+          if(!strategy.selectedSelector){reasons.add('尚未配置选中状态规则');continue;}
           selected=items.and(parent.locator(strategy.selectedSelector));
         }
-        if (await selected.count() !== 1) continue;
+        const selectedCount=await selected.count();
+        if(selectedCount!==1){ambiguous ||= selectedCount>1;reasons.add(selectedCount?'选中状态匹配多个标签':'选中状态尚未匹配任何标签');continue;}
         return active ? selected : items;
       }
       const locator = (strategy.type === 'role' ? scope.getByRole(strategy.value,{name:strategy.name,exact:true})
         : strategy.type === 'placeholder' ? scope.getByPlaceholder(strategy.value,{exact:true}) : scope.locator(strategy.value)).filter({visible:true});
       const count=await locator.count();
-      if (count !== 1) {reasons.add(count?'匹配到了多个可见控件':'尚未出现可见控件');continue;}
+      if (count !== 1) {ambiguous ||= count>1;reasons.add(count?'匹配到了多个可见控件':'尚未出现可见控件');continue;}
       if (!await locator.evaluate((el,selector)=>el.matches(selector) && !el.disabled && !el.readOnly && el.getAttribute('aria-readonly')!=='true',editable)) {reasons.add('控件尚不可编辑');continue;}
       const address = await locator.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
       if(key==='cellAddressBox' && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(String(address).trim())) {reasons.add('名称框尚未显示有效单元格地址');continue;}
@@ -73,17 +77,31 @@ async function resolveControl(page, binding, key, active = false, collectionOnly
   const error=Error(controlNames[key]+'定位失败，请重新录制对应网页控件。');
   error.code='ControlUnavailable';
   error.reason=[...reasons].join('；');
+  error.ambiguous=ambiguous;
   throw error;
 }
 
 // Read-only readiness probes. Never retry navigation, typing or submission here.
-async function waitForControl(page, binding, key, timeout) {
+async function waitForControl(page, binding, key, timeout, {active=false,collectionOnly=false,text} = {}) {
   const deadline=Date.now()+timeout;
   let last;
   do {
     if(page.isClosed())throw Error('专用浏览器已关闭，操作已中断。');
     await assertNoLogin(page);
-    try {return await resolveControl(page,binding,key);}
+    try {
+      let locator=await resolveControl(page,binding,key,active,collectionOnly);
+      if(text!==undefined) {
+        if(collectionOnly) {
+          const exact=new RegExp('^'+text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$');
+          locator=locator.filter({hasText:exact});
+          const count=await locator.count();
+          if(count!==1)throw Object.assign(Error(),{code:'ControlUnavailable',reason:count?'目标工作表名称不唯一：'+text:'目标工作表尚未出现：'+text});
+        } else if((await locator.innerText()).trim()!==text) {
+          throw Object.assign(Error(),{code:'ControlUnavailable',reason:'尚未切换到目标工作表：'+text});
+        }
+      }
+      return locator;
+    }
     catch(error) {if(error.code!=='ControlUnavailable')throw error;last=error;}
     await page.waitForTimeout(Math.min(100,Math.max(0,deadline-Date.now())));
   } while(Date.now()<deadline);
@@ -240,7 +258,7 @@ async function assertNoLogin(page) {
 }
 
 async function learnSelection(page, binding, timeout) {
-  const tabs=await resolveControl(page,binding,'sheetTab',false,true);
+  const tabs=await waitForControl(page,binding,'sheetTab',timeout,{collectionOnly:true});
   const names=(await tabs.allTextContents()).map(text=>text.trim());
   const first=names.indexOf(binding.sampleText),second=names.findIndex((name,index)=>index!==first && name && names.filter(value=>value===name).length===1);
   if(first<0 || names.filter(value=>value===binding.sampleText).length!==1 || second<0)throw Error('标签集合已找到，但需要两个名称不同且唯一的可见标签才能学习选中状态。');
@@ -314,22 +332,20 @@ async function learnSelection(page, binding, timeout) {
   if(!candidates.length)throw Error('未发现能随 Sheet 来回切换的选中状态，未保存控件；请检查网页当前工作表后重试测试。');
   const learned=JSON.parse(candidates[0]);
   for(const strategy of binding.strategies) {delete strategy.selectedStyle;strategy.selectedSelector=learned.selectedSelector || '';if(learned.selectedStyle)strategy.selectedStyle=learned.selectedStyle;}
-  const active=await resolveControl(page,binding,'sheetTab',true);
-  if((await active.innerText()).trim()!==binding.sampleText)throw Error('未确认切回录制标签，未保存控件；请检查网页当前工作表。');
+  await waitForControl(page,binding,'sheetTab',timeout,{active:true,text:binding.sampleText});
 }
 
 async function testControls(page, controls, timeout = 10000) {
   const steps=[];
   await assertNoLogin(page);
   await learnSelection(page,controls.sheetTab,timeout);
-  const tabs=await resolveControl(page,controls.sheetTab,'sheetTab');
+  const tabs=await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{collectionOnly:true});
   steps.push({label:'找到 Sheet 标签集合',detail:`${await tabs.count()} 个标签`});
   const sample=controls.sheetTab.sampleText;
   const target=tabs.filter({hasText:new RegExp('^'+sample.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$')});
   if(!sample || await target.count()!==1)throw Error('录制的 Sheet 标签未找到或不唯一，请重新录制一个 Sheet 标签。');
   await assertNoLogin(page);
-  const active=await resolveControl(page,controls.sheetTab,'sheetTab',true);
-  if((await active.innerText()).trim()!==sample)throw Error('Sheet 切换后选中状态不一致，请重新录制 Sheet 标签。');
+  await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{active:true,text:sample});
   steps.push({label:'按名称找到并切换工作表',detail:sample});
   const name=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
   steps.push({label:'找到单元格名称框',detail:'唯一可编辑控件'});

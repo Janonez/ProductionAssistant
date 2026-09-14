@@ -37,9 +37,7 @@ class TencentSheetClient {
   }
   async one(config, key) {
     const role={nameBox:'cellAddressBox',activeSheet:'sheetTab',valueBox:'cellEditor'}[key];
-    return key==='activeSheet'
-      ? site.resolveControl(this.page,config.webControls?.[role],role,true)
-      : site.waitForControl(this.page,config.webControls?.[role],role,config.timeout*1000);
+    return site.waitForControl(this.page,config.webControls?.[role],role,config.timeout*1000,{active:key==='activeSheet'});
   }
   async control(config,key) {
     let locator=await this.one(config,key);
@@ -60,32 +58,30 @@ class TencentSheetClient {
   async ready(config) {
     this.requirePage(config);
     await site.assertNoLogin(this.page);
-    await this.control(config,'nameBox');
-    await this.control(config,'valueBox');
+    const deadline=Date.now()+config.timeout*1000;
+    for(const key of ['nameBox','valueBox'])await this.control({...config,timeout:Math.max(0,deadline-Date.now())/1000},key);
     return {message:'网页编辑控件可用；尚未校验目标工作表与单元格。'};
   }
   async selectSheet(config, sheet) {
-    await this.ready(config);
-    let active = await this.one(config,'activeSheet');
-    if (await this.text(active) !== sheet) {
-      const exact = new RegExp('^'+sheet.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$');
-      const tabs = await site.resolveControl(this.page,config.webControls?.sheetTab,'sheetTab');
-      const tab = tabs.filter({hasText:exact});
-      if (await tab.count() !== 1) throw Error('未找到唯一的月份工作表：'+sheet);
-      await tab.click();
+    this.requirePage(config);
+    const binding=config.webControls?.sheetTab,deadline=Date.now()+config.timeout*1000;
+    const remaining=()=>Math.max(0,deadline-Date.now());
+    try {
+      // The toolbar and active marker may load after the tab collection. Find the
+      // target by name without requiring an already selected sheet or an A1 value.
+      const target=await site.waitForControl(this.page,binding,'sheetTab',remaining(),{collectionOnly:true,text:sheet});
+      let current='';
+      try {current=await this.text(await site.resolveControl(this.page,binding,'sheetTab',true));}
+      catch(error) {
+        if(error.ambiguous){error.message='Sheet 标签状态不唯一：'+error.reason+'。未切换或填写，请检查网页。';throw error;}
+        if(error.code!=='ControlUnavailable')throw error;
+      }
+      if(current!==sheet)await target.click({timeout:Math.max(1,remaining())});
+      await site.waitForControl(this.page,binding,'sheetTab',remaining(),{active:true,text:sheet});
+      await this.ready({...config,timeout:remaining()/1000});
+    } finally {
+      if(this.page && !this.page.isClosed())this.page.setDefaultTimeout(config.timeout*1000);
     }
-    const deadline = Date.now() + config.timeout*1000;
-    while (Date.now() < deadline) {
-      await site.assertNoLogin(this.page);
-      try {
-        // A style-based binding resolves to a particular element. Reacquire it after
-        // every poll so a slow switch cannot leave us watching the previous tab.
-        active = await this.one(config,'activeSheet');
-        if (await this.text(active) === sheet) return;
-      } catch(error) { if(error.code!=='ControlUnavailable')throw error; }
-      await new Promise(resolve => setTimeout(resolve,100));
-    }
-    throw Error('等待工作表切换超时，未确认目标工作表：'+sheet);
   }
   async locate(config, address) {
     a1(address);
@@ -295,7 +291,7 @@ class TencentSheetClient {
       try {await this.one(config,key);} catch {missing.push(key);}
     }
     if(missing.includes('activeSheet'))missing.push('sheetTabs');
-    const sheets=missing.includes('sheetTabs')?[]:await (await site.resolveControl(this.page,config.webControls?.sheetTab,'sheetTab')).allTextContents();
+    const sheets=missing.includes('sheetTabs')?[]:await (await site.waitForControl(this.page,config.webControls?.sheetTab,'sheetTab',config.timeout*1000,{collectionOnly:true})).allTextContents();
     if(!missing.includes('activeSheet') && !config.sheetReferenceName) {
       const name=(await this.text(await this.one(config,'activeSheet'))).trim();
       Object.assign(config,core.sheetBinding(name),{sheetReferenceName:name,capturedSheet:name});
