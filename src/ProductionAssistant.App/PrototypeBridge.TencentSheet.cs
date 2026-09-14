@@ -14,29 +14,15 @@ internal sealed partial class PrototypeBridge
         if (operation == "create")
         {
             var config = new JsonObject { ["documentUrl"] = ReadString(payload, "documentUrl") };
-            config["requireTeaching"] = true;
             config["fields"] = new JsonArray();
             config["rules"] = new JsonObject();
             TencentSheetService.ValidateExecutionRules(config.AsObject());
-            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = TencentSheetConfig.Resolve(config) }, cancellationToken);
+            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = config.DeepClone().AsObject() }, cancellationToken);
             var id = Guid.NewGuid().ToString("N");
-            TencentSheetTaskHandler.Save(new() { ["id"] = id, ["name"] = "腾讯文档生产填报", ["dateMode"] = "previous_day", ["config"] = TencentSheetConfig.Resolve(JsonNode.Parse(validated.GetProperty("config").GetRawText())!) });
+            TencentSheetTaskHandler.Save(new() { ["id"] = id, ["name"] = "腾讯文档填报", ["config"] = JsonNode.Parse(validated.GetProperty("config").GetRawText())! });
             return new { id };
         }
         var job = TencentSheetTaskHandler.Find(ReadString(payload, "id"));
-        if (job["config"]?["fields"] is null)
-        {
-            var original = job["config"]!.AsObject();
-            var fields = new JsonArray();
-            if ((bool?)original["requireTeaching"] != true || original["rules"] is JsonObject { Count: > 0 })
-                foreach (var (key, name) in new[] { ("cutting", "下料量"), ("welding", "装焊量"), ("section", "型材入库量"), ("plate", "板材入库量") })
-                {
-                    if ((bool?)original["requireTeaching"] == true && original["rules"]?[key] is null) continue;
-                    fields.Add(new JsonObject { ["id"] = key, ["name"] = name, ["unit"] = "吨", ["legacyKey"] = key });
-                }
-            original["fields"] = fields;
-            TencentSheetTaskHandler.Save(job);
-        }
         if (operation == "get") return TencentSheetPresentation(job);
         if (operation == "runs") return new { runs = job["runs"] ?? new JsonArray() };
         if (operation == "sources") return new { sources = AppServices.DatabaseProvider.GetSources() };
@@ -79,8 +65,8 @@ internal sealed partial class PrototypeBridge
                     field["notion"] = notion.ValueKind == JsonValueKind.Null ? null : JsonNode.Parse(notion.GetRawText());
                 }
             }
-            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = TencentSheetConfig.Resolve(config) }, cancellationToken);
-            job["config"] = TencentSheetConfig.Resolve(JsonNode.Parse(validated.GetProperty("config").GetRawText())!);
+            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = config.DeepClone().AsObject() }, cancellationToken);
+            job["config"] = JsonNode.Parse(validated.GetProperty("config").GetRawText())!;
             job["validated"] = false;
             TencentSheetTaskHandler.Save(job);
             return TencentSheetPresentation(job);
@@ -90,13 +76,13 @@ internal sealed partial class PrototypeBridge
             var expectedRevision = payload.TryGetProperty("configRevision", out var revision) ? revision.GetInt32() : 0;
             if (expectedRevision != ((int?)job["configRevision"] ?? 0))
                 throw new InvalidOperationException("任务配置已变化，请重新打开后再修改。");
-            var config = TencentSheetConfig.Resolve(job["config"]!);
+            var config = job["config"]!.DeepClone().AsObject();
             // Recording and field flows own controls, positions and data bindings.
             foreach (var key in new[] { "documentUrl", "sheetReferenceName", "businessDateRule", "executionSchedule" })
                 if (payload.GetProperty("config").TryGetProperty(key, out var value)) config[key] = JsonNode.Parse(value.GetRawText());
             TencentSheetService.ValidateExecutionRules(config);
             var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = config }, cancellationToken);
-            job["config"] = TencentSheetConfig.Resolve(JsonNode.Parse(validated.GetProperty("config").GetRawText())!);
+            job["config"] = JsonNode.Parse(validated.GetProperty("config").GetRawText())!;
             job["validated"] = false;
             TencentSheetTaskHandler.Save(job);
             return TencentSheetPresentation(job);
@@ -105,10 +91,9 @@ internal sealed partial class PrototypeBridge
         var manualText = ReadString(payload, "businessDate");
         if (!string.IsNullOrEmpty(manualText) && !DateOnly.TryParseExact(manualText, "yyyy-MM-dd", out _))
             throw new InvalidOperationException("请选择有效的业务日期。");
-        var date = TencentSheetService.ResolveBusinessDate(startedAt, job["config"]!.AsObject(), (string?)job["dateMode"] ?? "previous_day",
+        var date = TencentSheetService.ResolveBusinessDate(startedAt, job["config"]!.AsObject(),
             string.IsNullOrEmpty(manualText) ? null : DateOnly.ParseExact(manualText, "yyyy-MM-dd"));
-        if (operation == "fetch") return await AppServices.TencentNotion.FetchAsync((string)job["id"]!, job["config"]!.AsObject(), date,
-            payload.TryGetProperty("values", out var manualValues) ? JsonNode.Parse(manualValues.GetRawText())?.AsObject() : null, cancellationToken);
+        if (operation == "fetch") return await AppServices.TencentNotion.FetchAsync((string)job["id"]!, job["config"]!.AsObject(), date, cancellationToken);
         if (operation == "backgroundTest")
         {
             job["manualDate"] = date.ToString("yyyy-MM-dd");
@@ -117,9 +102,7 @@ internal sealed partial class PrototypeBridge
             return new { message = result.Message };
         }
         var executionValues = operation is "write" or "inspect"
-            ? TencentSheetNotionService.RequiresFetch(job["config"]!.AsObject())
-                ? AppServices.TencentNotion.RequireValues((string)job["id"]!, job["config"]!.AsObject(), date, ReadString(payload, "dataToken"))
-                : payload.TryGetProperty("values", out var inputValues) ? JsonNode.Parse(inputValues.GetRawText()) : null
+            ? AppServices.TencentNotion.RequireValues((string)job["id"]!, job["config"]!.AsObject(), date, ReadString(payload, "dataToken"))
             : null;
         if (operation == "write")
         {
@@ -132,7 +115,7 @@ internal sealed partial class PrototypeBridge
             if (!result.Succeeded) throw new InvalidOperationException(result.Message);
             return new { message = result.Message };
         }
-        var request = new JsonObject { ["operation"] = operation, ["jobId"] = (string)job["id"]!, ["config"] = TencentSheetConfig.Resolve(job["config"]!), ["date"] = date.ToString("yyyy-MM-dd") };
+        var request = new JsonObject { ["operation"] = operation, ["jobId"] = (string)job["id"]!, ["config"] = job["config"]!.DeepClone().AsObject(), ["date"] = date.ToString("yyyy-MM-dd") };
         if (executionValues is not null) request["values"] = executionValues.DeepClone();
         if (operation == "teach")
         {
@@ -141,7 +124,7 @@ internal sealed partial class PrototypeBridge
                 request[key] = ReadString(payload, key);
         }
         var response = await handler.Service.CallAsync(request, cancellationToken);
-        if (response.TryGetProperty("config", out var updated)) { job["config"] = TencentSheetConfig.Resolve(JsonNode.Parse(updated.GetRawText())!); job["validated"] = false; TencentSheetTaskHandler.Save(job); }
+        if (response.TryGetProperty("config", out var updated)) { job["config"] = JsonNode.Parse(updated.GetRawText())!; job["validated"] = false; TencentSheetTaskHandler.Save(job); }
         if (operation == "inspect") { job["validated"] = response.GetProperty("prewriteVerified").GetBoolean(); TencentSheetTaskHandler.Save(job); }
         return response;
     }
@@ -149,9 +132,8 @@ internal sealed partial class PrototypeBridge
     private static JsonObject TencentSheetPresentation(JsonObject job)
     {
         var result = job.DeepClone().AsObject();
-        result["config"] = TencentSheetConfig.Resolve(job["config"]!);
-        result["businessDate"] = TencentSheetService.ResolveBusinessDate(DateTimeOffset.Now, job["config"]!.AsObject(),
-            (string?)job["dateMode"] ?? "previous_day").ToString("yyyy-MM-dd");
+        result["config"] = job["config"]!.DeepClone().AsObject();
+        result["businessDate"] = TencentSheetService.ResolveBusinessDate(DateTimeOffset.Now, job["config"]!.AsObject()).ToString("yyyy-MM-dd");
         return result;
     }
 }

@@ -3,7 +3,7 @@ import { invoke } from "./bridge";
 import { ChoicePicker } from "./FormPickers";
 
 export type NotionBinding = { sourceId: string; valueFieldId: string; queryMode: "date" | "view"; dateFieldId: string; datasetId: string; period: string; sourceName?: string; valueFieldName?: string; datasetName?: string };
-export type BusinessField = { id: string; name: string; unit: string; legacyKey?: string; notion?: NotionBinding };
+export type BusinessField = { id: string; name: string; unit: string; notion?: NotionBinding };
 type Option = { id: string; name: string; type?: string };
 
 export function TencentNotionBinding({ id, field, disabled, continueToTeaching = false, onSave, onCancel }: {

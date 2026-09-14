@@ -45,7 +45,7 @@
 
 ## 定时与记录
 
-- 前台手动、后台自动测试、Windows 定时共用 Handler 和写入路径。后台要求每个字段都有完整 Notion 绑定，不把手动测试数值保存为无人值守输入。
+- 前台手动、后台自动测试、Windows 定时共用 Handler 和写入路径。所有执行均要求每个字段都有完整 Notion 绑定及位置示范，数值仅来自本次取数快照。
 - Windows 任务名含 Development，命令显式传环境、任务类型和任务 id。采用当前用户 InteractiveToken、有限权限、IgnoreNew；须电脑开机且 Windows 用户已登录。不开机补跑、不设置自动重试。
 - 每个执行时刻使用一个每周 CalendarTrigger，星期与时间可组合。默认 Development 的 `Scheduler.Enabled=false`；只有环境开放且当前配置后台测试成功后，任务开关才允许启用，启用不会立即执行。
 - 后台取数前保存 `phase=fetch` 记录；任何实际文档填写前保存 `phase=write` 记录。已写入或可能已写入的同一业务日期阻止定时再次执行；仅取数/检查失败允许下一个正常时刻重试。没有阶段信息的旧失败记录保守视作待确认。
@@ -53,18 +53,17 @@
 - 跨进程执行锁避免并行填报，浏览器操作有独立锁。存储写入使用互斥与原子替换，保留运行记录；`configRevision` 阻止旧异步操作覆盖新配置。前端保存携带读取时的修订号。
 - 已启用时先停用再修改配置。停用先保存禁用状态再移除系统任务；移除失败仍阻止后续实际执行。
 
-## 旧配置兼容
+## 配置重置（2026-09-14）
 
-- `TencentSheetConfig.Resolve` 是唯一旧适配引用迁移边界：只读 `tencent-site-profiles.json`，把原引用的控件复制到任务的 `webControls`。保存后的配置不再带 `siteProfileId`，任务之间互不影响。旧文件不删除。
-- 旧共享引用丢失时返回待录制的空控件，不降级到无关的旧定位；业务字段和位置仍保留，可以重新录制。
-- 更早的 `adapter` 字符串定位以及明确使用 `legacyKey` 的四类业务仍可执行。固定行列/公司/园区/旧锚点仅用于这条兼容路径，不再提供旧点选器或自动探测入口。
-- `dateMode` 仅用于旧日期配置；新配置使用 `businessDateRule`。缺少字段列表的旧任务继续保留原字段身份。
+按用户要求，删除旧设计及全部兼容路径。仅支持任务内 `webControls`、自定义 `fields/rules` 和 `businessDateRule`；不迁移共享适配库，不读取旧选择器、固定四项业务、行列默认值或 `dateMode`，不提供手动数值输入。
+
+Development 的腾讯文档任务配置及其中的运行记录清空，旧共享控件库删除；重新创建任务、录制控件并配置业务。专用浏览器登录状态保留，其他模块数据不受影响。
 
 ## 验证
 
 - .NET：配置隔离、修订保护、日期边界、Notion 查询/汇总、定时 XML、失败阶段与去重判定。
 - 前端：同级板块、任务内录制、测试后保存、切换任务清空旧状态、前台/后台入口。
-- `tests/tencent-sheet/check-rules.cjs`：规则推导、年月边界、空白新任务与旧规则兼容。
+- `tests/tencent-sheet/check-rules.cjs`：规则推导、年月边界、空白新任务、必需的位置规则。
 - `check-protocol.cjs`、`check-site-protocol.cjs`、`check-background.cjs`：任务绑定、一次性凭据、后台冲突/失败不重复写。
 - `check-site-adapter.cjs`、`check-browser.cjs`：localhost 无头表格验证真实 DOM 录制、定位、输入与刷新确认。
 - `check-ui.cjs`：正式 React 页面配模拟桥接验证完整操作及 1100px 布局。

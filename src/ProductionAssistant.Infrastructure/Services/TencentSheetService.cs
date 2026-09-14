@@ -78,15 +78,9 @@ public sealed class TencentSheetService
         _worker.BeginErrorReadLine();
     }
 
-    public static DateOnly ResolveBusinessDate(DateTimeOffset startedAt, string mode, DateOnly? manualDate = null)
-    {
-        if (manualDate is not null) return manualDate.Value;
-        var today = DateOnly.FromDateTime(startedAt.ToOffset(TimeSpan.FromHours(8)).DateTime);
-        return mode switch { "previous_day" => today.AddDays(-1), "today" => today, _ => throw new InvalidOperationException("业务日期模式无效。") };
-    }
-
     public static void ValidateExecutionRules(JsonObject config)
     {
+        config["businessDateRule"] ??= new JsonObject { ["kind"] = "relative", ["offsetDays"] = -1 };
         if (config["businessDateRule"] is JsonNode rule)
         {
             if (rule is not JsonObject) throw new InvalidOperationException("业务日期规则无效。");
@@ -116,11 +110,11 @@ public sealed class TencentSheetService
         }
     }
 
-    public static DateOnly ResolveBusinessDate(DateTimeOffset startedAt, JsonObject config, string legacyMode = "previous_day", DateOnly? manualDate = null)
+    public static DateOnly ResolveBusinessDate(DateTimeOffset startedAt, JsonObject config, DateOnly? manualDate = null)
     {
         ValidateExecutionRules(config);
         if (manualDate is not null) return manualDate.Value;
-        if (config["businessDateRule"] is not JsonObject rule) return ResolveBusinessDate(startedAt, legacyMode);
+        var rule = config["businessDateRule"]!.AsObject();
         return (string?)rule["kind"] == "fixed"
             ? DateOnly.ParseExact((string)rule["date"]!, "yyyy-MM-dd")
             : DateOnly.FromDateTime(startedAt.ToOffset(TimeSpan.FromHours(8)).DateTime).AddDays((int)rule["offsetDays"]!);

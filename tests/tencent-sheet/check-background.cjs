@@ -9,7 +9,7 @@ TencentDocsBrowser.prototype.open=async(_,headless)=>{calls.push(['open',headles
 TencentDocsBrowser.prototype.close=async()=>{calls.push(['close']);};
 TencentSheetClient.prototype.inspect=async()=>{calls.push(['inspect']);return {prewriteVerified:!conflict,conflict,rows:[]};};
 TencentSheetClient.prototype.write=async(_,plan,baseline)=>{calls.push(['write',plan.date,plan.rows[0].value]);assert.equal(baseline.prewriteVerified,true);if(failWrite)throw Error('保存待确认');return {message:'已保存'};};
-const request={config:{documentUrl:'https://docs.qq.com/sheet/fixture'},date:'2026-09-09',values:{cutting:1,welding:2,section:3,plate:4}};
+const request={config:require('./fixture-config.cjs')(),date:'2026-09-09',values:{cutting:1,welding:2,section:3,plate:4}};
 async function main(){
   const preview=await dispatch({...request,operation:'inspect'});calls=[];
   await dispatch({...request,operation:'background'});

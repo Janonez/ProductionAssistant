@@ -2,7 +2,7 @@
 const readline=require('node:readline');
 const crypto=require('node:crypto');
 const {TencentDocsBrowser}=require('./browser.cjs');
-const {TencentSheetClient,normalizeAdapter,explainError}=require('./client.cjs');
+const {TencentSheetClient,explainError}=require('./client.cjs');
 const core=require('./core.js');
 const site=require('./site-adapter.cjs');
 const browser=new TencentDocsBrowser(process.argv[2]);
@@ -11,12 +11,10 @@ let confirmation=null;
 let teaching=null;
 let siteValidation=null;
 const signature=(config,plan,jobId)=>JSON.stringify({config,plan,jobId});
-const defaultAnchors={cuttingDate:['{cuttingColumn}2','{date}'],weldingDate:['{weldingColumn}2','{date}'],sectionDate:['{sectionColumn}24','{date}'],plateDate:['{sectionColumn}24','{date}'],cuttingCompany:['C9','{company}'],weldingCompany:['C19','{company}'],park:['B35','{park}'],sectionType:['{sectionColumn}25','型材'],plateType:['{plateColumn}25','板材']};
 function normalize(raw={}) {
   const config=core.validate(raw);
   const url=new URL(config.documentUrl);
   if(url.protocol!=='https:'||!['doc.weixin.qq.com','docs.qq.com'].includes(url.hostname))throw Error('请粘贴腾讯文档或企业微信文档的 HTTPS 分享链接。');
-  config.adapter=normalizeAdapter({dateFormat:'{yyyy}/{M}/{d}',anchors:Object.fromEntries(Object.entries(defaultAnchors).map(([key,[address,expected]])=>[key,{address,expected}])),...raw.adapter},core.usesLegacyPositions(config));
   if(raw.webControls)config.webControls=site.normalizeControls(raw.webControls);
   return config;
 }

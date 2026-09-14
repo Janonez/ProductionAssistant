@@ -7,7 +7,7 @@ namespace ProductionAssistant.Tests;
 public sealed class TencentSheetTests
 {
     [Fact]
-    public void Task_storage_detaches_shared_controls_rejects_stale_changes_and_preserves_history()
+    public void Task_storage_isolates_controls_rejects_stale_changes_and_preserves_history()
     {
         if (!RuntimeEnvironment.Current.IsDevelopment)
         {
@@ -20,18 +20,12 @@ public sealed class TencentSheetTests
         try
         {
             Directory.CreateDirectory(RuntimeEnvironment.DataDirectory);
-            var sharedPath = Path.Combine(RuntimeEnvironment.DataDirectory, "tencent-site-profiles.json");
-            const string shared = """[{"id":"shared","controls":{"cellAddressBox":{"sampleText":"A1"}}}]""";
-            File.WriteAllText(sharedPath, shared);
             foreach (var id in new[] { "one", "two" })
-                TencentSheetTaskHandler.Save(new JsonObject { ["id"] = id, ["config"] = JsonNode.Parse("""{"siteProfileId":"shared","rules":{"field":{"rowStep":1}}}""") });
+                TencentSheetTaskHandler.Save(new JsonObject { ["id"] = id, ["config"] = JsonNode.Parse("""{"webControls":{"cellAddressBox":{"sampleText":"A1"}}}""") });
             var first = TencentSheetTaskHandler.Find("one");
-            first["config"] = TencentSheetConfig.Resolve(first["config"]!);
             first["config"]!["webControls"]!["cellAddressBox"]!["sampleText"] = "B2";
             TencentSheetTaskHandler.Save(first);
-            Assert.Null(TencentSheetTaskHandler.Find("one")["config"]!["siteProfileId"]);
-            Assert.Equal("A1", (string?)TencentSheetConfig.Resolve(TencentSheetTaskHandler.Find("two")["config"]!)["webControls"]?["cellAddressBox"]?["sampleText"]);
-            Assert.Equal(shared, File.ReadAllText(sharedPath));
+            Assert.Equal("A1", (string?)TencentSheetTaskHandler.Find("two")["config"]?["webControls"]?["cellAddressBox"]?["sampleText"]);
             var stale = TencentSheetTaskHandler.Find("one");
             first["config"]!["documentUrl"] = "new-document";
             TencentSheetTaskHandler.Save(first);
@@ -42,8 +36,6 @@ public sealed class TencentSheetTests
             TencentSheetTaskHandler.Save(first, updateRun: true);
             TencentSheetTaskHandler.Save(stale);
             Assert.Equal("成功", (string?)TencentSheetTaskHandler.Find("one")["runs"]?[0]?["status"]);
-            var missing = TencentSheetConfig.Resolve(JsonNode.Parse("""{"siteProfileId":"missing","adapter":{"nameBox":"#unrelated"}}""")!);
-            Assert.Empty(missing["webControls"]!.AsObject());
         }
         finally
         {
@@ -92,8 +84,6 @@ public sealed class TencentSheetTests
         TencentSheetTaskHandler.ValidateBackgroundConfig(config);
         config["rules"] = new JsonObject();
         Assert.Throws<InvalidOperationException>(() => TencentSheetTaskHandler.ValidateBackgroundConfig(config));
-        config["fields"]![0]!["legacyKey"] = "cutting";
-        TencentSheetTaskHandler.ValidateBackgroundConfig(config);
         config["fields"]![0]!["notion"] = null;
         Assert.Throws<InvalidOperationException>(() => TencentSheetTaskHandler.ValidateBackgroundConfig(config));
         config["fields"] = new JsonArray();
@@ -130,41 +120,4 @@ public sealed class TencentSheetTests
     public void Invalid_or_duplicate_execution_options_are_rejected(string json) =>
         Assert.Throws<InvalidOperationException>(() => TencentSheetService.ValidateExecutionRules(JsonNode.Parse(json)!.AsObject()));
 
-    [Theory]
-    [InlineData("2026-09-08T15:59:59Z", "previous_day", "2026-09-07")]
-    [InlineData("2026-09-08T16:00:00Z", "previous_day", "2026-09-08")]
-    [InlineData("2026-01-01T00:00:00+08:00", "previous_day", "2025-12-31")]
-    [InlineData("2024-03-01T00:00:00+08:00", "previous_day", "2024-02-29")]
-    [InlineData("2026-09-08T16:00:00Z", "today", "2026-09-09")]
-    public void Business_date_uses_China_calendar(string started, string mode, string expected) =>
-        Assert.Equal(DateOnly.Parse(expected), TencentSheetService.ResolveBusinessDate(DateTimeOffset.Parse(started), mode));
-
-    [Fact]
-    public void Manual_date_is_frozen_and_invalid_modes_fail()
-    {
-        var started = DateTimeOffset.Parse("2026-09-09T00:00:00+08:00");
-        var manual = new DateOnly(2026, 8, 31);
-        Assert.Equal(manual, TencentSheetService.ResolveBusinessDate(started, "previous_day", manual));
-        Assert.Throws<InvalidOperationException>(() => TencentSheetService.ResolveBusinessDate(started, "invalid"));
-    }
-
-    [Fact]
-    public void Task_owns_controls_without_shared_references_and_keeps_business_rules_and_legacy_selectors()
-    {
-        var config = JsonNode.Parse("""
-            {"siteProfileId":"shared","documentUrl":"https://docs.qq.com/sheet/document",
-             "webControls":{"cellAddressBox":{"sampleText":"A1"}},"siteProfile":{"name":"untrusted snapshot"},"rules":{"cutting":{"rowStep":3}}}
-            """)!;
-        var stored = TencentSheetConfig.Resolve(config);
-        Assert.Null(stored["siteProfileId"]);
-        Assert.Null(stored["siteProfile"]);
-        Assert.Equal(3, (int?)stored["rules"]?["cutting"]?["rowStep"]);
-        Assert.NotNull(config["siteProfile"]);
-        stored["webControls"]!["cellAddressBox"]!["sampleText"] = "B2";
-        Assert.Equal("A1", (string?)config["webControls"]?["cellAddressBox"]?["sampleText"]);
-        var legacy = JsonNode.Parse("""{"adapter":{"nameBox":"#legacy"},"siteProfile":{"name":"ignored"}}""")!;
-        var resolved = TencentSheetConfig.Resolve(legacy);
-        Assert.Null(resolved["siteProfile"]);
-        Assert.Equal("#legacy", (string?)resolved["adapter"]?["nameBox"]);
-    }
 }

@@ -17,43 +17,6 @@ function explainError(error) {
   return {error:message,details:details || (message!==original?original:''),field:error.field||null,code:error.code||null};
 }
 
-const anchorSpecs = [
-  ['cuttingDate','下料日期','{date}'], ['weldingDate','装焊日期','{date}'],
-  ['sectionDate','型材日期','{date}'], ['plateDate','板材日期','{date}'],
-  ['cuttingCompany','下料公司','{company}'], ['weldingCompany','装焊公司','{company}'],
-  ['park','入库园区','{park}'], ['sectionType','型材表头','型材'], ['plateType','板材表头','板材']
-];
-const adapterDefaults = {
-  frame: '', nameBox: '', valueBox: '', sheetTabs: '', activeSheet: '', ready: '', saved: '',
-  dateFormat: '{yyyy}年{M}月{d}日', stateMode:'auto',
-  anchors: Object.fromEntries(anchorSpecs.map(([key,,expected]) => [key,{address:'',expected}]))
-};
-function normalizeAdapter(raw = {}, legacy = true) {
-  const result = {};
-  result.stateMode=raw.stateMode ?? 'auto';
-  if(!['auto','selectors'].includes(result.stateMode))throw Error('请选择有效的页面状态判断方式');
-  for (const key of ['frame','nameBox','valueBox','sheetTabs','activeSheet','ready','saved','dateFormat']) {
-    const value = raw[key] ?? adapterDefaults[key];
-    if (typeof value !== 'string' || value.length > 1000) throw fieldError(key,'网页配置格式无效：'+fieldLabels[key]);
-    result[key] = value.trim();
-  }
-  result.anchors = {};
-  for (const [key,,expected] of legacy ? anchorSpecs : []) {
-    const item = raw.anchors?.[key] ?? {address:'',expected};
-    if (typeof item.address !== 'string' || typeof item.expected !== 'string' || item.address.length > 150 || item.expected.length > 300) throw Error('校验格配置无效：'+key);
-    result.anchors[key] = {address:item.address.trim(),expected:item.expected.trim()};
-  }
-  return result;
-}
-function expand(value, config, plan) {
-  const [year,month,day] = plan.date.split('-');
-  const tokens = {yyyy:year,yy:year.slice(-2),M:String(Number(month)),MM:month,d:String(Number(day)),dd:day,company:config.company,park:config.park};
-  tokens.date = config.adapter.dateFormat.replace(/\{([^}]+)\}/g, (_,k) => tokens[k] ?? '{'+k+'}');
-  for (const row of plan.rows) tokens[row.key+'Column'] = row.address.replace(/\d+$/, '');
-  const result = value.replace(/\{([^}]+)\}/g, (_,k) => tokens[k] ?? '{'+k+'}');
-  if (/[{}]/.test(result)) throw Error('校验格包含不支持的占位符：'+result);
-  return result;
-}
 function a1(value) {
   const match = /^([A-Z]{1,3})([1-9]\d{0,6})$/.exec(value);
   if (!match || Number(match[2]) > 1048576) throw Error('请输入单个 A1 地址，例如 J9');
@@ -70,25 +33,11 @@ class TencentSheetClient {
   get page(){return this.browser.page;}
   requirePage(config){this.browser.requirePage(config);}
   scope(config) {
-    if(config.webControls)return (config.webControls.cellAddressBox?.frame || []).reduce((scope,selector)=>scope.frameLocator(selector),this.page);
-    return config.adapter.frame ? this.page.frameLocator(config.adapter.frame) : this.page;
+    return (config.webControls?.cellAddressBox?.frame || []).reduce((scope,selector)=>scope.frameLocator(selector),this.page);
   }
   async one(config, key) {
-    if(config.webControls && ['nameBox','activeSheet','valueBox'].includes(key)) {
-      const role={nameBox:'cellAddressBox',activeSheet:'sheetTab',valueBox:'cellEditor'}[key];
-      return site.resolveControl(this.page,config.webControls[role],role,key==='activeSheet');
-    }
-    const label=fieldLabels[key];
-    if (!config.adapter[key]) throw fieldError(key,'尚未设置「'+label+'」。请在“网页控件”中点选对应位置。');
-    const locator = this.scope(config).locator(config.adapter[key]);
-    try {
-      await locator.first().waitFor({state:'visible'});
-      if (await locator.count() !== 1) throw fieldError(key,'「'+label+'」匹配到了多个元素，请重新选取唯一的目标控件。');
-    } catch(error) {
-      if(error.field)throw error;
-      throw fieldError(key,'未找到可见的「'+label+'」。请确认网页已打开、相关区域已展开，并检查该项设置。',error.message);
-    }
-    return locator;
+    const role={nameBox:'cellAddressBox',activeSheet:'sheetTab',valueBox:'cellEditor'}[key];
+    return site.resolveControl(this.page,config.webControls?.[role],role,key==='activeSheet');
   }
   async control(config,key) {
     let locator=await this.one(config,key);
@@ -109,7 +58,6 @@ class TencentSheetClient {
   async ready(config) {
     this.requirePage(config);
     await site.assertNoLogin(this.page);
-    if(config.adapter.stateMode==='selectors')await this.one(config,'ready');
     await this.control(config,'nameBox');
     await this.control(config,'valueBox');
     return {message:'网页编辑控件可用；尚未校验目标工作表与单元格。'};
@@ -118,9 +66,8 @@ class TencentSheetClient {
     await this.ready(config);
     let active = await this.one(config,'activeSheet');
     if (await this.text(active) !== sheet) {
-      if (!config.webControls && !config.adapter.sheetTabs) throw Error('请在“网页控件”中点选底部工作表标签');
       const exact = new RegExp('^'+sheet.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$');
-      const tabs = config.webControls ? await site.resolveControl(this.page,config.webControls.sheetTab,'sheetTab') : this.scope(config).locator(config.adapter.sheetTabs);
+      const tabs = await site.resolveControl(this.page,config.webControls?.sheetTab,'sheetTab');
       const tab = tabs.filter({hasText:exact});
       if (await tab.count() !== 1) throw Error('未找到唯一的月份工作表：'+sheet);
       await tab.click();
@@ -207,11 +154,9 @@ class TencentSheetClient {
   }
   async anchors(config, plan) {
     const results = [];
-    const legacyKeys = new Set();
-    const owned = {cutting:['cuttingDate','cuttingCompany'],welding:['weldingDate','weldingCompany'],section:['sectionDate','park','sectionType'],plate:['plateDate','park','plateType']};
     for (const row of plan.rows) {
       const rule=config.rules?.[row.key];
-      if(!rule) {if(!owned[row.key])throw Error(row.label+'尚未示范位置');owned[row.key].forEach(key=>legacyKeys.add(key));continue;}
+      if(!rule)throw Error(row.label+'尚未示范位置');
       for(const check of [
         {label:row.label+'日期',address:core.ruleAddress(rule,plan.date,rule.dateAnchor.address),expected:core.formatDate(plan.date,rule.dateAnchor.format)},
         {label:row.label+'项目标志',...rule.labelAnchor}
@@ -221,19 +166,10 @@ class TencentSheetClient {
         results.push({...check,actual});
       }
     }
-    for (const [key,label] of anchorSpecs.filter(([key])=>legacyKeys.has(key))) {
-      const item = config.adapter.anchors[key];
-      if (!item?.address || !item?.expected) throw Error('请通过“示范填报位置”重新记录：'+label);
-      const address = a1(expand(item.address,config,plan));
-      const expected = expand(item.expected,config,plan);
-      const actual = await this.read(config,address);
-      if (actual !== expected) throw Error(label+'校验失败：'+address+' 期望「'+expected+'」，实际「'+actual+'」；未开始填报');
-      results.push({label,address,expected,actual});
-    }
     return results;
   }
   async inspect(config, plan) {
-    if(config.requireTeaching && core.fieldKeys(config).some(key=>!config.rules?.[key] && !config.fields?.find(field=>field.id===key)?.legacyKey))throw Error('这份新文档尚未完成所有字段的位置示范。请在业务字段与填写位置板块逐项示范。');
+    if(core.fieldKeys(config).some(key=>!config.rules?.[key]))throw Error('这份新文档尚未完成所有字段的位置示范。请在业务字段与填写位置板块逐项示范。');
     await this.selectSheet(config,plan.sheet);
     const anchors = await this.anchors(config,plan), cells = {};
     for (const row of plan.rows) cells[row.address] = await this.read(config,row.address);
@@ -249,7 +185,6 @@ class TencentSheetClient {
     const completed = [];
     let attempted = null;
     try {
-      if (config.adapter.stateMode==='selectors' && !config.adapter.saved) throw fieldError('saved','额外状态检查已启用，请设置「已保存状态标志」，或改用自动检查。');
       const inspection = await this.inspect(config,plan);
       if (inspection.conflict) throw Error('已有值冲突，整批停止');
       if (inspection.rows.some((row,i) => row.current !== baseline.rows[i].current)) throw Error('网页数据在预览后发生变化，请重新检查');
@@ -292,10 +227,6 @@ class TencentSheetClient {
   }
   async saveState(config) {
     const texts=await this.scope(config).locator('[role="status"]:visible,[aria-live="polite"]:visible').allTextContents();
-    if(config.adapter.stateMode==='selectors' && config.adapter.saved) {
-      const saved=this.scope(config).locator(config.adapter.saved);
-      if(await saved.count()===1 && await saved.isVisible())texts.push(await this.text(saved));
-    }
     const text=texts.join(' ');
     if(/保存失败|无法保存|同步失败/.test(text))throw Error('文档提示保存失败，请检查网页；不会重复写入。');
     return /正在保存|保存中|同步中/.test(text)?'saving':/已保存|保存成功|已同步/.test(text)?'saved':'unknown';
@@ -350,15 +281,13 @@ class TencentSheetClient {
   }
   async recognize(config) {
     this.requirePage(config);
-    config.adapter.stateMode='auto';
     await site.assertNoLogin(this.page);
-    const scope=this.scope(config),missing=[];
+    const missing=[];
     for(const key of ['nameBox','valueBox','activeSheet']) {
       try {await this.one(config,key);} catch {missing.push(key);}
     }
-    if(!config.webControls && !config.adapter.sheetTabs)missing.push('sheetTabs');
-    if(config.webControls && missing.includes('activeSheet'))missing.push('sheetTabs');
-    const sheets=missing.includes('sheetTabs')?[]:await (config.webControls?await site.resolveControl(this.page,config.webControls.sheetTab,'sheetTab'):scope.locator(config.adapter.sheetTabs)).allTextContents();
+    if(missing.includes('activeSheet'))missing.push('sheetTabs');
+    const sheets=missing.includes('sheetTabs')?[]:await (await site.resolveControl(this.page,config.webControls?.sheetTab,'sheetTab')).allTextContents();
     if(!missing.includes('activeSheet') && !config.sheetReferenceName) {
       const name=(await this.text(await this.one(config,'activeSheet'))).trim();
       Object.assign(config,core.sheetBinding(name),{sheetReferenceName:name,capturedSheet:name});
@@ -366,4 +295,4 @@ class TencentSheetClient {
     return {config,missing,sheets:sheets.map(s=>s.trim()).filter(Boolean),message:missing.length?'还有 '+missing.length+' 项控件不可用，请在网页控件板块重新录制。':'已识别网页控件和工作表名称；填报时按业务日期匹配月份。'};
   }
 }
-module.exports = {TencentSheetClient,adapterDefaults,anchorSpecs,normalizeAdapter,expand,a1,explainError};
+module.exports = {TencentSheetClient,a1,explainError};

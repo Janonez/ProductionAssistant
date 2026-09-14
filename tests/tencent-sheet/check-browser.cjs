@@ -5,7 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const core = require('../../src/ProductionAssistant.App/Assets/TencentSheet/core.js');
-const {TencentSheetClient,normalizeAdapter} = require('../../src/ProductionAssistant.App/Assets/TencentSheet/client.cjs');
+const {TencentSheetClient} = require('../../src/ProductionAssistant.App/Assets/TencentSheet/client.cjs');
 const {TencentDocsBrowser}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/browser.cjs');
 
 
@@ -45,9 +45,7 @@ async function main() {
   const profile = await fs.mkdtemp(path.resolve(__dirname,'../../artifacts/tencent-integrated-test-'));
   const browser=new TencentDocsBrowser(profile,{headless:true,viewport:{width:1200,height:800}});
   const driver=new TencentSheetClient(browser);
-  const adapter=normalizeAdapter({nameBox:'#name',valueBox:'#value',sheetTabs:'[role=tab]',activeSheet:'[aria-selected=true]',ready:'',saved:''});
-  for(const [key,address] of Object.entries({cuttingDate:'J8',weldingDate:'J18',sectionDate:'N34',plateDate:'O34',cuttingCompany:'B9',weldingCompany:'B19',park:'B35',sectionType:'N33',plateType:'O33'}))adapter.anchors[key].address=address;
-  const config={...core.defaults,timeout:15,documentUrl:`http://127.0.0.1:${fixture.address().port}/`,adapter};
+  const config=core.validate({...require('./fixture-config.cjs')(),timeout:15,documentUrl:`http://127.0.0.1:${fixture.address().port}/`});
   const plan=core.plan(config,'2026-09-05',{cutting:0,welding:2,section:3,plate:4});
   try {
     await browser.open(config);
@@ -73,18 +71,9 @@ async function main() {
     await assert.rejects(driver.write(config,plan,inputBaseline),/内容编辑区输入未生效/);
     assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');await driver.page.reload();
     if(process.argv.includes('--location-only'))return;
-    assert.equal(config.adapter.stateMode,'auto');
     await driver.ready(config);
-    await driver.ready({...config,adapter:{...adapter,ready:'#obsolete',saved:'#obsolete'}});
-    assert.equal(await (await driver.control({...config,adapter:{...adapter,nameBox:'#nameWrap'}},'nameBox')).getAttribute('id'),'name');
-    await assert.rejects(driver.control({...config,adapter:{...adapter,nameBox:'#ordinary'}},'nameBox'),e=>e.field==='nameBox' && e.message.includes('普通页面区域'));
-    await assert.rejects(driver.ready({...config,adapter:{...adapter,stateMode:'selectors'}}),e=>e.field==='ready' && e.message.includes('编辑状态标志') && !e.message.includes('ready'));
-    const check=await driver.inspect(config,plan);assert.equal(check.anchors.length,9);assert.equal(writes,0);
-    const sharedConfig={...config,webControls:{
-      cellAddressBox:{frame:[],strategies:[{type:'css',value:'#name'}]},
-      cellEditor:{frame:[],strategies:[{type:'css',value:'#value'}]},
-      sheetTab:{frame:[],strategies:[{parentSelector:'body',itemSelector:':scope > [role=tab]',selectedSelector:'[aria-selected=true]'}]}
-    }};
+    const check=await driver.inspect(config,plan);assert.equal(check.anchors.length,8);assert.equal(writes,0);
+    const sharedConfig=config;
     reloadDelay=600;
     const result=await driver.write(sharedConfig,plan,check);assert.equal(result.completed.length,4);assert.equal(writes,4);assert.equal(cells.J9,'0');assert.ok(reloads>=2);
     reloadDelay=0;
@@ -103,12 +92,12 @@ async function main() {
     const conflict=await driver.inspect(config,plan);assert.equal(conflict.conflict,true);
     await assert.rejects(driver.write(config,plan,conflict),/冲突/);assert.equal(writes,4);
     cells.J9='0';cells.B9='别的公司';await driver.page.reload();
-    await assert.rejects(driver.inspect(config,plan),/公司校验失败/);assert.equal(writes,4);
+    await assert.rejects(driver.inspect(config,plan),/项目标志校验失败/);assert.equal(writes,4);
     cells.B9='滨海公司';for(const row of plan.rows)delete cells[row.address];await driver.page.reload();
     const baseline=await driver.inspect(config,plan);failedSave=true;
     await assert.rejects(driver.write(config,plan,baseline),error=>error.code==='SaveConfirmationPending' && error.completed.length===4 && /已填写 4 项/.test(error.message) && /刷新后回读不一致/.test(error.details));assert.equal(writes,8);
     denyEdit=true;await driver.page.reload();await assert.rejects(driver.ready(config));
-    console.log('PASS: actual DOM navigation, 9 anchors, read-only inspect, write and reload verification, occupied-cell rejection, conflict, anchor failure, unsaved data and permission failure');
+    console.log('PASS: actual DOM navigation, 8 anchors, read-only inspect, write and reload verification, occupied-cell rejection, conflict, anchor failure, unsaved data and permission failure');
     failedSave=false;denyEdit=false;for(const row of plan.rows)delete cells[row.address];await driver.page.reload();
     for(let day=1;day<=30;day++)cells['A'+(day+3)]='2026/9/'+day;
     const rules={};
@@ -136,22 +125,14 @@ async function main() {
     await assert.rejects(driver.inspect(learnedConfig,learnedPlan),/日期校验失败/);
     assert.equal(writes,beforeWrites+4);
     cells.A8='2026/9/5';delete cells.C8;await driver.page.reload();
-    const mixedConfig=core.validate({...config,rules:{cutting:rules.cutting}});
-    const mixedPlan=core.plan(mixedConfig,'2026-09-05',{cutting:5,welding:6,section:7,plate:8});
-    assert.deepEqual(mixedPlan.rows.map(row=>row.address),['C8','J19','N35','O35']);
-    const mixedPreview=await driver.inspect(mixedConfig,mixedPlan);
-    await driver.write(mixedConfig,mixedPlan,mixedPreview);
-    assert.equal(cells.C8,'5');assert.equal(cells.J19,'6');assert.equal(cells.N35,'7');assert.equal(cells.O35,'8');
-    assert.equal(writes,beforeWrites+8);
     const customConfig=core.validate({...config,requireTeaching:true,fields:[{id:'quality',name:'合格数量',unit:'件'}],rules:{quality:rules.cutting}});
     const customPlan=core.plan(customConfig,'2026-09-06',{quality:-2.5});
     assert.deepEqual(customPlan.rows.map(row=>row.address),['C9']);
     const customPreview=await driver.inspect(customConfig,customPlan);
     await driver.write(customConfig,customPlan,customPreview);
-    assert.equal(cells.C9,'-2.5');assert.equal(cells.A9,'2026/9/6');assert.equal(writes,beforeWrites+9);
+    assert.equal(cells.C9,'-2.5');assert.equal(cells.A9,'2026/9/6');assert.equal(writes,beforeWrites+5);
     console.log('PASS: single custom field uses learned rule and anchor for leave-and-return verification, preserving signed decimal value');
     console.log('PASS: actual selection capture, third-cell preview, vertical date anchors and four persisted vertical writes');
-    console.log('PASS: learned vertical metric mixed with unchanged legacy horizontal metrics');
 
   } finally {await browser.close();await new Promise(resolve=>fixture.close(resolve));}
 }

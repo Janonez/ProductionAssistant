@@ -90,7 +90,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
     public Task<IReadOnlyList<AutomationTaskSummary>> ListTasksAsync()
     {
         IReadOnlyList<AutomationTaskSummary> tasks = Load().OfType<JsonObject>().Select(job => new AutomationTaskSummary(
-            Type, "腾讯文档填报", (string)job["id"]!, (string)job["name"]!, "业务日期 " + TencentSheetService.ResolveBusinessDate(DateTimeOffset.Now, job["config"]!.AsObject(), (string?)job["dateMode"] ?? "previous_day").ToString("yyyy-MM-dd"), (bool?)job["enabled"] == true, TencentSheetTaskScheduler.IsAvailable || (bool?)job["enabled"] == true,
+            Type, "腾讯文档填报", (string)job["id"]!, (string)job["name"]!, "业务日期 " + TencentSheetService.ResolveBusinessDate(DateTimeOffset.Now, job["config"]!.AsObject()).ToString("yyyy-MM-dd"), (bool?)job["enabled"] == true, TencentSheetTaskScheduler.IsAvailable || (bool?)job["enabled"] == true,
             (bool?)job["validated"] == true ? "checked" : "pending-test", TencentSheetTaskScheduler.IsAvailable ? "后台测试通过后可启用；仅在 Windows 已登录时执行" : "当前环境未开放定时，可前台或后台测试", "腾讯文档",
             (string?)job["lastRun"] ?? "暂无运行记录")).ToArray();
         return Task.FromResult(tasks);
@@ -117,7 +117,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
             if (!TencentSheetTaskScheduler.IsAvailable || (bool?)job["enabled"] != true)
                 return new(false, 1, "定时填报未启用，本次未执行。");
         }
-        var date = TencentSheetService.ResolveBusinessDate(context.StartedAt, job["config"]!.AsObject(), (string?)job["dateMode"] ?? "previous_day",
+        var date = TencentSheetService.ResolveBusinessDate(context.StartedAt, job["config"]!.AsObject(),
             DateOnly.TryParse((string?)job["manualDate"], out var manual) ? manual : null);
         var record = new JsonObject { ["id"] = Guid.NewGuid().ToString("N"), ["time"] = context.StartedAt.ToString("yyyy-MM-dd HH:mm:ss"), ["source"] = context.Trigger, ["businessDate"] = date.ToString("yyyy-MM-dd"), ["phase"] = background ? "fetch" : "check" };
         try
@@ -138,14 +138,14 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
                 record["status"] = "执行中，结果待确认";
                 SaveRun(context.TaskId, record, job["config"]!.AsObject(), background);
                 var data = await (notion ?? throw new InvalidOperationException("Notion 取数服务不可用。"))
-                    .FetchAsync(context.TaskId, job["config"]!.AsObject(), date, null, cancellationToken);
+                    .FetchAsync(context.TaskId, job["config"]!.AsObject(), date, cancellationToken);
                 job["values"] = data.Values.DeepClone();
                 record["data"] = JsonSerializer.SerializeToNode(data.Rows);
             }
-            else if (TencentSheetNotionService.RequiresFetch(job["config"]!.AsObject()))
+            else
                 job["values"] = (notion ?? throw new InvalidOperationException("Notion 取数服务不可用。"))
                     .RequireValues(context.TaskId, job["config"]!.AsObject(), date, (string?)job["dataToken"] ?? "");
-            var resolved = TencentSheetConfig.Resolve(job["config"]!);
+            var resolved = job["config"]!.DeepClone().AsObject();
             record["configSignature"] = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(resolved.ToJsonString())));
             if (context.Trigger == "automatic" && (string?)job["backgroundValidatedConfig"] != (string?)record["configSignature"])
                 throw new InvalidOperationException("取数期间网页适配已变化，本次未填写，请重新后台测试。");
@@ -180,11 +180,11 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
         foreach (var field in fields)
         {
             TencentSheetNotionService.ReadBinding(field?["notion"]);
-            if (field?["legacyKey"] is null && config["rules"]?[(string)field!["id"]!] is null)
+            if (config["rules"]?[(string)field!["id"]!] is null)
                 throw new InvalidOperationException("请完成所有业务字段的位置示范。");
         }
     }
-    public static string ConfigSignature(JsonObject config) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(TencentSheetConfig.Resolve(config).ToJsonString())));
+    public static string ConfigSignature(JsonObject config) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(config.DeepClone().AsObject().ToJsonString())));
 
     public async Task<AutomationTaskToggleResult> SetEnabledAsync(string taskId, bool enabled)
     {

@@ -28,7 +28,7 @@ internal sealed partial class PrototypeBridge
         job = TencentSheetTaskHandler.Find(id);
         if (signature != TencentSheetTaskHandler.ConfigSignature(job["config"]!.AsObject()))
             throw new InvalidOperationException("任务配置已变化，请重新测试网页控件。");
-        job["config"] = TencentSheetConfig.Resolve(job["config"]!);
+        job["config"] = job["config"]!.DeepClone().AsObject();
         job["config"]!["webControls"] = JsonNode.Parse(response.GetProperty("controls").GetRawText());
         job["validated"] = false;
         TencentSheetTaskHandler.Save(job);

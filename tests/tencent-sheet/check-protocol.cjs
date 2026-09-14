@@ -7,8 +7,8 @@ TencentSheetClient.prototype.inspect=async()=>({prewriteVerified:true,rows:[],co
 TencentSheetClient.prototype.write=async()=>{writes++;return {message:'fixture'};};
 async function main() {
   assert.throws(()=>normalize({documentUrl:'https://example.com/'}),/分享链接/);
-  const config=normalize({documentUrl:'https://docs.qq.com/sheet/fixture'});
-  assert.equal(config.adapter.anchors.plateDate.address,'{sectionColumn}24');
+  const config=normalize(require('./fixture-config.cjs')());
+  assert.equal(config.fields.length,4);
   const request={config,date:'2026-09-09',values:{cutting:1,welding:2,section:3,plate:4}};
   await assert.rejects(dispatch({...request,operation:'write',token:'unknown'}),/预览已失效/);
   let preview=await dispatch({...request,operation:'inspect'});

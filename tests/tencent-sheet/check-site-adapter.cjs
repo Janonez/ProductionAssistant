@@ -48,7 +48,7 @@ async function main() {
       const client=new TencentSheetClient({page,requirePage:()=>{}});
       // Filling consumes the recorded collection, never the unrelated role=tab outside its parent.
       client.ready=async()=>{};
-      const config={webControls:profile,adapter:{},timeout:5};
+      const config={webControls:profile,timeout:5};
       await client.selectSheet(config,'项目月报 9月');
       assert.equal((await (await client.one(config,'activeSheet')).innerText()).trim(),'项目月报 9月');
       assert.equal(await page.locator('nav button').getAttribute('aria-selected'),'true');
@@ -92,7 +92,7 @@ async function main() {
     await frame.locator('#address').evaluate(el=>{el.onfocus=()=>{const modal=document.createElement('dialog');modal.textContent='请先登录';document.body.append(modal);modal.showModal();};});
     await assert.rejects(site.testControls(page,profile),error=>error.code==='LoginRequired');
     const client=new TencentSheetClient({page,requirePage:()=>{}});
-    await assert.rejects(client.inspect({requireTeaching:true},{}),/尚未完成/);
+    await assert.rejects(client.inspect({fields:[{id:'missing'}],rules:{}},{}),/尚未完成/);
     console.log('PASS: two unrelated DOM shapes, nested picker clicks, collection scope, dynamic month/reorder, fallback, ambiguity, cancellation, login, J9 navigation without business writes');
   } finally {await browser.close();}
 }

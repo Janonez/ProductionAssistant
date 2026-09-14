@@ -18,7 +18,7 @@ public sealed class TencentSheetNotionTests
         var provider = new Provider();
         var service = new TencentSheetNotionService(provider);
         var config = Config(); var date = new DateOnly(2026, 9, 9);
-        var result = await service.FetchAsync("job", config, date, null);
+        var result = await service.FetchAsync("job", config, date);
         Assert.Equal(5d, (double)result.Values["custom"]!);
         Assert.Equal((new DateOnly(2026, 9, 1), date), provider.Range);
         Assert.Equal(5d, (double)service.RequireValues("job", config, date, result.DataToken)["custom"]!);
@@ -34,7 +34,7 @@ public sealed class TencentSheetNotionTests
         var provider = new Provider(); var service = new TencentSheetNotionService(provider); var config = Config("view");
         var second = config["fields"]![0]!.DeepClone(); second["id"] = "another";
         config["fields"]!.AsArray().Add(second); config["rules"]!["another"] = new JsonObject();
-        var result = await service.FetchAsync("job", config, new(2026, 9, 9), null);
+        var result = await service.FetchAsync("job", config, new(2026, 9, 9));
         Assert.Equal(1, provider.ViewCalls); Assert.Equal(0, provider.RangeCalls);
         Assert.Equal(2, result.Rows.Count); Assert.Contains("真实筛选", result.Rows[0].Period);
     }
@@ -45,9 +45,9 @@ public sealed class TencentSheetNotionTests
     public async Task Empty_or_missing_numeric_data_fails_and_invalidates_previous_snapshot(bool empty)
     {
         var provider = new Provider(); var service = new TencentSheetNotionService(provider); var config = Config(); var date = new DateOnly(2026, 9, 9);
-        var old = await service.FetchAsync("job", config, date, null);
+        var old = await service.FetchAsync("job", config, date);
         provider.Records = empty ? [] : [new("bad", [new("value", "数量", "number", null)])];
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchAsync("job", config, date, null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchAsync("job", config, date));
         Assert.Throws<InvalidOperationException>(() => service.RequireValues("job", config, date, old.DataToken));
     }
 
@@ -56,10 +56,10 @@ public sealed class TencentSheetNotionTests
     {
         var provider = new Provider { Records = [new("zero", [new("value", "数量", "number", 0d)])] };
         var service = new TencentSheetNotionService(provider); var config = Config(); var date = new DateOnly(2026, 9, 9);
-        var result = await service.FetchAsync("job", config, date, new() { ["custom"] = 999 });
+        var result = await service.FetchAsync("job", config, date);
         Assert.Equal(0d, (double)result.Values["custom"]!);
         config["rules"] = new JsonObject();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchAsync("job", config, date, null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchAsync("job", config, date));
     }
 
     private sealed class Provider : IDatabaseQueryProvider

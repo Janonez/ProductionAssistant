@@ -1,10 +1,5 @@
 (function () {
   'use strict';
-  const defaults = {
-    documentUrl: '', sheetPattern: '下料、装焊（{yy}年{M}月）',
-    company: '滨海公司', park: '滨海园区', startColumn: 'F',
-    cuttingRow: 9, weldingRow: 19, inboundRow: 35, timeout: 30
-  };
   function columnNumber(value) {
     if (!/^[A-Z]{1,3}$/.test(value)) throw Error('起始列请填写 A–XFD 的列字母');
     return [...value].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0);
@@ -15,9 +10,7 @@
     while (n) { n--; s = String.fromCharCode(65 + n % 26) + s; n = Math.floor(n / 26); }
     return s;
   }
-  const metricKeys = ['cutting', 'welding', 'section', 'plate'];
-  function usesLegacyPositions(config) { return config.fields === undefined || (Array.isArray(config.fields) && config.fields.some(field => field?.legacyKey)); }
-  function fieldKeys(config) { return config.fields ? config.fields.map(field=>field.id) : metricKeys; }
+  function fieldKeys(config) { return config.fields.map(field=>field.id); }
   function sheetName(config, date) {
     const {year,month}=dateParts(date);
     if(config.sheetMode!=='fixed' && !config.sheetPattern)throw Error('请先识别工作表名称或示范业务位置。');
@@ -97,7 +90,7 @@
       : { sheetMode: 'fixed', sheetName: sheet };
   }
   function validate(config) {
-    const c = { ...(usesLegacyPositions(config) ? defaults : { timeout: 30 }), ...config };
+    const c = { timeout: 30, fields: [], rules: {}, ...config };
     if (c.sheetReferenceName !== undefined) Object.assign(c, sheetBinding(c.sheetReferenceName));
     if (c.documentUrl) {
       const url = new URL(c.documentUrl);
@@ -110,15 +103,6 @@
       if (typeof c.sheetPattern !== 'string' || !c.sheetPattern.includes('{M}') || !/\{yy(?:yy)?\}/.test(c.sheetPattern)) throw Error('工作表名称必须包含 {yy} 或 {yyyy}，以及 {M}');
       if (c.sheetPattern.replace(/\{(?:yyyy|yy|M)\}/g, '').match(/[{}]/)) throw Error('工作表名称存在不支持的占位符');
     }
-    if(usesLegacyPositions(c)) {
-      if (!c.company.trim() || !c.park.trim()) throw Error('请填写公司和园区名称');
-      columnName(columnNumber(c.startColumn));
-      for (const key of ['cuttingRow', 'weldingRow', 'inboundRow']) {
-        if (!Number.isInteger(c[key]) || c[key] < 1 || c[key] > 1048576) throw Error('目标行必须为 1–1048576 的整数');
-      }
-    } else {
-      for(const key of ['company','park','startColumn','cuttingRow','weldingRow','inboundRow'])delete c[key];
-    }
     if (!Number.isInteger(c.timeout) || c.timeout < 5 || c.timeout > 120) throw Error('超时时间须为 5–120 秒的整数');
     if(c.fields!==undefined) {
       if(!Array.isArray(c.fields) || c.fields.length>100)throw Error('业务字段列表无效');
@@ -127,7 +111,6 @@
         if(!field || typeof field.id!=='string' || !/^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/.test(field.id) || ['__proto__','constructor','prototype'].includes(field.id) || ids.has(field.id))throw Error('业务字段标识无效或重复');
         ids.add(field.id);
         if(typeof field.name!=='string' || !field.name.trim() || field.name.length>80 || (field.unit!==undefined && (typeof field.unit!=='string' || field.unit.length>20)))throw Error('请填写有效的业务名称和单位');
-        if(field.legacyKey && (field.legacyKey!==field.id || !metricKeys.includes(field.id)))throw Error('原业务位置引用无效');
       }
     }
     if (c.rules !== undefined) {
@@ -140,27 +123,19 @@
     const c = validate(config);
     const { day, monthKey } = dateParts(date);
     const sheet = sheetName(c,date);
-    const start = usesLegacyPositions(c) ? columnNumber(c.startColumn) : 0;
-    const specs = usesLegacyPositions(c) ? [
-      ['cutting', '下料量', start + day - 1, c.cuttingRow, c.company],
-      ['welding', '装焊量', start + day - 1, c.weldingRow, c.company],
-      ['section', '型材入库量', start + (day - 1) * 2, c.inboundRow, c.park],
-      ['plate', '板材入库量', start + (day - 1) * 2 + 1, c.inboundRow, c.park]
-    ] : [];
-    const definitions=c.fields?c.fields.map(field=>{
-      const legacy=field.legacyKey?specs.find(spec=>spec[0]===field.legacyKey):null;
-      if(!c.rules?.[field.id] && !legacy)throw Error(field.name+'尚未示范填报位置');
-      return [field.id,field.name,legacy?.[2],legacy?.[3],legacy?.[4] || '',field.unit || ''];
-    }):specs;
+    const definitions=c.fields.map(field=>{
+      if(!c.rules[field.id])throw Error(field.name+'尚未示范填报位置');
+      return [field.id,field.name,field.unit || ''];
+    });
     if(!definitions.length)throw Error('请先新增业务字段并录制填报位置');
-    const rows = definitions.map(([key, label, col, row, owner, unit]) => {
+    const rows = definitions.map(([key, label, unit]) => {
       const raw = String(values[key] ?? '').trim();
-      const numeric=c.fields?/^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/:/^(?:\d+\.?\d*|\.\d+)$/;
+      const numeric=/^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
       if (!numeric.test(raw) || !Number.isFinite(Number(raw))) throw Error(label + '必须提供有效数字，空值不会视为 0');
       const rule = c.rules?.[key];
       if (rule && c.sheetMode === 'fixed' && !rule.dateAnchor.format.includes('{yyyy}') && monthKey !== dateParts(rule.samples[0].date).monthKey)
         throw Error(label + '的日期表头不含完整年月，固定工作表跨月前请重新示范并确认');
-      return { key, label, address: rule ? ruleAddress(rule, date) : columnName(col) + row, owner: rule ? rule.labelAnchor.expected : owner, value: Number(raw),unit:unit || '' };
+      return { key, label, address: ruleAddress(rule, date), owner: rule.labelAnchor.expected, value: Number(raw),unit:unit || '' };
     });
     if (new Set(rows.map(r => r.address)).size !== rows.length) throw Error('目标单元格重复，请检查行号配置');
     return { sheet, date, rows };
@@ -176,6 +151,6 @@
       return { ...r, current, action: current === '' ? 'write' : 'conflict' };
     });
   }
-  const api = { defaults, validate, plan, preflight, columnName, cellText, metricKeys, fieldKeys, usesLegacyPositions, sheetName, dateFormats, dateParts, addressParts, inferRule, ruleAddress, prediction, formatDate, normalizeRule, sheetBinding };
+  const api = { validate, plan, preflight, columnName, cellText, fieldKeys, sheetName, dateFormats, dateParts, addressParts, inferRule, ruleAddress, prediction, formatDate, normalizeRule, sheetBinding };
   module.exports = api;
 })();

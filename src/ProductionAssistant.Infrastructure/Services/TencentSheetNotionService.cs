@@ -16,9 +16,6 @@ public sealed class TencentSheetNotionService(IDatabaseQueryProvider provider)
     private readonly ConcurrentDictionary<string, Snapshot> _snapshots = new();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static bool RequiresFetch(JsonObject config) => config["fields"] is JsonArray fields &&
-        fields.Any(field => field?["notion"] is not null || string.IsNullOrEmpty((string?)field?["legacyKey"]));
-
     public static TencentNotionBinding ReadBinding(JsonNode? node)
     {
         var binding = node?.Deserialize<TencentNotionBinding>(JsonOptions)
@@ -31,7 +28,7 @@ public sealed class TencentSheetNotionService(IDatabaseQueryProvider provider)
         return binding;
     }
 
-    public async Task<TencentDataResult> FetchAsync(string jobId, JsonObject config, DateOnly date, JsonObject? manualValues,
+    public async Task<TencentDataResult> FetchAsync(string jobId, JsonObject config, DateOnly date,
         CancellationToken cancellationToken = default)
     {
         _snapshots.TryRemove(jobId, out _);
@@ -46,15 +43,7 @@ public sealed class TencentSheetNotionService(IDatabaseQueryProvider provider)
             var id = (string)field["id"]!;
             var name = (string)field["name"]!;
             var unit = (string?)field["unit"] ?? "";
-            if (field["notion"] is null && field["legacyKey"] is not null)
-            {
-                if (!double.TryParse(manualValues?[id]?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var manual) || !double.IsFinite(manual))
-                    throw new InvalidOperationException($"{name}：原任务手动数值未填写。");
-                values[id] = manual;
-                rows.Add(new(id, name, manual, unit, "原任务手动输入", "本次输入", 0));
-                continue;
-            }
-            if (config["rules"]?[id] is null && field["legacyKey"] is null)
+            if (config["rules"]?[id] is null)
                 throw new InvalidOperationException($"{name}：请先示范填报位置。");
             var binding = ReadBinding(field["notion"]);
             var source = provider.GetSources().FirstOrDefault(source => source.Id == binding.SourceId)

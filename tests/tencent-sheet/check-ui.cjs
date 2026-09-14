@@ -10,7 +10,7 @@ async function main(){
     const page=await browser.newPage({viewport:{width:1200,height:900}});
     await page.addInitScript(()=>{
       let receive;
-      const config={documentUrl:'https://docs.qq.com/sheet/fixture',fields:[],rules:{},requireTeaching:true,sheetPattern:'下料、装焊（{yy}年{M}月）',company:'滨海公司',park:'滨海园区',startColumn:'F',cuttingRow:9,weldingRow:19,inboundRow:35,adapter:{anchors:{}}};
+      const config={documentUrl:'https://docs.qq.com/sheet/fixture',fields:[],rules:{}};
       window.chrome={webview:{addEventListener:(_,fn)=>receive=fn,postMessage:request=>{
         if(!request.id)return;
         let data=request.operation==='automation.list'?{availableTaskTypes:['daily_report','notion_fill','tencent_sheet_fill'],tasks:[{id:'fixture',taskType:'tencent_sheet_fill',taskTypeName:'腾讯文档填报',name:'生产月报填报（本地测试数据）',schedule:'手动测试',isEnabled:false,schedulingAvailable:false,status:'pending-test',connectionStatus:'腾讯文档',lastRun:'暂无运行记录'}]}:request.operation==='tencentSheet.get'?{id:'fixture',config,businessDate:'2026-08-31'}:{};
