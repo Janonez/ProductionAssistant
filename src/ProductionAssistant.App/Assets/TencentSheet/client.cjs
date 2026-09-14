@@ -71,13 +71,19 @@ class TencentSheetClient {
       const tab = tabs.filter({hasText:exact});
       if (await tab.count() !== 1) throw Error('未找到唯一的月份工作表：'+sheet);
       await tab.click();
-      active = await this.one(config,'activeSheet');
     }
     const deadline = Date.now() + config.timeout*1000;
-    while (await this.text(active) !== sheet) {
-      if (Date.now() > deadline) throw Error('当前工作表名称与预期不一致：'+sheet);
+    while (Date.now() < deadline) {
+      await site.assertNoLogin(this.page);
+      try {
+        // A style-based binding resolves to a particular element. Reacquire it after
+        // every poll so a slow switch cannot leave us watching the previous tab.
+        active = await this.one(config,'activeSheet');
+        if (await this.text(active) === sheet) return;
+      } catch(error) { if(error.code!=='ControlUnavailable')throw error; }
       await new Promise(resolve => setTimeout(resolve,100));
     }
+    throw Error('等待工作表切换超时，未确认目标工作表：'+sheet);
   }
   async locate(config, address) {
     a1(address);

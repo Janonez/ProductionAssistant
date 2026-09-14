@@ -220,20 +220,20 @@ async function assertNoLogin(page) {
   }
 }
 
-async function learnSelection(page, binding) {
+async function learnSelection(page, binding, timeout) {
   const tabs=await resolveControl(page,binding,'sheetTab',false,true);
   const names=(await tabs.allTextContents()).map(text=>text.trim());
   const first=names.indexOf(binding.sampleText),second=names.findIndex((name,index)=>index!==first && name && names.filter(value=>value===name).length===1);
   if(first<0 || names.filter(value=>value===binding.sampleText).length!==1 || second<0)throw Error('标签集合已找到，但需要两个名称不同且唯一的可见标签才能学习选中状态。');
-  async function snapshot(index) {
+  const unique=(states,index,key)=>states[index].includes(key) && states.every((keys,i)=>i===index || !keys.includes(key));
+  async function collection() {
     const current=await resolveControl(page,binding,'sheetTab',false,true);
     if(JSON.stringify((await current.allTextContents()).map(text=>text.trim()))!==JSON.stringify(names))throw Error('学习期间标签集合发生变化，请重新测试控件。');
     await assertNoLogin(page);
-    await current.nth(index).click();
-    await current.nth(index).evaluate(el=>el.blur());
-    await page.mouse.move(0,0);
-    await page.waitForTimeout(250);
-    await assertNoLogin(page);
+    return current;
+  }
+  async function snapshot() {
+    const current=await collection();
     return current.evaluateAll(elements=>elements.map(el=>{
       const rules=[];
       for(const node of [el,...el.querySelectorAll('*')].slice(0,25)) {
@@ -247,26 +247,68 @@ async function learnSelection(page, binding) {
       return [...new Set(rules)];
     }));
   }
-  const a=await snapshot(first),b=await snapshot(second),again=await snapshot(first);
-  const unique=(states,index,key)=>states[index].includes(key) && states.every((keys,i)=>i===index || !keys.includes(key));
-  const candidates=a[first].filter(key=>unique(a,first,key) && unique(b,second,key) && unique(again,first,key));
+  // Remove hover/focus before the baseline as well as after each click.
+  await tabs.evaluateAll(elements=>elements.forEach(el=>el.blur()));
+  await page.mouse.move(0,0);
+  const before=await snapshot();
+  const recorded=binding.strategies.map(strategy=>JSON.stringify(strategy.selectedStyle
+    ? {selectedStyle:strategy.selectedStyle} : {selectedSelector:strategy.selectedSelector}));
+  const known=recorded.filter(key=>before.some((_,index)=>unique(before,index,key)));
+  async function select(index, keys, initial=false) {
+    const current=await collection();
+    await current.nth(index).click();
+    await current.nth(index).evaluate(el=>el.blur());
+    await page.mouse.move(0,0);
+    const deadline=Date.now()+timeout;
+    let stableSince=0, previous='', last;
+    while(Date.now()<deadline) {
+      try { last=await snapshot(); }
+      catch(error) {
+        if(error.code!=='ControlUnavailable')throw error;
+        stableSince=0;previous='';await page.waitForTimeout(50);continue;
+      }
+      const matches=keys.filter(key=>unique(last,index,key));
+      const signature=JSON.stringify(matches);
+      if(matches.length) {
+        if(signature!==previous)stableSince=Date.now();
+        // Do not capture a transition frame; the same rule must remain on this tab.
+        if(Date.now()-stableSince>=150)return last;
+      } else stableSince=0;
+      previous=signature;
+      await page.waitForTimeout(50);
+    }
+    // With no known selection rule, clicking an already selected tab can be a no-op.
+    // This is only a provisional baseline: the next two switches must prove the rule.
+    if(initial && JSON.stringify(last)===JSON.stringify(before))return last;
+    throw Error('未能确认切换到「'+names[index]+'」：等待选中状态超时。已停止后续切换，未确认切回录制标签；请检查网页并重试测试。');
+  }
+  // A new unknown rule must first move from another tab to the clicked tab.
+  // Known rules can confirm an already selected target without a needless wait.
+  const moved=before.flatMap((rules,index)=>index===first?[]:rules.filter(key=>unique(before,index,key)));
+  const a=await select(first,known.length?known:moved,!known.length);
+  const initial=a[first].filter(key=>unique(a,first,key));
+  const b=await select(second,known.length?known:initial);
+  const transferable=initial.filter(key=>unique(b,second,key));
+  const again=await select(first,known.length?known:transferable);
+  const candidates=transferable.filter(key=>unique(again,first,key));
   candidates.sort((left,right)=>Number(left.includes('selectedStyle'))-Number(right.includes('selectedStyle')));
-  if(!candidates.length)throw Error('标签集合已找到，但切换前后没有发现可验证的选中状态。已切回录制标签；请重新录制或反馈此状态识别失败。');
+  if(!candidates.length)throw Error('未发现能随 Sheet 来回切换的选中状态，未保存控件；请检查网页当前工作表后重试测试。');
   const learned=JSON.parse(candidates[0]);
   for(const strategy of binding.strategies) {delete strategy.selectedStyle;strategy.selectedSelector=learned.selectedSelector || '';if(learned.selectedStyle)strategy.selectedStyle=learned.selectedStyle;}
-  await resolveControl(page,binding,'sheetTab',true);
+  const active=await resolveControl(page,binding,'sheetTab',true);
+  if((await active.innerText()).trim()!==binding.sampleText)throw Error('未确认切回录制标签，未保存控件；请检查网页当前工作表。');
 }
 
-async function testControls(page, controls) {
+async function testControls(page, controls, timeout = 10000) {
   const steps=[];
   await assertNoLogin(page);
-  await learnSelection(page,controls.sheetTab);
+  await learnSelection(page,controls.sheetTab,timeout);
   const tabs=await resolveControl(page,controls.sheetTab,'sheetTab');
   steps.push({label:'找到 Sheet 标签集合',detail:`${await tabs.count()} 个标签`});
   const sample=controls.sheetTab.sampleText;
   const target=tabs.filter({hasText:new RegExp('^'+sample.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$')});
   if(!sample || await target.count()!==1)throw Error('录制的 Sheet 标签未找到或不唯一，请重新录制一个 Sheet 标签。');
-  await target.click();await assertNoLogin(page);
+  await assertNoLogin(page);
   const active=await resolveControl(page,controls.sheetTab,'sheetTab',true);
   if((await active.innerText()).trim()!==sample)throw Error('Sheet 切换后选中状态不一致，请重新录制 Sheet 标签。');
   steps.push({label:'按名称找到并切换工作表',detail:sample});
