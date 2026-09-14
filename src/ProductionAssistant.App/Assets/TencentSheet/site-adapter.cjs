@@ -39,6 +39,7 @@ function scopeFor(page, frame) {
 async function resolveControl(page, binding, key, active = false, collectionOnly = false) {
   if (!binding) throw Error('尚未录制'+controlNames[key]+'，请先录制网页控件。');
   const scope = scopeFor(page,binding.frame);
+  const reasons=new Set();
   for (const strategy of binding.strategies) {
     try {
       if (key === 'sheetTab') {
@@ -61,16 +62,34 @@ async function resolveControl(page, binding, key, active = false, collectionOnly
       }
       const locator = (strategy.type === 'role' ? scope.getByRole(strategy.value,{name:strategy.name,exact:true})
         : strategy.type === 'placeholder' ? scope.getByPlaceholder(strategy.value,{exact:true}) : scope.locator(strategy.value)).filter({visible:true});
-      if (await locator.count() !== 1) continue;
-      if (!await locator.evaluate((el,selector)=>el.matches(selector) && !el.disabled && !el.readOnly && el.getAttribute('aria-readonly')!=='true',editable)) continue;
+      const count=await locator.count();
+      if (count !== 1) {reasons.add(count?'匹配到了多个可见控件':'尚未出现可见控件');continue;}
+      if (!await locator.evaluate((el,selector)=>el.matches(selector) && !el.disabled && !el.readOnly && el.getAttribute('aria-readonly')!=='true',editable)) {reasons.add('控件尚不可编辑');continue;}
       const address = await locator.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
-      if(key==='cellAddressBox' && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(String(address).trim()))continue;
+      if(key==='cellAddressBox' && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(String(address).trim())) {reasons.add('名称框尚未显示有效单元格地址');continue;}
       return locator;
-    } catch { /* A stale candidate may fail; try the next recorded, independently validated candidate. */ }
+    } catch { reasons.add('定位规则无法解析或控件正在更新'); }
   }
   const error=Error(controlNames[key]+'定位失败，请重新录制对应网页控件。');
   error.code='ControlUnavailable';
+  error.reason=[...reasons].join('；');
   throw error;
+}
+
+// Read-only readiness probes. Never retry navigation, typing or submission here.
+async function waitForControl(page, binding, key, timeout) {
+  const deadline=Date.now()+timeout;
+  let last;
+  do {
+    if(page.isClosed())throw Error('专用浏览器已关闭，操作已中断。');
+    await assertNoLogin(page);
+    try {return await resolveControl(page,binding,key);}
+    catch(error) {if(error.code!=='ControlUnavailable')throw error;last=error;}
+    await page.waitForTimeout(Math.min(100,Math.max(0,deadline-Date.now())));
+  } while(Date.now()<deadline);
+  last.message='等待'+controlNames[key]+'就绪超时：'+(last.reason || '定位未通过')+'。请确认网页加载完成并可编辑，再重试。';
+  last.field=key;
+  throw last;
 }
 
 // Runs in each visible document. Analysis and locator construction stay next to the picker
@@ -312,7 +331,7 @@ async function testControls(page, controls, timeout = 10000) {
   const active=await resolveControl(page,controls.sheetTab,'sheetTab',true);
   if((await active.innerText()).trim()!==sample)throw Error('Sheet 切换后选中状态不一致，请重新录制 Sheet 标签。');
   steps.push({label:'按名称找到并切换工作表',detail:sample});
-  const name=await resolveControl(page,controls.cellAddressBox,'cellAddressBox');
+  const name=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
   steps.push({label:'找到单元格名称框',detail:'唯一可编辑控件'});
   await name.click();await assertNoLogin(page);await name.press('Control+A');await name.pressSequentially('J9');await name.press('Enter');
   steps.push({label:'名称框定位 J9',detail:'未向业务单元格输入数值'});
@@ -320,11 +339,11 @@ async function testControls(page, controls, timeout = 10000) {
   // Reacquire after blur; this tests the address control, not the document's business anchors.
   await name.evaluate(el=>el.blur());
   await page.waitForTimeout(150);
-  const resolved=await resolveControl(page,controls.cellAddressBox,'cellAddressBox');
+  const resolved=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
   const value=await resolved.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
   if(String(value).replaceAll('$','').trim().toUpperCase()!=='J9')throw Error('名称框定位测试失败：离开输入框后不是 J9，请重新录制名称框。');
   steps.push({label:'核对名称框地址',detail:'J9'});
-  const editor=await resolveControl(page,controls.cellEditor,'cellEditor');
+  const editor=await waitForControl(page,controls.cellEditor,'cellEditor',timeout);
   const nameHandle=await resolved.elementHandle(),editorHandle=await editor.elementHandle();
   try {
     if(await nameHandle.ownerFrame()===await editorHandle.ownerFrame() && await nameHandle.evaluate((el,other)=>el===other,editorHandle))throw Error('编辑区与名称框录成了同一控件，请重新录制内容编辑区。');
@@ -336,4 +355,4 @@ async function testControls(page, controls, timeout = 10000) {
   return steps;
 }
 
-module.exports={normalizeControls,resolveControl,recordControl,assertNoLogin,testControls};
+module.exports={normalizeControls,resolveControl,waitForControl,recordControl,assertNoLogin,testControls};

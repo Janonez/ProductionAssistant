@@ -37,7 +37,9 @@ class TencentSheetClient {
   }
   async one(config, key) {
     const role={nameBox:'cellAddressBox',activeSheet:'sheetTab',valueBox:'cellEditor'}[key];
-    return site.resolveControl(this.page,config.webControls?.[role],role,key==='activeSheet');
+    return key==='activeSheet'
+      ? site.resolveControl(this.page,config.webControls?.[role],role,true)
+      : site.waitForControl(this.page,config.webControls?.[role],role,config.timeout*1000);
   }
   async control(config,key) {
     let locator=await this.one(config,key);
