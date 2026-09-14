@@ -12,10 +12,12 @@ it('never opens on entry, requires preview and discards confirmation when inputs
   invoke.mockReset().mockImplementation(async (operation: string) => operation === 'tencentSheet.get' ? job : { date: '2026-09-08', sheet: '测试月报', token: 'one-use', conflict: false, rows: [{ label: '下料量', address: 'M9', current: '', value: 1 }], message: '检查通过' });
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root!.render(<TencentSheetPage id="job" changed={() => {}} />));
-  expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get', 'tencentSite.list']);
+  expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get']);
   expect(container.textContent).not.toMatch(/高级设置|CSS|起始列|月份工作表名称/);
   expect(container.textContent).not.toContain('记住网页当前工作表');
-  expect(container.querySelectorAll('button[aria-label^=点选]')).toHaveLength(3);
+  expect(container.querySelectorAll('button[aria-label^=点选]')).toHaveLength(0);
+  expect([...container.querySelectorAll('.tencent-sheet-workbench > fieldset > legend')].map(item => item.textContent)).toContain('网页控件');
+  expect([...container.querySelectorAll('.tencent-sheet-workbench > fieldset > legend')].map(item => item.textContent)).toContain('业务字段与填写位置');
   expect(container.textContent).not.toContain('当前选中的工作表标签');
   expect(container.querySelectorAll('input[type=number]')).toHaveLength(4);
   const button = (text: string) => [...container.querySelectorAll('button')].find(button => button.textContent === text)!;
@@ -32,12 +34,16 @@ it('never opens on entry, requires preview and discards confirmation when inputs
   await act(async () => button('检查本次数据与位置').click());
   await act(async () => button('确认填报以上 1 项').click());
   expect(invoke.mock.calls.find(call => call[0] === 'tencentSheet.write')?.[1]).toMatchObject({ businessDate: '2026-09-08', token: 'one-use', values: { cutting: '2' } });
+  await act(async () => button('检查本次数据与位置').click());
+  expect(button('确认填报以上 1 项')).toBeDefined();
+  await act(async () => root!.render(<TencentSheetPage key="another-job" id="another-job" changed={() => {}} />));
+  expect(button('确认填报以上 1 项')).toBeUndefined();
+  expect([...container.querySelectorAll<HTMLInputElement>('input[placeholder="输入本次实际数据"]')].every(input => input.value === '')).toBe(true);
 });
 
 it('starts without preset business and binds a custom data snapshot to inspection and writing', async () => {
   let job: any = { id: 'job', config: { documentUrl: 'https://docs.qq.com/sheet/test', fields: [], rules: {}, requireTeaching: true, adapter: { anchors: {} } } };
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
-    if (operation === 'tencentSite.list') return { profiles: [] };
     if (operation === 'tencentSheet.get') return structuredClone(job);
     if (operation === 'tencentSheet.sources') return { sources: [] };
     if (operation === 'tencentSheet.addField') { job.config.fields.push({ id: 'custom', name: payload.name, unit: payload.unit }); return structuredClone(job); }

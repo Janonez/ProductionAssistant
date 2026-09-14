@@ -1,6 +1,9 @@
 'use strict';
 const assert=require('node:assert/strict');
 const core=require('../../src/ProductionAssistant.App/Assets/TencentSheet/core.js');
+const emptyJob=core.validate({documentUrl:'https://docs.qq.com/sheet/new',fields:[],rules:{},requireTeaching:true});
+for(const key of ['company','park','startColumn','cuttingRow','weldingRow','inboundRow','sheetPattern'])assert.equal(emptyJob[key],undefined,'new tasks must not inherit fixed legacy business '+key);
+assert.throws(()=>core.sheetName(emptyJob,'2026-09-14'),/工作表名称/);
 const sample=(address,day)=>({address,date:'2026-09-'+String(day).padStart(2,'0')});
 const learned=(first,second,dateAddress,labelAddress,format='{yyyy}/{M}/{d}')=>{
   const rule=core.inferRule([first,second]);

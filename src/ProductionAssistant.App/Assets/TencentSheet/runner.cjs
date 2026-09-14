@@ -10,14 +10,14 @@ const client=new TencentSheetClient(browser);
 let confirmation=null;
 let teaching=null;
 let siteValidation=null;
-const signature=(config,plan)=>JSON.stringify({config,plan});
+const signature=(config,plan,jobId)=>JSON.stringify({config,plan,jobId});
 const defaultAnchors={cuttingDate:['{cuttingColumn}2','{date}'],weldingDate:['{weldingColumn}2','{date}'],sectionDate:['{sectionColumn}24','{date}'],plateDate:['{sectionColumn}24','{date}'],cuttingCompany:['C9','{company}'],weldingCompany:['C19','{company}'],park:['B35','{park}'],sectionType:['{sectionColumn}25','型材'],plateType:['{plateColumn}25','板材']};
 function normalize(raw={}) {
   const config=core.validate(raw);
   const url=new URL(config.documentUrl);
   if(url.protocol!=='https:'||!['doc.weixin.qq.com','docs.qq.com'].includes(url.hostname))throw Error('请粘贴腾讯文档或企业微信文档的 HTTPS 分享链接。');
-  config.adapter=normalizeAdapter({dateFormat:'{yyyy}/{M}/{d}',anchors:Object.fromEntries(Object.entries(defaultAnchors).map(([key,[address,expected]])=>[key,{address,expected}])),...raw.adapter});
-  if(raw.siteProfile)config.siteProfile=site.normalizeProfile(raw.siteProfile);
+  config.adapter=normalizeAdapter({dateFormat:'{yyyy}/{M}/{d}',anchors:Object.fromEntries(Object.entries(defaultAnchors).map(([key,[address,expected]])=>[key,{address,expected}])),...raw.adapter},core.usesLegacyPositions(config));
+  if(raw.webControls)config.webControls=site.normalizeControls(raw.webControls);
   return config;
 }
 async function readRetry(action) {
@@ -87,43 +87,36 @@ async function dispatch(request) {
     confirmation=null;teaching=null;
     const tested=siteValidation;siteValidation=null;
     const config=normalize(request.config);
-    const profile=site.normalizeProfile(request.profile);
-    const proof=JSON.stringify({profile,url:config.documentUrl,id:request.profile.id??'',revision:request.profile.revision??0});
+    const controls=site.normalizeControls(request.controls);
+    const proof=()=>JSON.stringify({controls,url:config.documentUrl,jobId:request.jobId,configSignature:request.configSignature});
     if(operation==='siteSave') {
       browser.requirePage(config);
-      if(!tested || tested.token!==request.token || tested.proof!==proof || tested.expires<Date.now())throw Error('适配测试已失效，请重新测试后保存。');
+      if(!tested || tested.token!==request.token || tested.proof!==proof() || tested.expires<Date.now())throw Error('控件测试已失效，请重新测试后保存。');
       await site.assertNoLogin(browser.page);
-      for(const key of ['sheetTab','cellAddressBox','cellEditor'])await site.resolveControl(browser.page,profile.controls[key],key);
-      return {profile,message:'适配测试通过，可以保存。'};
+      for(const key of ['sheetTab','cellAddressBox','cellEditor'])await site.resolveControl(browser.page,controls[key],key);
+      return {controls,message:'控件测试通过，可以保存。'};
     }
     if(operation==='siteOpen')return browser.open(config);
     browser.requirePage(config);
     if(operation==='sitePick') {
       await site.assertNoLogin(browser.page);
       const binding=await site.recordControl(browser.page,request.key);
-      profile.controls[request.key]=binding;
-      return {profile:site.normalizeProfile(profile),count:binding.count,message:request.key==='sheetTab'?`已识别 ${binding.count} 个同类 Sheet 标签。`:request.key==='cellEditor'?'已录制内容编辑区。':'已录制单元格名称框。'};
+      controls[request.key]=binding;
+      return {controls:site.normalizeControls(controls),count:binding.count,message:request.key==='sheetTab'?`已识别 ${binding.count} 个同类 Sheet 标签。`:request.key==='cellEditor'?'已录制内容编辑区。':'已录制单元格名称框。'};
     }
     if(operation==='siteTest') {
-      const steps=await site.testProfile(browser.page,profile);
-      const token=crypto.randomUUID();siteValidation={token,proof:JSON.stringify({profile,url:config.documentUrl,id:request.profile.id??'',revision:request.profile.revision??0}),expires:Date.now()+600000};
-      return {steps,token,profile,message:`已通过切换学习选中状态，${steps.length} 项适配测试全部通过，可以保存。`};
+      const steps=await site.testControls(browser.page,controls);
+      const token=crypto.randomUUID();siteValidation={token,proof:proof(),expires:Date.now()+600000};
+      return {steps,token,controls,message:`${steps.length} 项控件测试全部通过，可以保存。`};
     }
-    throw Error('不支持的适配操作。');
+    throw Error('不支持的控件录制操作。');
   }
   siteValidation=null;
   const config=normalize(request.config);
   if(operation==='validate'){confirmation=null;teaching=null;return {config};}
   if(operation==='open'){confirmation=null;teaching=null;return browser.open(config);}
   if(operation==='recognize'){confirmation=null;teaching=null;return client.recognize(config);}
-  if(operation==='pick'){confirmation=null;teaching=null;const result=await client.pick(config,request.key);config.adapter[request.key]=result.selector;if(request.key==='activeSheet')config.adapter.sheetTabs=result.sheetTabs;return {config,message:result.warning||'已记住位置。'};}
   if(operation==='teach')return teach(request,config);
-  if(operation==='captureSheet') {
-    confirmation=null;teaching=null;
-    await client.ready(config);
-    const sheet=await client.text(await client.one(config,'activeSheet'));
-    return {config:normalize({...config,...core.sheetBinding(sheet),capturedSheet:sheet}),sheet,message:'已记住工作表「'+sheet+'」。'};
-  }
   teaching=null;
   const plan=core.plan(config,request.date,request.values);
   if(operation==='background') {
@@ -139,12 +132,12 @@ async function dispatch(request) {
     confirmation=null;
     const inspection=await readRetry(()=>client.inspect(config,plan));
     const token=inspection.prewriteVerified?crypto.randomUUID():null;
-    if(token)confirmation={token,signature:signature(config,plan),expires:Date.now()+120000,inspection};
+    if(token)confirmation={token,signature:signature(config,plan,request.jobId),expires:Date.now()+120000,inspection};
     return {...inspection,date:plan.date,token,message:inspection.conflict?'目标格已有内容，请检查；不会覆盖。':'位置与空值检查通过，请确认本次数据后填报。'};
   }
   if(operation==='write') {
     const saved=confirmation;confirmation=null;
-    if(!saved||saved.token!==request.token||saved.expires<Date.now()||saved.signature!==signature(config,plan))throw Error('预览已失效，请重新检查本次数据。');
+    if(!saved||saved.token!==request.token||saved.expires<Date.now()||saved.signature!==signature(config,plan,request.jobId))throw Error('预览已失效，请重新检查本次数据。');
     return client.write(config,plan,saved.inspection);
   }
   throw Error('不支持的填报操作。');

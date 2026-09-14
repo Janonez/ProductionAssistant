@@ -6,11 +6,9 @@
 .tencent-sheet-panel { min-width: 0; margin: 0; padding: 24px; border: 1px solid #E7E5E4; border-radius: 17px; background: #FFFFFF; display: grid; gap: 16px; }
 .tencent-sheet-panel legend { padding: 0 8px; font-size: 16px; font-weight: 600; }
 .tencent-sheet-panel label { display: grid; gap: 8px; font-size: 14px; font-weight: 500; }
-.tencent-site-profiles h3 { margin: 0 0 8px; font-size: 16px; }
-.tencent-site-profiles p { margin: 0; line-height: 1.6; }
+.tencent-web-controls p { margin: 0; line-height: 1.6; }
 .tencent-site-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 16px; }
 .tencent-site-fields > button { justify-self: start; }
-.tencent-site-fields .tencent-sheet-grid { margin-top: 0; }
 .tencent-site-recording { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 1.4fr); gap: 24px; background: var(--surface-muted); border-radius: var(--radius-control); padding: 20px; }
 .tencent-site-controls { display: grid; gap: 20px; }
 .tencent-site-controls button { margin-top: 10px; }
@@ -25,7 +23,6 @@
 .tencent-sheet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
 .tencent-sheet-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .tencent-sheet-panel > button { justify-self: start; }
-.tencent-sheet-panel summary { cursor: pointer; color: #78716C; padding: 8px 0; }
 .tencent-sheet-panel .tencent-sheet-date-mode { display: flex; align-items: center; gap: 8px; }
 .tencent-sheet-guidance { display: grid; gap: 12px; background: #F5F5F4; padding: 16px; border-radius: 14px; }
 .tencent-sheet-guidance > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }

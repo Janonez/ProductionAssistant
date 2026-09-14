@@ -14,7 +14,7 @@ export function TencentExecutionRules({ rule, schedule, disabled, onChange }: {
   const [customOffset, setCustomOffset] = useState(rule.kind === "relative" && ![-1, 0].includes(rule.offsetDays));
   const mode = rule.kind === "fixed" ? "fixed" : customOffset ? "offset" : rule.offsetDays === 0 ? "today" : "previous";
   return <fieldset className="tencent-sheet-panel" disabled={disabled}>
-    <legend>2 · 何时填、填哪天</legend>
+    <legend>执行规则</legend>
     <p className="tencent-sheet-help">执行时间决定什么时候开始；业务日期决定取哪天的数据、选择哪个月份的工作表、填写哪个位置。以下规则可独立组合。</p>
     <div className="tencent-sheet-grid">
       <label>执行频率<ChoicePicker value={schedule.weekdays.length === 7 ? "daily" : "weekly"} options={[{ value: "daily", label: "每天" }, { value: "weekly", label: "指定星期" }]} placeholder="选择执行频率" disabled={disabled} onChange={mode => onChange(rule, { ...schedule, weekdays: mode === "daily" ? [...defaultSchedule.weekdays] : [1, 2, 3, 4, 5] })} /></label>

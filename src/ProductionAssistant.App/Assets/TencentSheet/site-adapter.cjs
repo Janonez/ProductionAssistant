@@ -3,12 +3,11 @@
 const controlNames = {sheetTab:'Sheet 标签',cellAddressBox:'单元格名称框',cellEditor:'内容编辑区／公式栏'};
 const editable = 'input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
 
-function normalizeProfile(raw) {
-  if (!raw || raw.siteType !== 'TencentDocs' || typeof raw.name !== 'string' || !raw.name.trim() || raw.name.length > 80)
-    throw Error('请填写有效的腾讯文档适配名称。');
+function normalizeControls(raw = {}) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw Error('网页控件录制信息无效。');
   const controls = {};
   for (const key of Object.keys(controlNames)) {
-    const value = raw.controls?.[key];
+    const value = raw[key];
     if (!value) continue;
     if (!Array.isArray(value.strategies) || !value.strategies.length || value.strategies.length > 12 || !Array.isArray(value.frame) || value.frame.length > 5)
       throw Error(controlNames[key]+'录制信息无效，请重新录制。');
@@ -18,7 +17,7 @@ function normalizeProfile(raw) {
       if (key === 'sheetTab') {
         if (strategy.type !== 'collection' || !short(strategy.parentSelector) || !short(strategy.itemSelector) || (typeof strategy.selectedSelector !== 'string' || strategy.selectedSelector.length > 1000))
           throw Error('Sheet 标签集合规则无效，请重新录制。');
-        if(strategy.selectedStyle && (![':scope','span','div','button','a','label'].includes(strategy.selectedStyle.selector) || !['backgroundColor','color','borderBottomColor','borderBottomWidth','fontWeight','boxShadow'].includes(strategy.selectedStyle.property) || !short(strategy.selectedStyle.value)))throw Error('选中状态规则无效，请重新测试适配。');
+        if(strategy.selectedStyle && (![':scope','span','div','button','a','label'].includes(strategy.selectedStyle.selector) || !['backgroundColor','color','borderBottomColor','borderBottomWidth','fontWeight','boxShadow'].includes(strategy.selectedStyle.property) || !short(strategy.selectedStyle.value)))throw Error('选中状态规则无效，请重新测试控件。');
         return {type:'collection',parentSelector:strategy.parentSelector,itemSelector:strategy.itemSelector,selectedSelector:strategy.selectedSelector,...(strategy.selectedStyle?{selectedStyle:strategy.selectedStyle}:{})};
       }
       if (!['css','role','placeholder'].includes(strategy.type) || !short(strategy.value) || (strategy.type === 'role' && !short(strategy.name)))
@@ -30,7 +29,7 @@ function normalizeProfile(raw) {
     const evidence = value.evidence && JSON.stringify(value.evidence).length < 16000 ? value.evidence : {};
     controls[key] = {frame:[...value.frame],strategies,sampleText:value.sampleText,evidence};
   }
-  return {siteType:'TencentDocs',name:raw.name.trim(),controls};
+  return controls;
 }
 
 function scopeFor(page, frame) {
@@ -38,7 +37,7 @@ function scopeFor(page, frame) {
 }
 
 async function resolveControl(page, binding, key, active = false, collectionOnly = false) {
-  if (!binding) throw Error('尚未录制'+controlNames[key]+'，请先配置网页适配。');
+  if (!binding) throw Error('尚未录制'+controlNames[key]+'，请先录制网页控件。');
   const scope = scopeFor(page,binding.frame);
   for (const strategy of binding.strategies) {
     try {
@@ -217,7 +216,7 @@ async function assertNoLogin(page) {
     const login=await frame.locator('[role="dialog"]:visible,[aria-modal="true"]:visible,dialog:visible,[class*="modal" i]:visible,[class*="overlay" i]:visible,[class*="mask" i]:visible,[class*="login" i]:visible,[id*="login" i]:visible')
       .filter({hasText:/请先登录|扫码|QQ\s*登录|微信\s*登录|登录/}).count();
     const loginFrame=frame.parentFrame() && /login|qrcode|passport/i.test(frame.url()) && /登录|扫码/.test(await frame.locator('body').innerText().catch(()=>''));
-    if(login || loginFrame) {const error=Error('请重新扫码登录，然后重新测试适配或检查填报位置。');error.code='LoginRequired';throw error;}
+    if(login || loginFrame) {const error=Error('请重新扫码登录，然后重新测试控件或检查填报位置。');error.code='LoginRequired';throw error;}
   }
 }
 
@@ -228,7 +227,7 @@ async function learnSelection(page, binding) {
   if(first<0 || names.filter(value=>value===binding.sampleText).length!==1 || second<0)throw Error('标签集合已找到，但需要两个名称不同且唯一的可见标签才能学习选中状态。');
   async function snapshot(index) {
     const current=await resolveControl(page,binding,'sheetTab',false,true);
-    if(JSON.stringify((await current.allTextContents()).map(text=>text.trim()))!==JSON.stringify(names))throw Error('学习期间标签集合发生变化，请重新测试适配。');
+    if(JSON.stringify((await current.allTextContents()).map(text=>text.trim()))!==JSON.stringify(names))throw Error('学习期间标签集合发生变化，请重新测试控件。');
     await assertNoLogin(page);
     await current.nth(index).click();
     await current.nth(index).evaluate(el=>el.blur());
@@ -258,20 +257,20 @@ async function learnSelection(page, binding) {
   await resolveControl(page,binding,'sheetTab',true);
 }
 
-async function testProfile(page, profile) {
+async function testControls(page, controls) {
   const steps=[];
   await assertNoLogin(page);
-  await learnSelection(page,profile.controls.sheetTab);
-  const tabs=await resolveControl(page,profile.controls.sheetTab,'sheetTab');
+  await learnSelection(page,controls.sheetTab);
+  const tabs=await resolveControl(page,controls.sheetTab,'sheetTab');
   steps.push({label:'找到 Sheet 标签集合',detail:`${await tabs.count()} 个标签`});
-  const sample=profile.controls.sheetTab.sampleText;
+  const sample=controls.sheetTab.sampleText;
   const target=tabs.filter({hasText:new RegExp('^'+sample.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$')});
   if(!sample || await target.count()!==1)throw Error('录制的 Sheet 标签未找到或不唯一，请重新录制一个 Sheet 标签。');
   await target.click();await assertNoLogin(page);
-  const active=await resolveControl(page,profile.controls.sheetTab,'sheetTab',true);
+  const active=await resolveControl(page,controls.sheetTab,'sheetTab',true);
   if((await active.innerText()).trim()!==sample)throw Error('Sheet 切换后选中状态不一致，请重新录制 Sheet 标签。');
   steps.push({label:'按名称找到并切换工作表',detail:sample});
-  const name=await resolveControl(page,profile.controls.cellAddressBox,'cellAddressBox');
+  const name=await resolveControl(page,controls.cellAddressBox,'cellAddressBox');
   steps.push({label:'找到单元格名称框',detail:'唯一可编辑控件'});
   await name.click();await assertNoLogin(page);await name.press('Control+A');await name.pressSequentially('J9');await name.press('Enter');
   steps.push({label:'名称框定位 J9',detail:'未向业务单元格输入数值'});
@@ -279,11 +278,11 @@ async function testProfile(page, profile) {
   // Reacquire after blur; this tests the address control, not the document's business anchors.
   await name.evaluate(el=>el.blur());
   await page.waitForTimeout(150);
-  const resolved=await resolveControl(page,profile.controls.cellAddressBox,'cellAddressBox');
+  const resolved=await resolveControl(page,controls.cellAddressBox,'cellAddressBox');
   const value=await resolved.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
   if(String(value).replaceAll('$','').trim().toUpperCase()!=='J9')throw Error('名称框定位测试失败：离开输入框后不是 J9，请重新录制名称框。');
   steps.push({label:'核对名称框地址',detail:'J9'});
-  const editor=await resolveControl(page,profile.controls.cellEditor,'cellEditor');
+  const editor=await resolveControl(page,controls.cellEditor,'cellEditor');
   const nameHandle=await resolved.elementHandle(),editorHandle=await editor.elementHandle();
   try {
     if(await nameHandle.ownerFrame()===await editorHandle.ownerFrame() && await nameHandle.evaluate((el,other)=>el===other,editorHandle))throw Error('编辑区与名称框录成了同一控件，请重新录制内容编辑区。');
@@ -295,4 +294,4 @@ async function testProfile(page, profile) {
   return steps;
 }
 
-module.exports={normalizeProfile,resolveControl,recordControl,assertNoLogin,testProfile};
+module.exports={normalizeControls,resolveControl,recordControl,assertNoLogin,testControls};

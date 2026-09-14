@@ -11,28 +11,16 @@ internal sealed partial class PrototypeBridge
     {
         TencentSheetService.RequireDevelopment();
         var handler = AppServices.TencentSheetTasks;
-        if (operation == "defaults")
-        {
-            for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-            {
-                if (!File.Exists(Path.Combine(dir.FullName, "ProductionAssistant.sln"))) continue;
-                var demoPath = Path.Combine(dir.FullName, "artifacts", "tencent-docs-demo", "config.json");
-                if (File.Exists(demoPath)) return new { config = JsonNode.Parse(File.ReadAllText(demoPath)), imported = true };
-            }
-            return new { config = new JsonObject { ["documentUrl"] = "" }, imported = false };
-        }
         if (operation == "create")
         {
-            var config = payload.TryGetProperty("config", out var supplied) ? JsonNode.Parse(supplied.GetRawText())! : new JsonObject { ["documentUrl"] = ReadString(payload, "documentUrl") };
-            if (string.IsNullOrWhiteSpace((string?)config["siteProfileId"]))
-                throw new InvalidOperationException("请先选择已测试并保存的网页适配配置。");
+            var config = new JsonObject { ["documentUrl"] = ReadString(payload, "documentUrl") };
             config["requireTeaching"] = true;
             config["fields"] = new JsonArray();
             config["rules"] = new JsonObject();
             TencentSheetService.ValidateExecutionRules(config.AsObject());
-            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = TencentSiteProfileStore.Resolve(config) }, cancellationToken);
+            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = TencentSheetConfig.Resolve(config) }, cancellationToken);
             var id = Guid.NewGuid().ToString("N");
-            TencentSheetTaskHandler.Save(new() { ["id"] = id, ["name"] = "腾讯文档生产填报", ["dateMode"] = "previous_day", ["config"] = TencentSiteProfileStore.ForStorage(JsonNode.Parse(validated.GetProperty("config").GetRawText())!) });
+            TencentSheetTaskHandler.Save(new() { ["id"] = id, ["name"] = "腾讯文档生产填报", ["dateMode"] = "previous_day", ["config"] = TencentSheetConfig.Resolve(JsonNode.Parse(validated.GetProperty("config").GetRawText())!) });
             return new { id };
         }
         var job = TencentSheetTaskHandler.Find(ReadString(payload, "id"));
@@ -91,19 +79,24 @@ internal sealed partial class PrototypeBridge
                     field["notion"] = notion.ValueKind == JsonValueKind.Null ? null : JsonNode.Parse(notion.GetRawText());
                 }
             }
-            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = TencentSiteProfileStore.Resolve(config) }, cancellationToken);
-            job["config"] = TencentSiteProfileStore.ForStorage(JsonNode.Parse(validated.GetProperty("config").GetRawText())!);
+            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = TencentSheetConfig.Resolve(config) }, cancellationToken);
+            job["config"] = TencentSheetConfig.Resolve(JsonNode.Parse(validated.GetProperty("config").GetRawText())!);
             job["validated"] = false;
             TencentSheetTaskHandler.Save(job);
             return TencentSheetPresentation(job);
         }
         if (operation == "save")
         {
-            var config = JsonNode.Parse(payload.GetProperty("config").GetRawText());
-            TencentSheetService.ValidateExecutionRules(config!.AsObject());
-            if ((bool?)job["config"]?["requireTeaching"] == true) config!["requireTeaching"] = true;
-            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = TencentSiteProfileStore.Resolve(config!) }, cancellationToken);
-            job["config"] = TencentSiteProfileStore.ForStorage(JsonNode.Parse(validated.GetProperty("config").GetRawText())!);
+            var expectedRevision = payload.TryGetProperty("configRevision", out var revision) ? revision.GetInt32() : 0;
+            if (expectedRevision != ((int?)job["configRevision"] ?? 0))
+                throw new InvalidOperationException("任务配置已变化，请重新打开后再修改。");
+            var config = TencentSheetConfig.Resolve(job["config"]!);
+            // Recording and field flows own controls, positions and data bindings.
+            foreach (var key in new[] { "documentUrl", "sheetReferenceName", "businessDateRule", "executionSchedule" })
+                if (payload.GetProperty("config").TryGetProperty(key, out var value)) config[key] = JsonNode.Parse(value.GetRawText());
+            TencentSheetService.ValidateExecutionRules(config);
+            var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = config }, cancellationToken);
+            job["config"] = TencentSheetConfig.Resolve(JsonNode.Parse(validated.GetProperty("config").GetRawText())!);
             job["validated"] = false;
             TencentSheetTaskHandler.Save(job);
             return TencentSheetPresentation(job);
@@ -139,9 +132,8 @@ internal sealed partial class PrototypeBridge
             if (!result.Succeeded) throw new InvalidOperationException(result.Message);
             return new { message = result.Message };
         }
-        var request = new JsonObject { ["operation"] = operation, ["config"] = TencentSiteProfileStore.Resolve(job["config"]!), ["date"] = date.ToString("yyyy-MM-dd") };
+        var request = new JsonObject { ["operation"] = operation, ["jobId"] = (string)job["id"]!, ["config"] = TencentSheetConfig.Resolve(job["config"]!), ["date"] = date.ToString("yyyy-MM-dd") };
         if (executionValues is not null) request["values"] = executionValues.DeepClone();
-        if (operation == "pick") request["key"] = ReadString(payload, "key");
         if (operation == "teach")
         {
             request["jobId"] = (string)job["id"]!;
@@ -149,7 +141,7 @@ internal sealed partial class PrototypeBridge
                 request[key] = ReadString(payload, key);
         }
         var response = await handler.Service.CallAsync(request, cancellationToken);
-        if (response.TryGetProperty("config", out var updated)) { job["config"] = TencentSiteProfileStore.ForStorage(JsonNode.Parse(updated.GetRawText())!); job["validated"] = false; TencentSheetTaskHandler.Save(job); }
+        if (response.TryGetProperty("config", out var updated)) { job["config"] = TencentSheetConfig.Resolve(JsonNode.Parse(updated.GetRawText())!); job["validated"] = false; TencentSheetTaskHandler.Save(job); }
         if (operation == "inspect") { job["validated"] = response.GetProperty("prewriteVerified").GetBoolean(); TencentSheetTaskHandler.Save(job); }
         return response;
     }
@@ -157,6 +149,7 @@ internal sealed partial class PrototypeBridge
     private static JsonObject TencentSheetPresentation(JsonObject job)
     {
         var result = job.DeepClone().AsObject();
+        result["config"] = TencentSheetConfig.Resolve(job["config"]!);
         result["businessDate"] = TencentSheetService.ResolveBusinessDate(DateTimeOffset.Now, job["config"]!.AsObject(),
             (string?)job["dateMode"] ?? "previous_day").ToString("yyyy-MM-dd");
         return result;

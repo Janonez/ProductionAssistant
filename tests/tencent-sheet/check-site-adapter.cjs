@@ -31,24 +31,24 @@ async function main() {
       assert.ok(!JSON.stringify(sheetTab.strategies).includes('nth-'));
       const cellAddressBox=await pick(page,'cellAddressBox',page.locator('#address'));
       assert.ok(cellAddressBox.strategies.length>=3);
-      const profile=site.normalizeProfile({name:'测试适配',siteType:'TencentDocs',controls:{sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}}});
-      assert.equal((await site.testProfile(page,profile)).length,6);
+      const profile=site.normalizeControls({sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}});
+      assert.equal((await site.testControls(page,profile)).length,6);
       assert.equal(await page.evaluate(()=>window.lastAddress),'J9');
       assert.equal(await page.locator('#business-data').inputValue(),'业务内容未修改');
       // Simulate another workbook, changed id, reordered tabs and a new month.
       await page.setContent(fixture(custom));
       await page.locator('#address').evaluate(el=>{el.removeAttribute('id');el.removeAttribute('aria-label');});
       await page.locator('#tabs').evaluate(parent=>{parent.prepend(parent.lastElementChild);const extra=parent.firstElementChild.cloneNode(true);extra.textContent='项目月报 10月';parent.append(extra);});
-      const resolved=await site.resolveControl(page,profile.controls.cellAddressBox,'cellAddressBox');
+      const resolved=await site.resolveControl(page,profile.cellAddressBox,'cellAddressBox');
       assert.equal(await resolved.inputValue(),'A1');
-      const tabs=await site.resolveControl(page,profile.controls.sheetTab,'sheetTab');
+      const tabs=await site.resolveControl(page,profile.sheetTab,'sheetTab');
       assert.equal(await tabs.count(),4);
       await tabs.filter({hasText:/^项目月报 10月$/}).click();
-      assert.equal((await (await site.resolveControl(page,profile.controls.sheetTab,'sheetTab',true)).innerText()).trim(),'项目月报 10月');
+      assert.equal((await (await site.resolveControl(page,profile.sheetTab,'sheetTab',true)).innerText()).trim(),'项目月报 10月');
       const client=new TencentSheetClient({page,requirePage:()=>{}});
       // Filling consumes the recorded collection, never the unrelated role=tab outside its parent.
       client.ready=async()=>{};
-      const config={siteProfile:profile,adapter:{},timeout:5};
+      const config={webControls:profile,adapter:{},timeout:5};
       await client.selectSheet(config,'项目月报 9月');
       assert.equal((await (await client.one(config,'activeSheet')).innerText()).trim(),'项目月报 9月');
       assert.equal(await page.locator('nav button').getAttribute('aria-selected'),'true');
@@ -64,13 +64,13 @@ async function main() {
       const sheetTab=await pick(page,'sheetTab',page.getByText('甲表',{exact:true}));
       assert.equal(sheetTab.strategies[0].selectedSelector,'');
       const cellAddressBox=await pick(page,'cellAddressBox',page.locator('#address'));
-      const profile=site.normalizeProfile({name:'未知状态',siteType:'TencentDocs',controls:{sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}}});
-      await site.testProfile(page,profile);
-      if(styleOnly)assert.ok(profile.controls.sheetTab.strategies[0].selectedStyle);
-      else assert.match(profile.controls.sheetTab.strategies[0].selectedSelector,/:has/);
-      const persisted=site.normalizeProfile(JSON.parse(JSON.stringify(profile)));
+      const profile=site.normalizeControls({sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}});
+      await site.testControls(page,profile);
+      if(styleOnly)assert.ok(profile.sheetTab.strategies[0].selectedStyle);
+      else assert.match(profile.sheetTab.strategies[0].selectedSelector,/:has/);
+      const persisted=site.normalizeControls(JSON.parse(JSON.stringify(profile)));
       await page.getByText('乙表',{exact:true}).click();
-      assert.equal(await (await site.resolveControl(page,persisted.controls.sheetTab,'sheetTab',true)).innerText(),'乙表');
+      assert.equal(await (await site.resolveControl(page,persisted.sheetTab,'sheetTab',true)).innerText(),'乙表');
     }
     await page.setContent(fixture());
     const cancelling=site.recordControl(page,'sheetTab');
@@ -85,12 +85,12 @@ async function main() {
     const sheetTab=await pick(page,'sheetTab',frame.getByText('项目月报 8月',{exact:true}));
     const cellAddressBox=await pick(page,'cellAddressBox',frame.locator('#address'));
     assert.deepEqual(sheetTab.frame,['#embedded']);assert.deepEqual(cellAddressBox.frame,['#embedded']);
-    const profile=site.normalizeProfile({name:'框架适配',siteType:'TencentDocs',controls:{sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}}});
-    await site.testProfile(page,profile);
+    const profile=site.normalizeControls({sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}});
+    await site.testControls(page,profile);
     assert.equal(await frame.locator('#address').inputValue(),'J9');
     assert.equal(await page.locator('[data-pa-site-picker]').count(),0);
     await frame.locator('#address').evaluate(el=>{el.onfocus=()=>{const modal=document.createElement('dialog');modal.textContent='请先登录';document.body.append(modal);modal.showModal();};});
-    await assert.rejects(site.testProfile(page,profile),error=>error.code==='LoginRequired');
+    await assert.rejects(site.testControls(page,profile),error=>error.code==='LoginRequired');
     const client=new TencentSheetClient({page,requirePage:()=>{}});
     await assert.rejects(client.inspect({requireTeaching:true},{}),/尚未完成/);
     console.log('PASS: two unrelated DOM shapes, nested picker clicks, collection scope, dynamic month/reorder, fallback, ambiguity, cancellation, login, J9 navigation without business writes');

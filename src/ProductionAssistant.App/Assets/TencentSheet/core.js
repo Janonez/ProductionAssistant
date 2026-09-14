@@ -1,4 +1,4 @@
-(function (root) {
+(function () {
   'use strict';
   const defaults = {
     documentUrl: '', sheetPattern: '下料、装焊（{yy}年{M}月）',
@@ -16,9 +16,11 @@
     return s;
   }
   const metricKeys = ['cutting', 'welding', 'section', 'plate'];
+  function usesLegacyPositions(config) { return config.fields === undefined || (Array.isArray(config.fields) && config.fields.some(field => field?.legacyKey)); }
   function fieldKeys(config) { return config.fields ? config.fields.map(field=>field.id) : metricKeys; }
   function sheetName(config, date) {
     const {year,month}=dateParts(date);
+    if(config.sheetMode!=='fixed' && !config.sheetPattern)throw Error('请先识别工作表名称或示范业务位置。');
     return config.sheetMode==='fixed'?config.sheetName:config.sheetPattern.replace(/\{yyyy\}/g,String(year)).replace(/\{yy\}/g,String(year).slice(-2)).replace(/\{M\}/g,String(month));
   }
   const dateFormats = ['{yyyy}/{M}/{d}', '{yyyy}/{MM}/{dd}', '{yyyy}-{MM}-{dd}', '{yyyy}-{M}-{d}', '{yyyy}年{M}月{d}日', '{M}月{d}日', '{M}/{d}', '{MM}/{dd}', '{M}.{d}', '{d}日', '{dd}日', '{d}', '{dd}'];
@@ -95,7 +97,7 @@
       : { sheetMode: 'fixed', sheetName: sheet };
   }
   function validate(config) {
-    const c = { ...defaults, ...config };
+    const c = { ...(usesLegacyPositions(config) ? defaults : { timeout: 30 }), ...config };
     if (c.sheetReferenceName !== undefined) Object.assign(c, sheetBinding(c.sheetReferenceName));
     if (c.documentUrl) {
       const url = new URL(c.documentUrl);
@@ -103,15 +105,19 @@
     }
     if (c.sheetMode === 'fixed') {
       if (typeof c.sheetName !== 'string' || !c.sheetName.trim() || c.sheetName.length > 200) throw Error('请选择固定工作表');
-    } else {
+    } else if (c.sheetPattern || c.sheetMode) {
       if (c.sheetMode && c.sheetMode !== 'monthly') throw Error('工作表选择方式无效');
-      if (!c.sheetPattern.includes('{M}') || !/\{yy(?:yy)?\}/.test(c.sheetPattern)) throw Error('工作表名称必须包含 {yy} 或 {yyyy}，以及 {M}');
+      if (typeof c.sheetPattern !== 'string' || !c.sheetPattern.includes('{M}') || !/\{yy(?:yy)?\}/.test(c.sheetPattern)) throw Error('工作表名称必须包含 {yy} 或 {yyyy}，以及 {M}');
       if (c.sheetPattern.replace(/\{(?:yyyy|yy|M)\}/g, '').match(/[{}]/)) throw Error('工作表名称存在不支持的占位符');
     }
-    if (!c.company.trim() || !c.park.trim()) throw Error('请填写公司和园区名称');
-    columnName(columnNumber(c.startColumn));
-    for (const key of ['cuttingRow', 'weldingRow', 'inboundRow']) {
-      if (!Number.isInteger(c[key]) || c[key] < 1 || c[key] > 1048576) throw Error('目标行必须为 1–1048576 的整数');
+    if(usesLegacyPositions(c)) {
+      if (!c.company.trim() || !c.park.trim()) throw Error('请填写公司和园区名称');
+      columnName(columnNumber(c.startColumn));
+      for (const key of ['cuttingRow', 'weldingRow', 'inboundRow']) {
+        if (!Number.isInteger(c[key]) || c[key] < 1 || c[key] > 1048576) throw Error('目标行必须为 1–1048576 的整数');
+      }
+    } else {
+      for(const key of ['company','park','startColumn','cuttingRow','weldingRow','inboundRow'])delete c[key];
     }
     if (!Number.isInteger(c.timeout) || c.timeout < 5 || c.timeout > 120) throw Error('超时时间须为 5–120 秒的整数');
     if(c.fields!==undefined) {
@@ -132,15 +138,15 @@
   }
   function plan(config, date, values) {
     const c = validate(config);
-    const { year, month, day, monthKey } = dateParts(date);
+    const { day, monthKey } = dateParts(date);
     const sheet = sheetName(c,date);
-    const start = columnNumber(c.startColumn);
-    const specs = [
+    const start = usesLegacyPositions(c) ? columnNumber(c.startColumn) : 0;
+    const specs = usesLegacyPositions(c) ? [
       ['cutting', '下料量', start + day - 1, c.cuttingRow, c.company],
       ['welding', '装焊量', start + day - 1, c.weldingRow, c.company],
       ['section', '型材入库量', start + (day - 1) * 2, c.inboundRow, c.park],
       ['plate', '板材入库量', start + (day - 1) * 2 + 1, c.inboundRow, c.park]
-    ];
+    ] : [];
     const definitions=c.fields?c.fields.map(field=>{
       const legacy=field.legacyKey?specs.find(spec=>spec[0]===field.legacyKey):null;
       if(!c.rules?.[field.id] && !legacy)throw Error(field.name+'尚未示范填报位置');
@@ -164,24 +170,12 @@
     // Blank contenteditable controls can expose line breaks or invisible placeholders.
     return /^[\s\u200B\uFEFF]*$/.test(text) ? '' : text;
   }
-  function preflight(plan, cells, scenario) {
-    const failures = { login: '模拟登录已失效，需要重新扫码', permission: '模拟账号没有编辑权限', anchor: '模拟日期 / 公司 / 材料锚点不匹配', sheet: '模拟目标工作表不存在' };
-    if (failures[scenario]) throw Error(failures[scenario]);
+  function preflight(plan, cells) {
     return plan.rows.map(r => {
       const current = cellText(cells[r.address]);
       return { ...r, current, action: current === '' ? 'write' : 'conflict' };
     });
   }
-  // Local simulation only. A real page adapter must verify its own anchors and saved values.
-  function simulate(plan, cells, scenario) {
-    const rows = preflight(plan, cells, scenario);
-    if (rows.some(r => r.action === 'conflict')) throw Error('目标格已有内容，整批停止；未写入任何单元格');
-    const next = { ...cells };
-    rows.filter(r => r.action === 'write').forEach(r => { next[r.address] = String(r.value); });
-    if (!rows.every(r => Number(next[r.address]) === r.value)) throw Error('模拟回读不一致');
-    return { cells: next, rows };
-  }
-  const api = { defaults, validate, plan, preflight, simulate, columnName, cellText, metricKeys, fieldKeys, sheetName, dateFormats, dateParts, addressParts, inferRule, ruleAddress, prediction, formatDate, normalizeRule, sheetBinding };
-  if (typeof module !== 'undefined' && module.exports) module.exports = api;
-  else root.TencentDemo = api;
-})(globalThis);
+  const api = { defaults, validate, plan, preflight, columnName, cellText, metricKeys, fieldKeys, usesLegacyPositions, sheetName, dateFormats, dateParts, addressParts, inferRule, ruleAddress, prediction, formatDate, normalizeRule, sheetBinding };
+  module.exports = api;
+})();

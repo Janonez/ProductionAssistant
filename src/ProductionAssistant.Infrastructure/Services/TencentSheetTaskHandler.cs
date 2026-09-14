@@ -40,8 +40,12 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
             {
                 var jobs = Load();
                 var old = jobs.FirstOrDefault(item => (string?)item?["id"] == (string?)job["id"]);
+                var revision = (int?)old?["configRevision"] ?? 0;
+                if (old is not null && ((int?)job["configRevision"] ?? 0) != revision)
+                    throw new InvalidOperationException("任务配置已被其他操作修改，请重新打开后再保存。");
                 if ((bool?)old?["enabled"] == true && !JsonNode.DeepEquals(old?["config"], job["config"]))
                     throw new InvalidOperationException("请先停用定时填报，再修改填写配置。");
+                job["configRevision"] = old is not null && !JsonNode.DeepEquals(old["config"], job["config"]) ? revision + 1 : revision;
                 if (old is not null && !updateRun)
                     foreach (var key in new[] { "runs", "lastRun", "backgroundValidatedConfig" }) job[key] = old[key]?.DeepClone();
                 if (old is not null) jobs.Remove(old);
@@ -60,7 +64,10 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
             {
                 var saved = Find(taskId);
                 if (background && (string?)record["status"] == "成功" && JsonNode.DeepEquals(saved["config"], executionConfig))
+                {
                     saved["backgroundValidatedConfig"] = record["configSignature"]?.DeepClone();
+                    saved["validated"] = true;
+                }
                 var runs = saved["runs"] as JsonArray ?? new();
                 if (saved["runs"] is null) saved["runs"] = runs;
                 var previous = runs.FirstOrDefault(run => (string?)run?["id"] == (string?)record["id"]);
@@ -112,7 +119,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
         }
         var date = TencentSheetService.ResolveBusinessDate(context.StartedAt, job["config"]!.AsObject(), (string?)job["dateMode"] ?? "previous_day",
             DateOnly.TryParse((string?)job["manualDate"], out var manual) ? manual : null);
-        var record = new JsonObject { ["id"] = Guid.NewGuid().ToString("N"), ["time"] = context.StartedAt.ToString("yyyy-MM-dd HH:mm:ss"), ["source"] = context.Trigger, ["businessDate"] = date.ToString("yyyy-MM-dd") };
+        var record = new JsonObject { ["id"] = Guid.NewGuid().ToString("N"), ["time"] = context.StartedAt.ToString("yyyy-MM-dd HH:mm:ss"), ["source"] = context.Trigger, ["businessDate"] = date.ToString("yyyy-MM-dd"), ["phase"] = background ? "fetch" : "check" };
         try
         {
             if (background)
@@ -122,7 +129,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
                 {
                     if ((string?)job["backgroundValidatedConfig"] != ConfigSignature(job["config"]!.AsObject()))
                         throw new InvalidOperationException("配置或网页适配已变化，请重新后台测试后启用。");
-                    if (job["runs"] is JsonArray previous && previous.Any(run => (string?)run?["businessDate"] == date.ToString("yyyy-MM-dd")))
+                    if (job["runs"] is JsonArray previous && previous.Any(run => BlocksAutomaticRetry(run, date)))
                     {
                         record["status"] = "已跳过"; record["message"] = "此业务日期已有执行记录，请先检查原结果；定时不会重复填写。";
                         return new(true, 0, (string)record["message"]!);
@@ -138,11 +145,14 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
             else if (TencentSheetNotionService.RequiresFetch(job["config"]!.AsObject()))
                 job["values"] = (notion ?? throw new InvalidOperationException("Notion 取数服务不可用。"))
                     .RequireValues(context.TaskId, job["config"]!.AsObject(), date, (string?)job["dataToken"] ?? "");
-            var resolved = TencentSiteProfileStore.Resolve(job["config"]!);
+            var resolved = TencentSheetConfig.Resolve(job["config"]!);
             record["configSignature"] = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(resolved.ToJsonString())));
             if (context.Trigger == "automatic" && (string?)job["backgroundValidatedConfig"] != (string?)record["configSignature"])
                 throw new InvalidOperationException("取数期间网页适配已变化，本次未填写，请重新后台测试。");
-            var request = new JsonObject { ["operation"] = background ? "background" : "write", ["config"] = resolved, ["date"] = date.ToString("yyyy-MM-dd"), ["values"] = job["values"]?.DeepClone(), ["token"] = (string?)job["confirmationToken"] };
+            record["phase"] = "write";
+            record["status"] = "执行中，结果待确认";
+            SaveRun(context.TaskId, record, job["config"]!.AsObject(), background);
+            var request = new JsonObject { ["operation"] = background ? "background" : "write", ["jobId"] = context.TaskId, ["config"] = resolved, ["date"] = date.ToString("yyyy-MM-dd"), ["values"] = job["values"]?.DeepClone(), ["token"] = (string?)job["confirmationToken"] };
             var result = await Service.CallAsync(request, cancellationToken);
             record["status"] = "成功";
             record["message"] = result.GetProperty("message").GetString();
@@ -155,10 +165,14 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
         }
         finally
         {
-            record["status"] ??= "已中断，结果待确认";
+            if (record["status"] is null || (string?)record["status"] == "执行中，结果待确认")
+                record["status"] = (string?)record["phase"] == "write" ? "已中断，结果待确认" : "已中断，未开始填写";
             SaveRun(context.TaskId, record, job["config"]!.AsObject(), background);
         }
     }
+    public static bool BlocksAutomaticRetry(JsonNode? run, DateOnly date) =>
+        (string?)run?["businessDate"] == date.ToString("yyyy-MM-dd") &&
+        (string?)run?["status"] != "已跳过" && (string?)run?["phase"] is not ("fetch" or "check");
     public static void ValidateBackgroundConfig(JsonObject config)
     {
         TencentSheetService.ValidateExecutionRules(config);
@@ -170,7 +184,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
                 throw new InvalidOperationException("请完成所有业务字段的位置示范。");
         }
     }
-    public static string ConfigSignature(JsonObject config) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(TencentSiteProfileStore.Resolve(config).ToJsonString())));
+    public static string ConfigSignature(JsonObject config) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(TencentSheetConfig.Resolve(config).ToJsonString())));
 
     public async Task<AutomationTaskToggleResult> SetEnabledAsync(string taskId, bool enabled)
     {

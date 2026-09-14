@@ -126,6 +126,13 @@ public sealed class ArchitectureTests
         Assert.True(PrototypeBridgeProtocol.IsAllowed("weld.write"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("app.navigateNative"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("automation.list"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.backgroundTest"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.close"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSite.pick"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.defaults"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.pick"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.captureSheet"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSite.list"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("automation.setEnabled"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("notionFill.testSource"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("notionFill.runNow"));

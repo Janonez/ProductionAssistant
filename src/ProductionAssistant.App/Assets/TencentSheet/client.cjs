@@ -13,7 +13,7 @@ function explainError(error) {
   if (/Target.*closed|has been closed/.test(original)) message='专用浏览器已关闭，操作已中断。请重新打开网页后检查。';
   else if (/Timeout \d+ms|TimeoutError/.test(original)) message='等待网页响应超时。请确认页面加载完成，并检查相关控件配置。';
   else if (/net::ERR_/.test(original)) message='网页连接失败。请检查测试地址和网络连接后重试。';
-  else if (/(?:locator|page|browserType|frameLocator|browserContext)\.\w+:|Call log:|strict mode violation/.test(original)) message='网页控件操作未完成。请在“网页识别位置”中重新点选对应控件。';
+  else if (/(?:locator|page|browserType|frameLocator|browserContext)\.\w+:|Call log:|strict mode violation/.test(original)) message='网页控件操作未完成。请在“网页控件”中重新点选对应控件。';
   return {error:message,details:details || (message!==original?original:''),field:error.field||null,code:error.code||null};
 }
 
@@ -28,7 +28,7 @@ const adapterDefaults = {
   dateFormat: '{yyyy}年{M}月{d}日', stateMode:'auto',
   anchors: Object.fromEntries(anchorSpecs.map(([key,,expected]) => [key,{address:'',expected}]))
 };
-function normalizeAdapter(raw = {}) {
+function normalizeAdapter(raw = {}, legacy = true) {
   const result = {};
   result.stateMode=raw.stateMode ?? 'auto';
   if(!['auto','selectors'].includes(result.stateMode))throw Error('请选择有效的页面状态判断方式');
@@ -38,7 +38,7 @@ function normalizeAdapter(raw = {}) {
     result[key] = value.trim();
   }
   result.anchors = {};
-  for (const [key,,expected] of anchorSpecs) {
+  for (const [key,,expected] of legacy ? anchorSpecs : []) {
     const item = raw.anchors?.[key] ?? {address:'',expected};
     if (typeof item.address !== 'string' || typeof item.expected !== 'string' || item.address.length > 150 || item.expected.length > 300) throw Error('校验格配置无效：'+key);
     result.anchors[key] = {address:item.address.trim(),expected:item.expected.trim()};
@@ -70,16 +70,16 @@ class TencentSheetClient {
   get page(){return this.browser.page;}
   requirePage(config){this.browser.requirePage(config);}
   scope(config) {
-    if(config.siteProfile)return (config.siteProfile.controls.cellAddressBox?.frame || []).reduce((scope,selector)=>scope.frameLocator(selector),this.page);
+    if(config.webControls)return (config.webControls.cellAddressBox?.frame || []).reduce((scope,selector)=>scope.frameLocator(selector),this.page);
     return config.adapter.frame ? this.page.frameLocator(config.adapter.frame) : this.page;
   }
   async one(config, key) {
-    if(config.siteProfile && ['nameBox','activeSheet','valueBox'].includes(key)) {
+    if(config.webControls && ['nameBox','activeSheet','valueBox'].includes(key)) {
       const role={nameBox:'cellAddressBox',activeSheet:'sheetTab',valueBox:'cellEditor'}[key];
-      return site.resolveControl(this.page,config.siteProfile.controls[role],role,key==='activeSheet');
+      return site.resolveControl(this.page,config.webControls[role],role,key==='activeSheet');
     }
     const label=fieldLabels[key];
-    if (!config.adapter[key]) throw fieldError(key,'尚未设置「'+label+'」。请在“网页识别位置”中点选对应位置。');
+    if (!config.adapter[key]) throw fieldError(key,'尚未设置「'+label+'」。请在“网页控件”中点选对应位置。');
     const locator = this.scope(config).locator(config.adapter[key]);
     try {
       await locator.first().waitFor({state:'visible'});
@@ -118,9 +118,9 @@ class TencentSheetClient {
     await this.ready(config);
     let active = await this.one(config,'activeSheet');
     if (await this.text(active) !== sheet) {
-      if (!config.siteProfile && !config.adapter.sheetTabs) throw Error('请在“网页识别位置”中点选底部工作表标签');
+      if (!config.webControls && !config.adapter.sheetTabs) throw Error('请在“网页控件”中点选底部工作表标签');
       const exact = new RegExp('^'+sheet.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$');
-      const tabs = config.siteProfile ? await site.resolveControl(this.page,config.siteProfile.controls.sheetTab,'sheetTab') : this.scope(config).locator(config.adapter.sheetTabs);
+      const tabs = config.webControls ? await site.resolveControl(this.page,config.webControls.sheetTab,'sheetTab') : this.scope(config).locator(config.adapter.sheetTabs);
       const tab = tabs.filter({hasText:exact});
       if (await tab.count() !== 1) throw Error('未找到唯一的月份工作表：'+sheet);
       await tab.click();
@@ -233,11 +233,11 @@ class TencentSheetClient {
     return results;
   }
   async inspect(config, plan) {
-    if(config.requireTeaching && core.fieldKeys(config).some(key=>!config.rules?.[key] && !config.fields?.find(field=>field.id===key)?.legacyKey))throw Error('这份新文档尚未完成所有字段的位置示范。公共网页适配不包含业务填报位置，请先逐项示范。');
+    if(config.requireTeaching && core.fieldKeys(config).some(key=>!config.rules?.[key] && !config.fields?.find(field=>field.id===key)?.legacyKey))throw Error('这份新文档尚未完成所有字段的位置示范。请在业务字段与填写位置板块逐项示范。');
     await this.selectSheet(config,plan.sheet);
     const anchors = await this.anchors(config,plan), cells = {};
     for (const row of plan.rows) cells[row.address] = await this.read(config,row.address);
-    const rows = core.preflight(plan,cells,'ready');
+    const rows = core.preflight(plan,cells);
     const conflict=rows.some(r=>r.action==='conflict'), editing=[];
     if(!conflict)for(const row of rows) {
       try {editing.push((await this.prepareEdit(config,row.address,row.current)).evidence);}
@@ -351,113 +351,19 @@ class TencentSheetClient {
   async recognize(config) {
     this.requirePage(config);
     config.adapter.stateMode='auto';
+    await site.assertNoLogin(this.page);
     const scope=this.scope(config),missing=[];
-    for(const [key,candidates] of Object.entries({
-      nameBox:['input[aria-label*="名称"]','input[placeholder*="名称"]','input[aria-label*="单元格"]'],
-      valueBox:['#alloy-simple-text-editor'],
-      activeSheet:['[role="tab"][aria-selected="true"]','[aria-selected="true"][aria-label]'],
-      sheetTabs:['[role="tab"]','[aria-selected][aria-label]']
-    })) {
-      if(config.siteProfile) {
-        const role=key==='nameBox'?'cellAddressBox':key==='valueBox'?'cellEditor':'sheetTab';
-        try {await site.resolveControl(this.page,config.siteProfile.controls[role],role,key==='activeSheet');}
-        catch {missing.push(key);}
-        continue;
-      }
-      let found=false;
-      for(const selector of [...candidates,config.adapter[key]].filter(Boolean)) {
-        const locator=scope.locator(selector),count=await locator.count();
-        if((key==='sheetTabs'?count>0:count===1) && await locator.first().isVisible()) {
-          config.adapter[key]=selector;found=true;break;
-        }
-      }
-      if(!found)missing.push(key);
+    for(const key of ['nameBox','valueBox','activeSheet']) {
+      try {await this.one(config,key);} catch {missing.push(key);}
     }
-    // A visible input containing a single A1 address is only accepted when unique.
-    if(!config.siteProfile && missing.includes('nameBox')) {
-      const inputs=scope.locator('input:visible');const matches=[];
-      for(let i=0;i<await inputs.count();i++)if(/^[A-Z]{1,3}[1-9]\d*$/.test(await inputs.nth(i).inputValue()))matches.push(i);
-      if(matches.length===1){config.adapter.nameBox='input:visible >> nth='+matches[0];missing.splice(missing.indexOf('nameBox'),1);}
-    }
-    const sheets=missing.includes('sheetTabs')?[]:await (config.siteProfile?await site.resolveControl(this.page,config.siteProfile.controls.sheetTab,'sheetTab'):scope.locator(config.adapter.sheetTabs)).allTextContents();
+    if(!config.webControls && !config.adapter.sheetTabs)missing.push('sheetTabs');
+    if(config.webControls && missing.includes('activeSheet'))missing.push('sheetTabs');
+    const sheets=missing.includes('sheetTabs')?[]:await (config.webControls?await site.resolveControl(this.page,config.webControls.sheetTab,'sheetTab'):scope.locator(config.adapter.sheetTabs)).allTextContents();
     if(!missing.includes('activeSheet') && !config.sheetReferenceName) {
       const name=(await this.text(await this.one(config,'activeSheet'))).trim();
       Object.assign(config,core.sheetBinding(name),{sheetReferenceName:name,capturedSheet:name});
     }
-    return {config,missing,sheets:sheets.map(s=>s.trim()).filter(Boolean),message:missing.length?'还有 '+missing.length+' 项需要点选，请按页面提示完成。':'已识别网页控件和工作表名称；填报时按业务日期匹配月份。'};
+    return {config,missing,sheets:sheets.map(s=>s.trim()).filter(Boolean),message:missing.length?'还有 '+missing.length+' 项控件不可用，请在网页控件板块重新录制。':'已识别网页控件和工作表名称；填报时按业务日期匹配月份。'};
   }
-  async discover(config) {
-    this.requirePage(config);
-    const frames = [];
-    for (const frame of this.page.frames()) {
-      const controls = await frame.locator('input:not([type=password]):not([type=hidden]),textarea,[contenteditable=true],[role=tab],[role=status]').evaluateAll(elements => elements.filter(el => el.getBoundingClientRect().width && el.getBoundingClientRect().height).slice(0,60).map(el => ({
-        tag:el.tagName.toLowerCase(),id:el.id,classes:typeof el.className==='string'?el.className:'',
-        role:el.getAttribute('role')||'',label:el.getAttribute('aria-label')||'',placeholder:el.getAttribute('placeholder')||'',
-        text:['tab','status'].includes(el.getAttribute('role')) ? el.textContent.trim().slice(0,80) : ''
-      })));
-      frames.push({main:frame === this.page.mainFrame(),name:frame.name(),controls});
-    }
-    return {frames,message:'仅列出可见 DOM 控件属性，不读取密码、Cookie 或网页内部数据。'};
-  }
-  async pick(config, key) {
-    if(!['nameBox','valueBox','sheetTabs','activeSheet','ready','saved'].includes(key)) throw Error('不支持选取此字段');
-    this.requirePage(config);
-    const locator = this.scope(config).locator('body');
-    await this.page.bringToFront();
-    const result=await locator.evaluate((body,{kind,label,textControls}) => new Promise(resolve => {
-      const banner = document.createElement('div');
-      banner.textContent = '填报配置引导：正在选取「'+label+'」。点击目标控件，仅记录位置，不执行原操作。Esc 取消（60 秒后自动结束）。';
-      Object.assign(banner.style,{position:'fixed',top:'0',left:'0',right:'0',padding:'14px',background:'#292524',color:'white',zIndex:'2147483647',pointerEvents:'none'});
-      body.append(banner);
-      const timer = setTimeout(()=>finish({error:'选取超时，请重试'}),60000);
-      const block = e => {e.preventDefault();e.stopImmediatePropagation();};
-      function finish(result) {clearTimeout(timer);banner.remove();for(const type of ['pointerdown','mousedown','pointerup','mouseup'])document.removeEventListener(type,block,true);document.removeEventListener('click',click,true);document.removeEventListener('keydown',keydown,true);resolve(result);}
-      function keydown(e) {if(e.key==='Escape'){block(e);finish({error:'已取消控件选取'});}}
-      function click(e) {
-        block(e);
-        let el=e.target.closest(textControls+',[role=tab],[role=status],[aria-selected][aria-label]') || e.target;
-        if(kind==='nameBox' || kind==='valueBox') {
-          const visible=node=>!!node.getClientRects().length && getComputedStyle(node).visibility!=='hidden';
-          if(!el.matches(textControls) && !el.isContentEditable) {
-            const children=[...el.querySelectorAll(textControls)].filter(visible);
-            if(children.length!==1) {finish({error:'「'+label+'」选中了普通页面区域，'+(children.length?'里面有多个输入框。':'没有找到可输入的控件。')+'请先在网页中点出输入光标，再重新选取。'});return;}
-            el=children[0];
-          }
-          if(el.disabled || el.readOnly || el.getAttribute('aria-readonly')==='true') {finish({error:'「'+label+'」当前只读或已禁用，请确认编辑权限后再选取。'});return;}
-        }
-        const attr=(name,value)=>'['+name+'='+JSON.stringify(value)+']';
-        if(kind==='activeSheet' && el.getAttribute('aria-selected')!=='true') {
-          finish({error:'请先退出选取模式，在网页中选中目标工作表，再重新点选当前高亮的标签。'});return;
-        }
-        let selector='';
-        if(kind==='sheetTabs') {
-          if(el.getAttribute('role')==='tab') selector='[role="tab"]';
-          else if(el.hasAttribute('aria-selected') && el.hasAttribute('aria-label')) selector='[aria-selected][aria-label]';
-          else if(el.classList.length) selector=el.tagName.toLowerCase()+[...el.classList].filter(c=>!/active|selected|current/i.test(c)).map(c=>'.'+CSS.escape(c)).join('');
-        } else if(kind==='activeSheet' && el.getAttribute('aria-selected')==='true') selector=el.getAttribute('role')==='tab'?'[role="tab"][aria-selected="true"]':'[aria-selected="true"][aria-label]';
-        for(const candidate of [el.id?'#'+CSS.escape(el.id):'',el.getAttribute('data-testid')?attr('data-testid',el.getAttribute('data-testid')):'',el.getAttribute('aria-label')?attr('aria-label',el.getAttribute('aria-label')):'']) {
-          if(!selector && candidate && document.querySelectorAll(candidate).length===1) selector=candidate;
-        }
-        if(!selector) {
-          const segments=[];let node=el;
-          while(node && node!==body && node.parentElement) {
-            const siblings=[...node.parentElement.children].filter(s=>s.tagName===node.tagName);
-            segments.unshift(node.tagName.toLowerCase()+':nth-of-type('+(siblings.indexOf(node)+1)+')');
-            const candidate=segments.join(' > ');
-            if(document.querySelectorAll(candidate).length===1){selector=candidate;break;}
-            node=node.parentElement;
-          }
-        }
-        const sheetTabs=kind==='activeSheet'?(el.getAttribute('role')==='tab'?'[role="tab"]':'[aria-selected][aria-label]'):undefined;
-        if(sheetTabs && (document.querySelectorAll(selector).length!==1 || document.querySelector(selector)!==el)) {finish({error:'找到多个选中标签，无法确认工作表，请重新选择。'});return;}
-        finish(selector?{selector,sheetTabs,warning:''}:{error:'未能记住这个位置，请重新点选更具体的网页控件。'});
-      }
-      for(const type of ['pointerdown','mousedown','pointerup','mouseup'])document.addEventListener(type,block,true);
-      document.addEventListener('click',click,true);document.addEventListener('keydown',keydown,true);
-    }),{kind:key,label:fieldLabels[key],textControls});
-    if(result.error)throw fieldError(key,result.error);
-    return result;
-  }
-
 }
 module.exports = {TencentSheetClient,adapterDefaults,anchorSpecs,normalizeAdapter,expand,a1,explainError};
