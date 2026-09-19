@@ -6,6 +6,8 @@ const {TencentSheetClient,explainError}=require('./client.cjs');
 const core=require('./core.js');
 const site=require('./site-adapter.cjs');
 const browser=new TencentDocsBrowser(process.argv[2]);
+const {TencentLogin}=require('./login.cjs');
+const login=new TencentLogin(browser);
 const client=new TencentSheetClient(browser);
 let confirmation=null;
 let teaching=null;
@@ -80,6 +82,11 @@ async function teach(request,config) {
 }
 async function dispatch(request) {
   const {operation}=request;
+  if(operation==='login') {
+    confirmation=null;teaching=null;siteValidation=null;
+    return login.run(request,request.stage==='cancel'?undefined:normalize(request.config));
+  }
+  await login.guard();
   if(operation==='close'){confirmation=null;teaching=null;siteValidation=null;await browser.close();return {message:'已结束填报浏览器会话，登录状态已保留。'};}
   if(operation.startsWith('site')) {
     confirmation=null;teaching=null;

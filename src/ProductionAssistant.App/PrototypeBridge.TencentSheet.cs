@@ -10,7 +10,27 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> TencentSheetAsync(string operation, JsonElement payload, CancellationToken cancellationToken)
     {
         TencentSheetService.RequireDevelopment();
+        if (operation == "loginAgreement")
+        {
+            var url = ReadString(payload, "kind") switch
+            {
+                "service" => "https://docs.qq.com/doc/p/41c65c813fe78d2f262bf35b825c214f0f459bfe",
+                "privacy" => "https://docs.qq.com/doc/p/79d8f25f4f022ccca80949ea89b3fe8a137d8940",
+                _ => throw new InvalidOperationException("请选择腾讯文档服务协议或隐私政策。")
+            };
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            return new { opened = true };
+        }
         var handler = AppServices.TencentSheetTasks;
+        if (operation == "login" && ReadString(payload, "stage") == "cancel")
+        {
+            // Cleanup must work even if the task was removed or its document link changed.
+            return await handler.Service.CallAsync(new JsonObject
+            {
+                ["operation"] = "login", ["stage"] = "cancel",
+                ["jobId"] = ReadString(payload, "id"), ["sessionToken"] = ReadString(payload, "sessionToken")
+            }, cancellationToken);
+        }
         if (operation == "create")
         {
             var config = new JsonObject { ["documentUrl"] = ReadString(payload, "documentUrl") };
@@ -117,6 +137,11 @@ internal sealed partial class PrototypeBridge
         }
         var request = new JsonObject { ["operation"] = operation, ["jobId"] = (string)job["id"]!, ["config"] = job["config"]!.DeepClone().AsObject(), ["date"] = date.ToString("yyyy-MM-dd") };
         if (executionValues is not null) request["values"] = executionValues.DeepClone();
+        if (operation == "login")
+        {
+            request["stage"] = ReadString(payload, "stage");
+            request["sessionToken"] = ReadString(payload, "sessionToken");
+        }
         if (operation == "teach")
         {
             request["jobId"] = (string)job["id"]!;

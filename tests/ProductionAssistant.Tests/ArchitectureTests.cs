@@ -128,6 +128,8 @@ public sealed class ArchitectureTests
         Assert.True(PrototypeBridgeProtocol.IsAllowed("automation.list"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.backgroundTest"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.close"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.login"));
+        Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.loginAgreement"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSite.pick"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.defaults"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.pick"));

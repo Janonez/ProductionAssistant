@@ -5,7 +5,7 @@ const dist=path.resolve(__dirname,'../../src/ProductionAssistant.App/Assets/Prot
 async function main(){
   const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');const file=path.resolve(dist,'.'+(url.pathname==='/'?'/index.html':url.pathname));if(!file.startsWith(dist+path.sep)){res.writeHead(403);res.end();return;}res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.html')?'text/html':'application/octet-stream');res.end(await fs.readFile(file));}catch{res.writeHead(404);res.end();}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-  const browser=await chromium.launch({channel:'msedge',headless:true});
+  const browser=await chromium.launch({channel:'msedge',headless:true,args:['--no-proxy-server']});
   try{
     const page=await browser.newPage({viewport:{width:1200,height:900}});
     await page.addInitScript(()=>{
@@ -15,6 +15,13 @@ async function main(){
         if(!request.id)return;
         let data=request.operation==='automation.list'?{availableTaskTypes:['daily_report','notion_fill','tencent_sheet_fill'],tasks:[{id:'fixture',taskType:'tencent_sheet_fill',taskTypeName:'腾讯文档填报',name:'生产月报填报（本地测试数据）',schedule:'手动测试',isEnabled:false,schedulingAvailable:false,status:'pending-test',connectionStatus:'腾讯文档',lastRun:'暂无运行记录'}]}:request.operation==='tencentSheet.get'?{id:'fixture',config,businessDate:'2026-08-31'}:{};
         if(request.operation==='tencentSheet.create'){config.documentUrl=request.payload.documentUrl;data={id:'fixture'};}
+        if(request.operation==='tencentSheet.login'){
+          window.loginStages=(window.loginStages||[]).concat(request.payload.stage);
+          if(request.payload.stage==='start')window.loginState='consent';
+          if(request.payload.stage==='consent'||request.payload.stage==='refresh')window.loginState='waiting';
+          data={state:request.payload.stage==='cancel'?'closed':window.loginState};
+          if(data.state==='waiting')data.qr='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="212" height="212"><rect width="212" height="212" fill="white"/><path d="M24 24h48v48H24zM140 24h48v48h-48zM24 140h48v48H24z" fill="#292524"/><text x="106" y="112" text-anchor="middle" font-size="14">本地测试图形</text></svg>');
+        }
         if(request.operation==='tencentSheet.save'){Object.assign(config,request.payload.config);window.savedConfig=request.payload.config;data={id:'fixture',config,businessDate:'2026-08-31'};}
         if(request.operation==='tencentSite.open')data={message:'已打开本地模拟文档'};
         if(request.operation==='tencentSite.pick')data={controls:{...request.payload.controls,[request.payload.key]:{frame:[],strategies:[{}],sampleText:'示例工作表'}},message:request.payload.key==='sheetTab'?'已识别 12 个同类 Sheet 标签。':'已录制单元格名称框。'};
@@ -45,6 +52,25 @@ async function main(){
     await page.getByLabel('文档分享链接').fill('https://docs.qq.com/sheet/fixture');
     assert.equal(await page.getByRole('button',{name:'录制网页控件',exact:true}).count(),0);
     await page.getByRole('button',{name:'创建并配置',exact:true}).click();
+    await page.getByRole('button',{name:'扫码登录',exact:true}).click();
+    await page.getByRole('button',{name:'同意协议并继续',exact:true}).click();
+    await page.getByAltText('企业微信登录二维码').waitFor();
+    await page.evaluate(()=>document.fonts.ready);
+    await page.screenshot({path:path.resolve(__dirname,'../../artifacts/tencent-login-integrated.png')});
+    assert.equal(await page.locator('.tencent-sheet-actions button').filter({hasText:'识别并检查'}).isDisabled(),true);
+    await page.setViewportSize({width:390,height:760});
+    assert.equal(await page.locator('.tencent-login-dialog').evaluate(el=>el.scrollWidth>el.clientWidth),false);
+    await page.setViewportSize({width:1200,height:900});
+    await page.evaluate(()=>window.loginState='expired');
+    await page.getByText('二维码已过期',{exact:true}).waitFor();
+    assert.equal(await page.getByAltText('企业微信登录二维码').count(),0);
+    await page.getByRole('button',{name:'刷新二维码',exact:true}).click();
+    await page.getByAltText('企业微信登录二维码').waitFor();
+    await page.evaluate(()=>window.loginState='success');
+    await page.getByRole('button',{name:'完成',exact:true}).click();
+    await page.locator('.tencent-login-dialog').waitFor({state:'detached'});
+    assert.equal(await page.locator('.tencent-login-session strong').textContent(),'已登录');
+    assert.equal((await page.evaluate(()=>window.loginStages)).at(-1),'cancel');
     await page.getByRole('button',{name:'录制网页控件',exact:true}).click();
     await page.getByRole('button',{name:'开始配置',exact:true}).click();
     await page.getByRole('button',{name:'录制 Sheet 标签',exact:true}).click();
@@ -112,6 +138,7 @@ async function main(){
     console.log('PASS: formal route, visual-only configuration without advanced settings, 1100px layout');
     console.log('PASS: teaching setup, four captures, third-date preview and write controls disabled during teaching');
     console.log('PASS: task-owned recording controls, required test before save and document operation isolation');
+    console.log('PASS: login consent, QR, expiry/refresh, completion cleanup, modal isolation and narrow viewport');
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

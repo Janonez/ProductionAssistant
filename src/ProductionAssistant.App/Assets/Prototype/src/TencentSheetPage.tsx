@@ -7,6 +7,7 @@ import { TencentWebControls, type WebControls } from "./TencentWebControls";
 import { TencentNotionBinding, type BusinessField, type NotionBinding } from "./TencentNotionBinding";
 import { TencentExecutionRules, defaultSchedule, type BusinessDateRule, type ExecutionSchedule } from "./TencentExecutionRules";
 import { ChoicePicker } from "./FormPickers";
+import { TencentLoginDialog } from "./TencentLoginDialog";
 import type { AutomationTaskCreateProps } from "./automationTaskTypes";
 import "./tencent-sheet.css";
 
@@ -46,6 +47,7 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
   const [manual, setManual] = useState(false), [date, setDate] = useState("");
   const [preview, setPreview] = useState<Preview>(), [dirty, setDirty] = useState(false);
   const [teaching, setTeaching] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false), [loggedIn, setLoggedIn] = useState(false);
   const [recording, setRecording] = useState(false), [sheets, setSheets] = useState<string[]>([]);
 
   const [fieldName, setFieldName] = useState(""), [fieldUnit, setFieldUnit] = useState("");
@@ -55,6 +57,7 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
   const load = () => invoke<Job>("tencentSheet.get", { id }).then(setJob);
   useEffect(() => {
     let active = true;
+    setLoggedIn(false); setLoginOpen(false);
     invoke<Job>("tencentSheet.get", { id }).then(job => { if (active) setJob(job); }).catch(error => { if (active) { setFailed(true); setNotice(message(error)); } });
     return () => { active = false; };
   }, [id]);
@@ -65,7 +68,7 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
     finally { setBusy(""); }
   }
   function invalidate() { setData(undefined); setPreview(undefined); }
-  function edit(config: Config) { setJob(current => current && { ...current, config }); setDirty(true); invalidate(); }
+  function edit(config: Config) { setJob(current => current && { ...current, config }); setLoggedIn(false); setDirty(true); invalidate(); }
   async function updateField(field: BusinessField, notion?: NotionBinding) {
     invalidate();
     setJob(await invoke<Job>("tencentSheet.updateField", { id, fieldId: field.id, name: field.name, unit: field.unit, ...(notion ? { notion } : {}) }));
@@ -91,18 +94,20 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
   const fields = config.fields ?? [];
   const selected = fields.find(field => field.id === selectedField);
   const binding = fields.find(field => field.id === bindingField);
-  const blocked = !!busy || teaching || !!binding || recording;
+  const blocked = !!busy || teaching || !!binding || recording || loginOpen;
   return <div className="tencent-sheet-workbench" aria-busy={!!busy}>
     <div className="tencent-sheet-intro"><div><h2>腾讯文档填报</h2><p>在同一任务中配置网页控件、业务位置和执行规则。目标格已有内容时会停止。</p></div><span>Development 测试</span></div>
     {notice && <div className={`notice ${failed ? "error" : "info"}`} role={failed ? "alert" : "status"}><div><strong>{failed ? "操作未完成" : "操作结果"}</strong><span>{notice}</span></div></div>}
     <fieldset disabled={blocked} className="tencent-sheet-panel"><legend>文档</legend>
       <label>文档链接<input type="url" disabled={job.enabled} value={config.documentUrl} onChange={event => edit({ ...config, documentUrl: event.target.value })} /></label>
-      <div className="tencent-sheet-actions"><button className="secondary" onClick={() => action("打开文档", () => connect("open"))}>打开文档 / 扫码登录</button><button className="primary" disabled={job.enabled} onClick={() => action("识别页面", () => connect("recognize"))}>识别并检查</button></div>
+      <div className="tencent-login-session"><div><strong>{loggedIn ? "已登录" : "连接填报账号"}</strong><p className="tencent-sheet-help">{loggedIn ? "可继续识别目标文档；执行前会重新检查登录状态。" : "使用企业微信扫码，已有登录状态会自动复用。"}</p></div><button className="primary" onClick={() => action("准备扫码登录", async () => { if (dirty) await save(); invalidate(); setLoggedIn(false); setLoginOpen(true); })}>{loggedIn ? "检查登录" : "扫码登录"}</button></div>
+      <div className="tencent-sheet-actions"><button className="secondary" onClick={() => action("打开文档", () => connect("open"))}>打开文档</button><button className="primary" disabled={job.enabled} onClick={() => action("识别页面", () => connect("recognize"))}>识别并检查</button></div>
       <button className="secondary" onClick={() => action("结束前台会话", async () => { invalidate(); const result = await invoke<{ message: string }>("tencentSheet.close", { id }); setNotice(result.message); })}>结束前台会话</button>
-      <p className="tencent-sheet-help">首次使用扫码登录。识别会检查已保存控件并读取工作表名称，不填写数据。</p>
+      <p className="tencent-sheet-help">识别会检查已保存控件并读取工作表名称，不填写数据。录制控件和示范位置时，仍会打开填报专用浏览器。</p>
       {!!sheets.length && <label>工作表名称<ChoicePicker value={config.sheetReferenceName ?? config.capturedSheet ?? config.sheetName ?? ""} options={sheets.map(name => ({ value: name, label: name }))} placeholder="选择识别到的工作表名称" disabled={blocked} onChange={sheetReferenceName => edit({ ...config, sheetReferenceName })} /></label>}
       {(config.sheetReferenceName || config.capturedSheet || config.sheetMode === "fixed") && <p className="tencent-sheet-help">工作表：{config.sheetReferenceName ?? config.capturedSheet ?? config.sheetName} · 执行时按名称匹配，年月使用本次业务日期。</p>}
     </fieldset>
+    {loginOpen && <TencentLoginDialog key={`login:${id}`} id={id} onClose={success => { setLoggedIn(success); setLoginOpen(false); setNotice(success ? "已登录腾讯文档，可以继续识别并检查。" : "已关闭扫码登录，原有登录状态已保留。"); }} />}
     {dirty && <button className="primary" disabled={blocked} onClick={() => action("保存任务配置", async () => { await save(); setNotice("任务配置已保存。保存规则不会自动启用定时。"); })}>保存任务配置</button>}
     <TencentWebControls key={id} id={id} value={config.webControls} disabled={!!busy || teaching || !!binding || dirty || !!job.enabled} onActive={active => { setRecording(active); if (active) invalidate(); }} onSaved={async () => { await load(); invalidate(); changed(); }} />
     <fieldset disabled={blocked || dirty || job.enabled} className="tencent-sheet-panel"><legend>业务字段与填写位置</legend>
