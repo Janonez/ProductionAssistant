@@ -230,22 +230,29 @@ class TencentSheetClient {
     }
   }
   async saveState(config) {
-    const texts=await this.scope(config).locator('[role="status"]:visible,[aria-live="polite"]:visible').allTextContents();
-    const text=texts.join(' ');
-    if(/保存失败|无法保存|同步失败/.test(text))throw Error('文档提示保存失败，请检查网页；不会重复写入。');
-    return /正在保存|保存中|同步中/.test(text)?'saving':/已保存|保存成功|已同步/.test(text)?'saved':'unknown';
+    await site.assertNoLogin(this.page);
+    let state;
+    if(config.webControls?.saveStatus) {
+      try {state=(await site.readSaveStatus(await site.resolveControl(this.page,config.webControls.saveStatus,'saveStatus'))).state;}
+      catch(error) {if(error.code!=='ControlUnavailable' || error.ambiguous)throw error;return 'unknown';}
+    } else {
+      const texts=await this.scope(config).locator('[role="status"]:visible,[aria-live="polite"]:visible').allTextContents();
+      state=site.classifySaveState(texts.join(' '));
+    }
+    if(state==='failed')throw Error('文档提示保存失败、未保存或离线，请检查网页；不会重复写入。');
+    return state;
   }
   async confirmSaved(config,plan,rows) {
     const deadline=Date.now()+30000;
     let sawSaving=false;
     // A saved label already present before this batch is never sufficient evidence.
     for(let attempt=0;attempt<3;attempt++) {
-      await new Promise(resolve=>setTimeout(resolve,[2000,2000,4000][attempt]));
+      const settledAfter=Date.now()+[2000,2000,4000][attempt];
       let status=await this.saveState(config);
-      while(status==='saving') {
-        sawSaving=true;
-        if(Date.now()>=deadline)throw Error('保存等待超过 30 秒，结果待确认；不会重复写入。');
-        await new Promise(resolve=>setTimeout(resolve,250));
+      while(Date.now()<settledAfter || status==='saving' || (config.webControls?.saveStatus && status!=='saved')) {
+        sawSaving ||= status==='saving';
+        if(Date.now()>=deadline)throw Error(config.webControls?.saveStatus?'等待录制的保存状态确认超过 30 秒，请检查控件和网页保存状态；不会重复写入。':'保存等待超过 30 秒，结果待确认；不会重复写入。');
+        await this.page.waitForTimeout(Math.min(250,deadline-Date.now()));
         status=await this.saveState(config);
       }
       if(Date.now()>=deadline)break;

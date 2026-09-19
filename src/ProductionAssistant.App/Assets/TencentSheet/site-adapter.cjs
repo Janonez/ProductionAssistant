@@ -1,7 +1,17 @@
 'use strict';
 
-const controlNames = {sheetTab:'Sheet 标签',cellAddressBox:'单元格名称框',cellEditor:'内容编辑区／公式栏'};
+const controlNames = {sheetTab:'Sheet 标签',cellAddressBox:'单元格名称框',cellEditor:'内容编辑区／公式栏',saveStatus:'保存状态'};
 const editable = 'input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
+const savedPattern = /保存成功|已(?:自动|成功)?保存|已同步|all changes saved|\bsaved\b/i;
+function classifySaveState(text) {
+  if(/保存失败|无法保存|同步失败|未保存|尚未保存|无法同步|未同步|离线|断网|save failed|not saved|unsaved|offline/i.test(text))return 'failed';
+  if(/正在保存|保存中|同步中|正在同步|\bsaving\b|\bsyncing\b/i.test(text))return 'saving';
+  return savedPattern.test(text)?'saved':'unknown';
+}
+async function readSaveStatus(locator) {
+  const text=await locator.evaluate(el=>[el.innerText || el.textContent || '',el.getAttribute('title'),el.getAttribute('aria-label'),el.getAttribute('data-tooltip')].filter(Boolean).join(' ').trim());
+  return {text,state:classifySaveState(text)};
+}
 
 function normalizeControls(raw = {}) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw Error('网页控件录制信息无效。');
@@ -21,10 +31,11 @@ function normalizeControls(raw = {}) {
         return {type:'collection',parentSelector:strategy.parentSelector,itemSelector:strategy.itemSelector,selectedSelector:strategy.selectedSelector,...(strategy.selectedStyle?{selectedStyle:strategy.selectedStyle}:{})};
       }
       if (!['css','role','placeholder'].includes(strategy.type) || !short(strategy.value) || (strategy.type === 'role' && !short(strategy.name)))
-        throw Error('单元格名称框定位规则无效，请重新录制。');
+        throw Error(controlNames[key]+'定位规则无效，请重新录制。');
       return strategy.type === 'role' ? {type:strategy.type,value:strategy.value,name:strategy.name} : {type:strategy.type,value:strategy.value};
     });
     if (typeof value.sampleText !== 'string' || value.sampleText.length > 300) throw Error('控件示例文字无效。');
+    if(key==='saveStatus' && classifySaveState(value.sampleText)!=='saved')throw Error('请在显示“保存成功／已保存”时录制保存状态。');
     // Evidence is display-only. Never execute or use user-supplied evidence as a locator.
     const evidence = value.evidence && JSON.stringify(value.evidence).length < 16000 ? value.evidence : {};
     controls[key] = {frame:[...value.frame],strategies,sampleText:value.sampleText,evidence};
@@ -68,6 +79,7 @@ async function resolveControl(page, binding, key, active = false, collectionOnly
         : strategy.type === 'placeholder' ? scope.getByPlaceholder(strategy.value,{exact:true}) : scope.locator(strategy.value)).filter({visible:true});
       const count=await locator.count();
       if (count !== 1) {ambiguous ||= count>1;reasons.add(count?'匹配到了多个可见控件':'尚未出现可见控件');continue;}
+      if(key==='saveStatus')return locator;
       if (!await locator.evaluate((el,selector)=>el.matches(selector) && !el.disabled && !el.readOnly && el.getAttribute('aria-readonly')!=='true',editable)) {reasons.add('控件尚不可编辑');continue;}
       const address = await locator.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
       if(key==='cellAddressBox' && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(String(address).trim())) {reasons.add('名称框尚未显示有效单元格地址');continue;}
@@ -112,8 +124,8 @@ async function waitForControl(page, binding, key, timeout, {active=false,collect
 
 // Runs in each visible document. Analysis and locator construction stay next to the picker
 // so the injected code has no dependency on page globals or private application state.
-function ElementPicker({kind,session}) {
-  const stableClasses = el => [...el.classList].filter(value=>!/(?:active|selected|current|hover|focus|disabled)|\d{5}|^[a-f\d]{8,}$/i.test(value)).sort();
+function ElementPicker({kind,session,savedPattern}) {
+  const stableClasses = el => [...el.classList].filter(value=>!/(?:active|selected|current|hover|focus|disabled)|\d{5}|^[a-f\d]{8,}$/i.test(value) && !(kind==='saveStatus' && /(?:saved|saving|success|error|failed|pending|complete)/i.test(value))).sort();
   const attr = (key,value) => '['+key+'='+JSON.stringify(value)+']';
   function ElementAnalyzer(el) {
     const feature = node => ({tag:node.tagName.toLowerCase(),id:node.id,class:[...node.classList],role:node.getAttribute('role'),ariaLabel:node.getAttribute('aria-label'),placeholder:node.getAttribute('placeholder')});
@@ -129,8 +141,8 @@ function ElementPicker({kind,session}) {
       strategies.push(name?{type,value,name}:{type,value});
     };
     if(el.id && !/\d{5}|^[a-f\d-]{16,}$/i.test(el.id))add('css','#'+CSS.escape(el.id));
-    if(el.getAttribute('aria-label'))add('css',tag+attr('aria-label',el.getAttribute('aria-label')));
-    if(!parentOnly) {
+    if(el.getAttribute('aria-label') && kind!=='saveStatus')add('css',tag+attr('aria-label',el.getAttribute('aria-label')));
+    if(!parentOnly && kind!=='saveStatus') {
       const role=el.getAttribute('role') || (tag==='input' || tag==='textarea'?'textbox':'');
       const name=el.getAttribute('aria-label') || (el.labels?.length===1?el.labels[0].textContent.trim():'');
       if(role && name)add('role',role,name);
@@ -175,7 +187,7 @@ function ElementPicker({kind,session}) {
   }
   return new Promise(resolve=>{
     const banner=document.createElement('div'),outline=document.createElement('div');
-    banner.textContent=kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
+    banner.textContent=kind==='saveStatus'?'请点击网页中显示“保存成功／已保存”的状态控件，Esc 取消。':kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
     banner.dataset.paSitePicker=session;
     Object.assign(banner.style,{position:'fixed',top:'0',left:'0',right:'0',padding:'14px',background:'#292524',color:'#fff',zIndex:'2147483647',pointerEvents:'none'});
     Object.assign(outline.style,{position:'fixed',border:'2px solid #C2703D',background:'#C2703D18',zIndex:'2147483646',pointerEvents:'none',display:'none'});
@@ -190,6 +202,15 @@ function ElementPicker({kind,session}) {
       block(e);
       try {
         if(kind==='sheetTab'){finish({binding:collection(e.target)});return;}
+        if(kind==='saveStatus') {
+          for(let el=e.target,depth=0;el && el!==document.body && depth<4;el=el.parentElement,depth++) {
+            const text=[el.innerText || el.textContent || '',el.getAttribute('title'),el.getAttribute('aria-label'),el.getAttribute('data-tooltip')].filter(Boolean).join(' ').trim();
+            if(!text || text.length>300 || !new RegExp(savedPattern,'i').test(text))continue;
+            const strategies=LocatorBuilder(el);
+            if(strategies.length){finish({binding:{strategies,sampleText:text,evidence:ElementAnalyzer(el),count:1}});return;}
+          }
+          throw Error('请选择显示“保存成功／已保存”文字或提示的状态控件，不要选择表格内容或整块工具栏。');
+        }
         let el=e.target.closest('input,textarea,[contenteditable]') || e.target;
         if(!el.matches('input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]')) {
           const children=[...el.querySelectorAll('input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"]')].filter(node=>node.getClientRects().length);
@@ -236,10 +257,11 @@ async function recordControl(page, kind) {
   const session='__paSitePicker_'+require('node:crypto').randomUUID().replaceAll('-','');
   await page.bringToFront();
   try {
-    const {result,frame}=await Promise.race(frames.map(async frame=>({frame,result:await frame.evaluate(ElementPicker,{kind,session})})));
+    const {result,frame}=await Promise.race(frames.map(async frame=>({frame,result:await frame.evaluate(ElementPicker,{kind,session,savedPattern:savedPattern.source})})));
     if(result.error)throw Error(result.error);
     result.binding.frame=await framePath(frame);
-    await resolveControl(page,result.binding,kind,false,kind==='sheetTab');
+    const locator=await resolveControl(page,result.binding,kind,false,kind==='sheetTab');
+    if(kind==='saveStatus' && (await readSaveStatus(locator)).state!=='saved')throw Error('当前不是明确的已保存状态，请等待保存完成后重新录制。');
     return result.binding;
   } finally {
     await Promise.allSettled(frames.map(frame=>frame.evaluate(session=>window[session]?.(),session)));
@@ -338,6 +360,11 @@ async function learnSelection(page, binding, timeout) {
 async function testControls(page, controls, timeout = 10000) {
   const steps=[];
   await assertNoLogin(page);
+  if(controls.saveStatus) {
+    const status=await readSaveStatus(await waitForControl(page,controls.saveStatus,'saveStatus',timeout));
+    if(status.state!=='saved')throw Error('保存状态控件未显示“保存成功／已保存”，请等待保存完成后重试测试。');
+    steps.push({label:'读取保存状态',detail:status.text});
+  }
   await learnSelection(page,controls.sheetTab,timeout);
   const tabs=await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{collectionOnly:true});
   steps.push({label:'找到 Sheet 标签集合',detail:`${await tabs.count()} 个标签`});
@@ -371,4 +398,4 @@ async function testControls(page, controls, timeout = 10000) {
   return steps;
 }
 
-module.exports={normalizeControls,resolveControl,waitForControl,recordControl,assertNoLogin,testControls};
+module.exports={normalizeControls,resolveControl,waitForControl,recordControl,assertNoLogin,testControls,classifySaveState,readSaveStatus};

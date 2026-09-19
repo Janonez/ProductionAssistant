@@ -99,6 +99,7 @@ async function dispatch(request) {
       if(!tested || tested.token!==request.token || tested.proof!==proof() || tested.expires<Date.now())throw Error('控件测试已失效，请重新测试后保存。');
       await site.assertNoLogin(browser.page);
       for(const key of ['sheetTab','cellAddressBox','cellEditor'])await site.waitForControl(browser.page,controls[key],key,config.timeout*1000,{active:key==='sheetTab'});
+      if(controls.saveStatus && (await site.readSaveStatus(await site.waitForControl(browser.page,controls.saveStatus,'saveStatus',config.timeout*1000))).state!=='saved')throw Error('保存状态已变化，请等待保存完成后重新测试。');
       return {controls,message:'控件测试通过，可以保存。'};
     }
     if(operation==='siteOpen')return browser.open(config);

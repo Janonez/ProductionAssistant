@@ -30,6 +30,15 @@ it('owns three controls within the task, requires testing, and invalidates the p
   expect(button('保存网页控件').disabled).toBe(true);
   await act(async () => button('测试网页控件').click());
   expect(button('保存网页控件').disabled).toBe(false);
+  await act(async () => button('录制保存状态').click());
+  expect(button('保存网页控件').disabled).toBe(true);
+  expect(invoke.mock.calls.at(-1)?.[1].controls).toMatchObject({ sheetTab: {}, cellAddressBox: {}, cellEditor: {} });
+  await act(async () => button('测试网页控件').click());
+  expect(invoke.mock.calls.at(-1)?.[1].controls.saveStatus).toBeDefined();
+  await act(async () => button('移除保存状态').click());
+  expect(button('保存网页控件').disabled).toBe(true);
+  await act(async () => button('测试网页控件').click());
+  expect(invoke.mock.calls.at(-1)?.[1].controls.saveStatus).toBeUndefined();
   await act(async () => button('录制内容编辑区').click());
   expect(button('保存网页控件').disabled).toBe(true);
   await act(async () => button('测试网页控件').click());

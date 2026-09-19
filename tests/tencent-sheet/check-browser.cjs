@@ -43,7 +43,7 @@ async function main() {
   });
   await new Promise(resolve=>fixture.listen(0,'127.0.0.1',resolve));
   const profile = await fs.mkdtemp(path.resolve(__dirname,'../../artifacts/tencent-integrated-test-'));
-  const browser=new TencentDocsBrowser(profile,{headless:true,viewport:{width:1200,height:800}});
+  const browser=new TencentDocsBrowser(profile,{headless:true,args:['--no-proxy-server'],viewport:{width:1200,height:800}});
   const driver=new TencentSheetClient(browser);
   const config=core.validate({...require('./fixture-config.cjs')(),timeout:15,documentUrl:`http://127.0.0.1:${fixture.address().port}/`});
   const plan=core.plan(config,'2026-09-05',{cutting:0,welding:2,section:3,plate:4});
@@ -94,6 +94,7 @@ async function main() {
     cells.J9='0';cells.B9='别的公司';await driver.page.reload();
     await assert.rejects(driver.inspect(config,plan),/项目标志校验失败/);assert.equal(writes,4);
     cells.B9='滨海公司';for(const row of plan.rows)delete cells[row.address];await driver.page.reload();
+    config.webControls.saveStatus={frame:[],sampleText:'已保存',strategies:[{type:'css',value:'#saved'}]};
     const baseline=await driver.inspect(config,plan);failedSave=true;
     await assert.rejects(driver.write(config,plan,baseline),error=>error.code==='SaveConfirmationPending' && error.completed.length===4 && /已填写 4 项/.test(error.message) && /刷新后回读不一致/.test(error.details));assert.equal(writes,8);
     denyEdit=true;await driver.page.reload();await assert.rejects(driver.ready(config));
