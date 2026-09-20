@@ -140,6 +140,13 @@
     if (new Set(rows.map(r => r.address)).size !== rows.length) throw Error('目标单元格重复，请检查行号配置');
     return { sheet, date, rows };
   }
+  function controlTestTarget(config, now = Date.now()) {
+    const field = config.fields.find(field => config.rules?.[field.id]);
+    if (!field) return null;
+    const date = new Date(Number(now) + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const target = plan({ ...config, fields: [field], rules: { [field.id]: config.rules[field.id] } }, date, { [field.id]: 0 });
+    return { date, sheet: target.sheet, address: target.rows[0].address };
+  }
   function cellText(value) {
     const text=String(value ?? '');
     // Blank contenteditable controls can expose line breaks or invisible placeholders.
@@ -151,6 +158,6 @@
       return { ...r, current, action: current === '' ? 'write' : 'conflict' };
     });
   }
-  const api = { validate, plan, preflight, columnName, cellText, fieldKeys, sheetName, dateFormats, dateParts, addressParts, inferRule, ruleAddress, prediction, formatDate, normalizeRule, sheetBinding };
+  const api = { validate, plan, preflight, columnName, cellText, fieldKeys, sheetName, dateFormats, dateParts, addressParts, inferRule, ruleAddress, prediction, formatDate, normalizeRule, sheetBinding, controlTestTarget };
   module.exports = api;
 })();

@@ -11,7 +11,7 @@ it('owns three controls within the task, requires testing, and invalidates the p
   const saved = vi.fn(async () => {}), active = vi.fn();
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
     if (operation === 'tencentSite.pick') return { controls: { ...payload.controls, [payload.key]: { frame: [], sampleText: '', strategies: [{}] } }, message: '已录制' };
-    if (operation === 'tencentSite.test') return { controls: { ...payload.controls, sheetTab: { ...payload.controls.sheetTab, sampleText: 'learned' } }, token: 'tested', steps: [{ label: '名称框定位 J9', detail: '通过' }], message: '通过' };
+    if (operation === 'tencentSite.test') return { controls: { ...payload.controls, sheetTab: { ...payload.controls.sheetTab, sampleText: 'learned' } }, token: 'tested', steps: [{ label: '名称框定位 Y9', detail: '通过' }], message: '通过' };
     return { message: '操作完成' };
   });
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);

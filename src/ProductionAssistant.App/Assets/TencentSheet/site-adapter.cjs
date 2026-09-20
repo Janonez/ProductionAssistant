@@ -361,9 +361,13 @@ async function learnSelection(page, binding, timeout) {
   await waitForControl(page,binding,'sheetTab',timeout,{active:true,text:binding.sampleText});
 }
 
-async function testControls(page, controls, timeout = 10000) {
+async function testControls(page, controls, timeout = 10000, testTarget = null) {
   const steps=[];
   await assertNoLogin(page);
+  // Capture before switching tabs, which can change the current cell selection.
+  const initialName=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
+  const address=testTarget?.address || String(await initialName.evaluate(el=>el.value??el.textContent)).replaceAll('$','').trim().toUpperCase();
+  require('./core.js').addressParts(address);
   if(controls.saveStatus) {
     const status=await readSaveStatus(await waitForControl(page,controls.saveStatus,'saveStatus',timeout));
     if(!['saved','idle'].includes(status.state))throw Error('保存状态控件尚未显示已保存或上次修改时间，请等待后重试测试。');
@@ -372,32 +376,35 @@ async function testControls(page, controls, timeout = 10000) {
   await learnSelection(page,controls.sheetTab,timeout);
   const tabs=await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{collectionOnly:true});
   steps.push({label:'找到 Sheet 标签集合',detail:`${await tabs.count()} 个标签`});
-  const sample=controls.sheetTab.sampleText;
+  const sample=testTarget?.sheet || controls.sheetTab.sampleText;
   const target=tabs.filter({hasText:new RegExp('^'+sample.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$')});
-  if(!sample || await target.count()!==1)throw Error('录制的 Sheet 标签未找到或不唯一，请重新录制一个 Sheet 标签。');
+  if(!sample || await target.count()!==1)throw Error('测试工作表未找到或不唯一：'+sample+'。请确认今天对应的工作表已打开。');
   await assertNoLogin(page);
+  if(testTarget)await target.click();
   await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{active:true,text:sample});
   steps.push({label:'按名称找到并切换工作表',detail:sample});
   const name=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
   steps.push({label:'找到单元格名称框',detail:'唯一可编辑控件'});
-  await name.click();await assertNoLogin(page);await name.press('Control+A');await name.pressSequentially('J9');await name.press('Enter');
-  steps.push({label:'名称框定位 J9',detail:'未向业务单元格输入数值'});
+  await name.click();await assertNoLogin(page);await name.press('Control+A');await name.pressSequentially(address);await name.press('Enter');
+  steps.push({label:'名称框定位 '+address,detail:(testTarget?'北京时间今天 '+testTarget.date:'使用测试前选中的单元格，请确认它属于今天')+'；未向业务单元格输入数值'});
   await assertNoLogin(page);
   // Reacquire after blur; this tests the address control, not the document's business anchors.
   await name.evaluate(el=>el.blur());
   await page.waitForTimeout(150);
   const resolved=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
   const value=await resolved.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
-  if(String(value).replaceAll('$','').trim().toUpperCase()!=='J9')throw Error('名称框定位测试失败：离开输入框后不是 J9，请重新录制名称框。');
-  steps.push({label:'核对名称框地址',detail:'J9'});
-  const editor=await waitForControl(page,controls.cellEditor,'cellEditor',timeout);
+  if(String(value).replaceAll('$','').trim().toUpperCase()!==address)throw Error('名称框定位测试失败：离开输入框后不是 '+address+'，请重新录制名称框。');
+  steps.push({label:'核对名称框地址',detail:address});
+  let editor;
+  try {editor=await waitForControl(page,controls.cellEditor,'cellEditor',timeout);}
+  catch(error) {if(error.code==='ControlUnavailable')error.message+=' 测试位置：'+sample+'!'+address+'。请确认今天的这个单元格未受保护且允许编辑。';throw error;}
   const nameHandle=await resolved.elementHandle(),editorHandle=await editor.elementHandle();
   try {
     if(await nameHandle.ownerFrame()===await editorHandle.ownerFrame() && await nameHandle.evaluate((el,other)=>el===other,editorHandle))throw Error('编辑区与名称框录成了同一控件，请重新录制内容编辑区。');
   } finally {await nameHandle.dispose();await editorHandle.dispose();}
   const readEditor=()=>editor.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.innerText??el.textContent??'');
   const before=await readEditor();await editor.focus();await assertNoLogin(page);
-  if(await readEditor()!==before || (await resolved.evaluate(el=>el.value??el.textContent)).replaceAll('$','').trim().toUpperCase()!=='J9')throw Error('聚焦编辑区后内容或单元格地址发生变化，请重新录制编辑区。');
+  if(await readEditor()!==before || (await resolved.evaluate(el=>el.value??el.textContent)).replaceAll('$','').trim().toUpperCase()!==address)throw Error('聚焦编辑区后内容或单元格地址发生变化，请重新录制编辑区。');
   steps.push({label:'找到并检查内容编辑区',detail:'聚焦后原值与地址保持一致，未输入数据'});
   return steps;
 }

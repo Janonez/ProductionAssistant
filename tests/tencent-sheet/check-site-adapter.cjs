@@ -14,7 +14,8 @@ function fixture(custom=false) {
 
 async function pick(page,key,target) {
   const promise=site.recordControl(page,key);
-  await page.locator('[data-pa-site-picker]').waitFor();
+  promise.catch(()=>{});
+  await page.locator('[data-pa-site-picker]').waitFor({state:'attached'});
   await target.hover();
   await target.click();
   return promise;
@@ -33,7 +34,7 @@ async function main() {
       assert.ok(cellAddressBox.strategies.length>=3);
       const profile=site.normalizeControls({sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}});
       assert.equal((await site.testControls(page,profile)).length,6);
-      assert.equal(await page.evaluate(()=>window.lastAddress),'J9');
+      assert.equal(await page.evaluate(()=>window.lastAddress),'A1');
       assert.equal(await page.locator('#business-data').inputValue(),'业务内容未修改');
       // Simulate another workbook, changed id, reordered tabs and a new month.
       await page.setContent(fixture(custom));
@@ -72,10 +73,27 @@ async function main() {
       await page.getByText('乙表',{exact:true}).click();
       assert.equal(await (await site.resolveControl(page,persisted.sheetTab,'sheetTab',true)).innerText(),'乙表');
     }
+    for(const testTarget of [null,{date:'2026-09-20',sheet:'项目月报 9月',address:'Y9'}]) {
+      await page.setContent(fixture());
+      await page.evaluate(hasTarget=>{
+        const address=document.querySelector('#address'),editor=document.querySelector('#business-data');
+        address.value=hasTarget?'J9':'Y9';editor.readOnly=hasTarget;window.businessInputs=0;
+        editor.addEventListener('input',()=>window.businessInputs++);
+        document.querySelector('#tabs').addEventListener('click',()=>{address.value='J9';editor.readOnly=true;});
+        address.addEventListener('keydown',e=>{if(e.key==='Enter')editor.readOnly=address.value!=='Y9';});
+      },!!testTarget);
+      const profile={sheetTab:{frame:[],sampleText:'项目月报 8月',strategies:[{type:'collection',parentSelector:'#tabs',itemSelector:':scope > button',selectedSelector:'[aria-selected="true"]'}]},cellAddressBox:{frame:[],sampleText:'',strategies:[{type:'css',value:'#address'}]},cellEditor:{frame:[],sampleText:'',strategies:[{type:'css',value:'#business-data'}]}};
+      const steps=await site.testControls(page,profile,3000,testTarget);
+      assert.equal(await page.locator('#address').inputValue(),'Y9');
+      assert.equal(await page.evaluate(()=>window.businessInputs),0);
+      assert.equal(await page.locator('#business-data').inputValue(),'业务内容未修改');
+      assert.ok(steps.some(step=>step.label==='名称框定位 Y9'));
+      assert.equal(await (await site.resolveControl(page,profile.sheetTab,'sheetTab',true)).innerText(),testTarget?.sheet || profile.sheetTab.sampleText);
+    }
     await page.setContent(fixture());
     const cancelling=site.recordControl(page,'sheetTab');
     const rejected=assert.rejects(cancelling,/取消/);
-    await page.locator('[data-pa-site-picker]').waitFor();await page.keyboard.press('Escape');await rejected;
+    await page.locator('[data-pa-site-picker]').waitFor({state:'attached'});await page.keyboard.press('Escape');await rejected;
     assert.equal(await page.locator('[data-pa-site-picker]').count(),0);
     await page.locator('body').evaluate(body=>{const modal=document.createElement('div');modal.setAttribute('role','dialog');modal.textContent='请先登录，使用微信扫码登录';body.append(modal);});
     await assert.rejects(site.assertNoLogin(page),error=>error.code==='LoginRequired');
@@ -87,13 +105,13 @@ async function main() {
     assert.deepEqual(sheetTab.frame,['#embedded']);assert.deepEqual(cellAddressBox.frame,['#embedded']);
     const profile=site.normalizeControls({sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}});
     await site.testControls(page,profile);
-    assert.equal(await frame.locator('#address').inputValue(),'J9');
+    assert.equal(await frame.locator('#address').inputValue(),'A1');
     assert.equal(await page.locator('[data-pa-site-picker]').count(),0);
     await frame.locator('#address').evaluate(el=>{el.onfocus=()=>{const modal=document.createElement('dialog');modal.textContent='请先登录';document.body.append(modal);modal.showModal();};});
     await assert.rejects(site.testControls(page,profile),error=>error.code==='LoginRequired');
     const client=new TencentSheetClient({page,requirePage:()=>{}});
     await assert.rejects(client.inspect({fields:[{id:'missing'}],rules:{}},{}),/尚未完成/);
-    console.log('PASS: two unrelated DOM shapes, nested picker clicks, collection scope, dynamic month/reorder, fallback, ambiguity, cancellation, login, J9 navigation without business writes');
+    console.log('PASS: control recording, target-date navigation and preserved selection avoid protected history; zero business input, iframe, cancellation and login checks');
   } finally {await browser.close();}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

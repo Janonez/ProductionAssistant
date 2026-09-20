@@ -111,7 +111,7 @@ async function dispatch(request) {
       return {controls:site.normalizeControls(controls),count:binding.count,message:request.key==='sheetTab'?`已识别 ${binding.count} 个同类 Sheet 标签。`:request.key==='cellEditor'?'已录制内容编辑区。':'已录制单元格名称框。'};
     }
     if(operation==='siteTest') {
-      const steps=await site.testControls(browser.page,controls);
+      const steps=await site.testControls(browser.page,controls,config.timeout*1000,core.controlTestTarget(config));
       const token=crypto.randomUUID();siteValidation={token,proof:proof(),expires:Date.now()+600000};
       return {steps,token,controls,message:`${steps.length} 项控件测试全部通过，可以保存。`};
     }

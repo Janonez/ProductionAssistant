@@ -49,7 +49,7 @@ export function TencentWebControls({ id, value, disabled, onSaved, onActive }: {
           <div className="tencent-site-instructions"><strong>{controls.some(control => control.key === busy) ? "正在等待网页点选" : "控件录制模式"}</strong><p>点击左侧录制按钮后，在打开的浏览器中选择控件。鼠标悬停时高亮，点击只记录位置，不执行页面原动作。按 Esc 取消。</p><p>录制时先识别标签集合；测试时自动切换两个标签并切回，学习选中状态。登录提示自动发现，无需录制。</p></div>
         </div>
         {!!steps?.length && <ol className="tencent-site-results">{steps.map(step => <li key={step.label}><strong>{step.label}</strong><span>{step.detail}</span></li>)}</ol>}
-        <p className="tencent-sheet-help">测试会在两个标签间切换、学习选中状态，再切回录制标签并定位 J9。保存状态仅检查当前提示，不触发保存。不会向业务单元格填写数值。全部通过后才可保存。</p>
+        <p className="tencent-sheet-help">测试会切换两个标签，学习选中状态。有业务位置规则时，自动定位北京时间今天的单元格；尚未示范位置时，请先在录制的工作表中选中今天可编辑的单元格，再点击测试。测试仅定位、读取和检查编辑区，不填写业务数值。全部通过后才可保存。</p>
         <p className="tencent-sheet-help">保存状态可单独补录，已有三个控件无需重录。录制后填写会等待保存状态稳定，再刷新回读；上次修改时间仅表示空闲，不能单独证明本次保存成功。未配置时沿用原确认方式。</p>
         <div className="tencent-sheet-actions"><button className="secondary" disabled={!opened || !draft.sheetTab || !draft.cellAddressBox || !draft.cellEditor} onClick={() => run("test")}>测试网页控件</button><button className="primary" disabled={!token} onClick={() => run("save")}>保存网页控件</button><button className="secondary" onClick={() => { setDraft(undefined); onActive(false); invalidate(); setNotice(""); }}>取消</button></div>
       </fieldset>

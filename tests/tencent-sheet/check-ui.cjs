@@ -25,7 +25,7 @@ async function main(){
         if(request.operation==='tencentSheet.save'){Object.assign(config,request.payload.config);window.savedConfig=request.payload.config;data={id:'fixture',config,businessDate:'2026-08-31'};}
         if(request.operation==='tencentSite.open')data={message:'已打开本地模拟文档'};
         if(request.operation==='tencentSite.pick')data={controls:{...request.payload.controls,[request.payload.key]:{frame:[],strategies:[{}],sampleText:'示例工作表'}},message:request.payload.key==='sheetTab'?'已识别 12 个同类 Sheet 标签。':'已录制单元格名称框。'};
-        if(request.operation==='tencentSite.test')data={token:'test-receipt',steps:['找到 Sheet 标签集合','按名称找到并切换工作表','找到单元格名称框','名称框定位 J9','核对名称框地址'].map(label=>({label,detail:'本地模拟通过'})),message:'5 项适配测试全部通过，可以保存。'};
+        if(request.operation==='tencentSite.test')data={token:'test-receipt',steps:['找到 Sheet 标签集合','按名称找到并切换工作表','找到单元格名称框','名称框定位 Y9','核对名称框地址'].map(label=>({label,detail:'本地模拟通过'})),message:'5 项适配测试全部通过，可以保存。'};
         if(request.operation==='tencentSite.save'){window.controlsTask=request.payload.id;config.webControls=request.payload.controls;data={message:'已保存本任务控件'};}
         if(request.operation==='tencentSheet.addField'){config.fields.push({id:'custom',name:request.payload.name,unit:request.payload.unit});data={id:'fixture',config,businessDate:'2026-08-31'};}
         if(request.operation==='tencentSheet.sources')data={sources:[{id:'source',name:'质量数据库'}]};
