@@ -23,7 +23,7 @@ async function main() {
     res.setHeader('Content-Type','text/html; charset=utf-8');
     res.end(`<!doctype html><meta charset="utf-8"><title>Local sheet fixture</title>
       <button role="tab" aria-selected="true">其他工作表</button><button role="tab" aria-selected="false">下料、装焊（26年9月）</button>
-      <span id="editable" ${denyEdit?'hidden':''}>可编辑</span><span id="saved">已保存</span>
+      <span id="editable" ${denyEdit?'hidden':''}>可编辑</span><span id="saved">上次修改是在36分钟前进行的</span>
       <div id="ordinary">普通页面区域</div><div id="nameWrap"><label>名称框<input id="name" value="A1"></label></div><label>公式栏<input id="value" ${denyEdit?'readonly':''}></label>
       <div id="grid" role="grid" tabindex="0">表格键盘操作区</div>
       <script>
@@ -94,7 +94,7 @@ async function main() {
     cells.J9='0';cells.B9='别的公司';await driver.page.reload();
     await assert.rejects(driver.inspect(config,plan),/项目标志校验失败/);assert.equal(writes,4);
     cells.B9='滨海公司';for(const row of plan.rows)delete cells[row.address];await driver.page.reload();
-    config.webControls.saveStatus={frame:[],sampleText:'已保存',strategies:[{type:'css',value:'#saved'}]};
+    config.webControls.saveStatus={frame:[],sampleText:'上次修改是在36分钟前进行的',strategies:[{type:'css',value:'#saved'}]};
     const baseline=await driver.inspect(config,plan);failedSave=true;
     await assert.rejects(driver.write(config,plan,baseline),error=>error.code==='SaveConfirmationPending' && error.completed.length===4 && /已填写 4 项/.test(error.message) && /刷新后回读不一致/.test(error.details));assert.equal(writes,8);
     denyEdit=true;await driver.page.reload();await assert.rejects(driver.ready(config));

@@ -3,10 +3,11 @@
 const controlNames = {sheetTab:'Sheet 标签',cellAddressBox:'单元格名称框',cellEditor:'内容编辑区／公式栏',saveStatus:'保存状态'};
 const editable = 'input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
 const savedPattern = /保存成功|已(?:自动|成功)?保存|最近保存\s*[:：]?\s*(?:[01]?\d|2[0-3])[:：][0-5]\d(?!\d)|已同步|all changes saved|\bsaved\b/i;
+const idlePattern = /上次修改(?:是)?在\s*\d+\s*(?:秒|分钟|小时|天)前进行的/;
 function classifySaveState(text) {
   if(/保存失败|无法保存|同步失败|未保存|尚未保存|无法同步|未同步|离线|断网|save failed|not saved|unsaved|offline/i.test(text))return 'failed';
   if(/正在保存|保存中|同步中|正在同步|\bsaving\b|\bsyncing\b/i.test(text))return 'saving';
-  return savedPattern.test(text)?'saved':'unknown';
+  return savedPattern.test(text)?'saved':idlePattern.test(text)?'idle':'unknown';
 }
 async function readSaveStatus(locator) {
   const text=await locator.evaluate(el=>[el.innerText || el.textContent || '',el.getAttribute('title'),el.getAttribute('aria-label'),el.getAttribute('data-tooltip')].filter(Boolean).join(' ').trim());
@@ -35,7 +36,7 @@ function normalizeControls(raw = {}) {
       return strategy.type === 'role' ? {type:strategy.type,value:strategy.value,name:strategy.name} : {type:strategy.type,value:strategy.value};
     });
     if (typeof value.sampleText !== 'string' || value.sampleText.length > 300) throw Error('控件示例文字无效。');
-    if(key==='saveStatus' && classifySaveState(value.sampleText)!=='saved')throw Error('请在显示“已保存／已自动保存／最近保存 + 时间”时录制保存状态。');
+    if(key==='saveStatus' && !['saved','idle'].includes(classifySaveState(value.sampleText)))throw Error('请在显示“已保存／最近保存／上次修改时间”时录制保存状态。');
     // Evidence is display-only. Never execute or use user-supplied evidence as a locator.
     const evidence = value.evidence && JSON.stringify(value.evidence).length < 16000 ? value.evidence : {};
     controls[key] = {frame:[...value.frame],strategies,sampleText:value.sampleText,evidence};
@@ -187,7 +188,7 @@ function ElementPicker({kind,session,savedPattern}) {
   }
   return new Promise(resolve=>{
     const banner=document.createElement('div'),outline=document.createElement('div');
-    banner.textContent=kind==='saveStatus'?'请点击网页中显示“已保存／已自动保存／最近保存 + 时间”的状态控件，Esc 取消。':kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
+    banner.textContent=kind==='saveStatus'?'请点击网页中显示“已保存／最近保存／上次修改时间”的状态控件，Esc 取消。':kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
     banner.dataset.paSitePicker=session;
     Object.assign(banner.style,{position:'fixed',...(kind==='saveStatus'?{bottom:'0'}:{top:'0'}),left:'0',right:'0',padding:'14px',background:'#292524',color:'#fff',zIndex:'2147483647',pointerEvents:'none'});
     Object.assign(outline.style,{position:'fixed',border:'2px solid #C2703D',background:'#C2703D18',zIndex:'2147483646',pointerEvents:'none',display:'none'});
@@ -260,11 +261,11 @@ async function recordControl(page, kind) {
   const session='__paSitePicker_'+require('node:crypto').randomUUID().replaceAll('-','');
   await page.bringToFront();
   try {
-    const {result,frame}=await Promise.race(frames.map(async frame=>({frame,result:await frame.evaluate(ElementPicker,{kind,session,savedPattern:savedPattern.source})})));
+    const {result,frame}=await Promise.race(frames.map(async frame=>({frame,result:await frame.evaluate(ElementPicker,{kind,session,savedPattern:savedPattern.source+'|'+idlePattern.source})})));
     if(result.error)throw Error(result.error);
     result.binding.frame=await framePath(frame);
     const locator=await resolveControl(page,result.binding,kind,false,kind==='sheetTab');
-    if(kind==='saveStatus' && (await readSaveStatus(locator)).state!=='saved')throw Error('当前不是明确的已保存状态，请等待保存完成后重新录制。');
+    if(kind==='saveStatus' && !['saved','idle'].includes((await readSaveStatus(locator)).state))throw Error('当前保存状态尚未稳定，请等待已保存或上次修改时间出现后重新录制。');
     return result.binding;
   } finally {
     await Promise.allSettled(frames.map(frame=>frame.evaluate(session=>window[session]?.(),session)));
@@ -365,7 +366,7 @@ async function testControls(page, controls, timeout = 10000) {
   await assertNoLogin(page);
   if(controls.saveStatus) {
     const status=await readSaveStatus(await waitForControl(page,controls.saveStatus,'saveStatus',timeout));
-    if(status.state!=='saved')throw Error('保存状态控件未显示“保存成功／已保存”，请等待保存完成后重试测试。');
+    if(!['saved','idle'].includes(status.state))throw Error('保存状态控件尚未显示已保存或上次修改时间，请等待后重试测试。');
     steps.push({label:'读取保存状态',detail:status.text});
   }
   await learnSelection(page,controls.sheetTab,timeout);

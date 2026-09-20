@@ -4,7 +4,7 @@ import { invoke } from "./bridge";
 type Binding = { frame: string[]; strategies: unknown[]; sampleText: string; evidence?: unknown };
 export type WebControls = { sheetTab?: Binding; cellAddressBox?: Binding; cellEditor?: Binding; saveStatus?: Binding };
 type Reply = { controls?: WebControls; message: string; count?: number; token?: string; steps?: { label: string; detail: string }[] };
-const controls = [{ key: "sheetTab", title: "① Sheet 标签", prompt: "请在浏览器中点击任意一个底部 Sheet 标签。程序会识别它所属的集合。" }, { key: "cellAddressBox", title: "② 单元格名称框", prompt: "请点击左上角显示当前单元格地址的位置。" }, { key: "cellEditor", title: "③ 内容编辑区／公式栏", prompt: "请点击可以读取和输入单元格内容的编辑区，不要选择名称框。" }, { key: "saveStatus", title: "④ 保存状态（可选）", prompt: "请在网页显示“保存成功／已保存”时，点击对应的状态控件。" }] as const;
+const controls = [{ key: "sheetTab", title: "① Sheet 标签", prompt: "请在浏览器中点击任意一个底部 Sheet 标签。程序会识别它所属的集合。" }, { key: "cellAddressBox", title: "② 单元格名称框", prompt: "请点击左上角显示当前单元格地址的位置。" }, { key: "cellEditor", title: "③ 内容编辑区／公式栏", prompt: "请点击可以读取和输入单元格内容的编辑区，不要选择名称框。" }, { key: "saveStatus", title: "④ 保存状态（可选）", prompt: "请点击显示“已保存”“最近保存”或“上次修改时间”的状态控件。" }] as const;
 
 export function TencentWebControls({ id, value, disabled, onSaved, onActive }: {
   id: string; value?: WebControls; disabled: boolean;
@@ -50,7 +50,7 @@ export function TencentWebControls({ id, value, disabled, onSaved, onActive }: {
         </div>
         {!!steps?.length && <ol className="tencent-site-results">{steps.map(step => <li key={step.label}><strong>{step.label}</strong><span>{step.detail}</span></li>)}</ol>}
         <p className="tencent-sheet-help">测试会在两个标签间切换、学习选中状态，再切回录制标签并定位 J9。保存状态仅检查当前提示，不触发保存。不会向业务单元格填写数值。全部通过后才可保存。</p>
-        <p className="tencent-sheet-help">保存状态可单独补录，已有三个控件无需重录。录制后填写会等待明确的已保存提示，再刷新回读；未配置时继续使用原来的确认方式。</p>
+        <p className="tencent-sheet-help">保存状态可单独补录，已有三个控件无需重录。录制后填写会等待保存状态稳定，再刷新回读；上次修改时间仅表示空闲，不能单独证明本次保存成功。未配置时沿用原确认方式。</p>
         <div className="tencent-sheet-actions"><button className="secondary" disabled={!opened || !draft.sheetTab || !draft.cellAddressBox || !draft.cellEditor} onClick={() => run("test")}>测试网页控件</button><button className="primary" disabled={!token} onClick={() => run("save")}>保存网页控件</button><button className="secondary" onClick={() => { setDraft(undefined); onActive(false); invalidate(); setNotice(""); }}>取消</button></div>
       </fieldset>
     </>}

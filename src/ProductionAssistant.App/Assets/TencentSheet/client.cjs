@@ -249,7 +249,7 @@ class TencentSheetClient {
     for(let attempt=0;attempt<3;attempt++) {
       const settledAfter=Date.now()+[2000,2000,4000][attempt];
       let status=await this.saveState(config);
-      while(Date.now()<settledAfter || status==='saving' || (config.webControls?.saveStatus && status!=='saved')) {
+      while(Date.now()<settledAfter || status==='saving' || (config.webControls?.saveStatus && !['saved','idle'].includes(status))) {
         sawSaving ||= status==='saving';
         if(Date.now()>=deadline)throw Error(config.webControls?.saveStatus?'等待录制的保存状态确认超过 30 秒，请检查控件和网页保存状态；不会重复写入。':'保存等待超过 30 秒，结果待确认；不会重复写入。');
         await this.page.waitForTimeout(Math.min(250,deadline-Date.now()));

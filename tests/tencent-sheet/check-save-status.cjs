@@ -8,7 +8,7 @@ async function main(){
   const page=await browser.newPage();page.setDefaultTimeout(3000);
   try {
     for(const attribute of ['text','title','aria-label']){
-      await page.setContent(`<button id="save" class="save-indicator saved" onclick="window.clicked=true" ${attribute==='text'?'':`${attribute}="最近保存 14:59"`}>${attribute==='text'?'最近保存 14:59':'✓'}</button><div role="status">已保存</div>`);
+      await page.setContent(`<button id="save" class="save-indicator saved" onclick="window.clicked=true" ${attribute==='text'?'':`${attribute}="上次修改是在36分钟前进行的"`}>${attribute==='text'?'上次修改是在36分钟前进行的':'✓'}</button><div role="status">已保存</div>`);
       await page.mouse.move(0,0);
       const pending=site.recordControl(page,'saveStatus');
       pending.catch(()=>{});
@@ -22,8 +22,8 @@ async function main(){
       assert.equal(await page.evaluate(()=>!!window.clicked),false);
       const config={webControls:site.normalizeControls(JSON.parse(JSON.stringify({saveStatus:binding})))};
       const client=new TencentSheetClient({page,requirePage:()=>{}});
-      assert.equal(await client.saveState(config),'saved');
-      for(const [text,state] of [['正在保存','saving'],['已自动保存','saved'],['最近保存 15:01','saved'],['保存成功','saved'],['未保存','failed'],['离线','failed'],['状态未知','unknown']]){
+      assert.equal(await client.saveState(config),'idle');
+      for(const [text,state] of [['正在保存','saving'],['已自动保存','saved'],['最近保存 15:01','saved'],['上次修改是在1小时前进行的','idle'],['保存成功','saved'],['未保存','failed'],['离线','failed'],['状态未知','unknown']]){
         await page.locator('#save').evaluate((el,{attribute,text})=>{el.className='save-indicator saving';if(attribute==='text')el.textContent=text;else el.setAttribute(attribute,text);},{attribute,text});
         if(state==='failed')await assert.rejects(client.saveState(config),/不会重复写入/);
         else assert.equal(await client.saveState(config),state);
