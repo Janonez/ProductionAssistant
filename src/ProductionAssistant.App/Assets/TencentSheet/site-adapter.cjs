@@ -189,11 +189,11 @@ function ElementPicker({kind,session,savedPattern}) {
     const banner=document.createElement('div'),outline=document.createElement('div');
     banner.textContent=kind==='saveStatus'?'请点击网页中显示“保存成功／已保存”的状态控件，Esc 取消。':kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
     banner.dataset.paSitePicker=session;
-    Object.assign(banner.style,{position:'fixed',top:'0',left:'0',right:'0',padding:'14px',background:'#292524',color:'#fff',zIndex:'2147483647',pointerEvents:'none'});
+    Object.assign(banner.style,{position:'fixed',...(kind==='saveStatus'?{bottom:'0'}:{top:'0'}),left:'0',right:'0',padding:'14px',background:'#292524',color:'#fff',zIndex:'2147483647',pointerEvents:'none'});
     Object.assign(outline.style,{position:'fixed',border:'2px solid #C2703D',background:'#C2703D18',zIndex:'2147483646',pointerEvents:'none',display:'none'});
     document.body.append(banner,outline);
     const block=e=>{e.preventDefault();e.stopImmediatePropagation();};
-    const highlight=e=>{const rect=e.target.getBoundingClientRect();Object.assign(outline.style,{display:'block',left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});};
+    const highlight=e=>{const rect=e.target.getBoundingClientRect(),hint=banner.getBoundingClientRect();banner.style.visibility=rect.top<hint.bottom && rect.bottom>hint.top && rect.left<hint.right && rect.right>hint.left?'hidden':'visible';Object.assign(outline.style,{display:'block',left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});};
     const hide=()=>{outline.style.display='none';};
     const finish=result=>{clearTimeout(timer);banner.remove();outline.remove();for(const type of ['pointerdown','mousedown','pointerup','mouseup'])document.removeEventListener(type,block,true);document.removeEventListener('mouseover',highlight,true);document.removeEventListener('mouseout',hide,true);document.removeEventListener('click',click,true);document.removeEventListener('keydown',keydown,true);delete window[session];resolve(result);};
     const timer=setTimeout(()=>finish({error:'录制超时，请重新开始选择。'}),60000);

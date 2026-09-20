@@ -9,8 +9,15 @@ async function main(){
   try {
     for(const attribute of ['text','title','aria-label']){
       await page.setContent(`<button id="save" class="save-indicator saved" onclick="window.clicked=true" ${attribute==='text'?'':`${attribute}="已保存"`}>${attribute==='text'?'已保存':'✓'}</button><div role="status">已保存</div>`);
+      await page.mouse.move(0,0);
       const pending=site.recordControl(page,'saveStatus');
-      await page.locator('[data-pa-site-picker]').waitFor();await page.locator('#save').click();
+      pending.catch(()=>{});
+      const hint=page.locator('[data-pa-site-picker]');await hint.waitFor({state:'attached'});
+      assert.ok((await hint.evaluate(el=>el.getBoundingClientRect().y))>(await page.locator('#save').boundingBox()).y+30);
+      await page.locator('#save').evaluate(el=>{el.style.position='fixed';el.style.bottom='0';});
+      await page.locator('#save').hover();
+      assert.equal(await hint.evaluate(el=>getComputedStyle(el).visibility),'hidden');
+      await page.locator('#save').click();
       const binding=await pending;
       assert.equal(await page.evaluate(()=>!!window.clicked),false);
       const config={webControls:site.normalizeControls(JSON.parse(JSON.stringify({saveStatus:binding})))};
