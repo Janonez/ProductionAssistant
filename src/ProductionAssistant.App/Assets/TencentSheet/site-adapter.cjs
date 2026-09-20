@@ -203,13 +203,16 @@ function ElementPicker({kind,session,savedPattern}) {
       try {
         if(kind==='sheetTab'){finish({binding:collection(e.target)});return;}
         if(kind==='saveStatus') {
+          const inspected=[];let matchedState=false;
           for(let el=e.target,depth=0;el && el!==document.body && depth<4;el=el.parentElement,depth++) {
             const text=[el.innerText || el.textContent || '',el.getAttribute('title'),el.getAttribute('aria-label'),el.getAttribute('data-tooltip')].filter(Boolean).join(' ').trim();
+            inspected.push(`${el.tagName.toLowerCase()}${el.id?'#'+el.id:''}${[...el.classList].slice(0,4).map(value=>'.'+value).join('')}：${text?JSON.stringify(text.slice(0,160)):'（无文字或提示）'}${text.length>300?'（内容超过控件范围）':''}`);
             if(!text || text.length>300 || !new RegExp(savedPattern,'i').test(text))continue;
+            matchedState=true;
             const strategies=LocatorBuilder(el);
             if(strategies.length){finish({binding:{strategies,sampleText:text,evidence:ElementAnalyzer(el),count:1}});return;}
           }
-          throw Error('未能识别所选控件的保存状态或稳定位置。请点击显示“已保存／已自动保存／最近保存 + 时间”的控件；仅有自动保存说明或上次修改信息无法确认保存状态。');
+          throw Error((matchedState?'已读到保存状态，但无法生成唯一、可复用的控件定位。':'点击位置及其上层元素未读到可识别的保存状态。')+' 实际读取：'+inspected.join(' → '));
         }
         let el=e.target.closest('input,textarea,[contenteditable]') || e.target;
         if(!el.matches('input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]')) {

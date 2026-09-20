@@ -35,6 +35,15 @@ async function main(){
     for(const text of ['所有编辑内容都会自动保存到云端','上次修改在1小时前','最近保存','最近保存 99:99'])assert.equal(site.classifySaveState(text),'unknown');
     assert.equal(site.classifySaveState('最近保存 14:59 正在保存'),'saving');
     assert.equal(site.classifySaveState('最近保存 14:59 保存失败'),'failed');
+    for(const [html,expected] of [
+      ['<button id="history">上次修改在1小时前</button>',/未读到可识别的保存状态.*button#history.*上次修改/],
+      ['<span>最近保存 14:59</span><span>最近保存 14:59</span>',/已读到保存状态，但无法生成唯一/]
+    ]){
+      await page.setContent(html);await page.mouse.move(0,0);
+      const pending=site.recordControl(page,'saveStatus');const rejected=assert.rejects(pending,expected);
+      await page.locator('[data-pa-site-picker]').waitFor({state:'attached'});
+      await page.locator('body > :first-child').click();await rejected;
+    }
     assert.throws(()=>site.normalizeControls({saveStatus:{frame:[],sampleText:'未保存',strategies:[{type:'css',value:'#save'}]}}),/已保存/);
     console.log('PASS: recorded text/title/aria-label status survives transitions; picker suppresses original click; missing status never falls back to unrelated saved label; failures stop confirmation');
   }finally{await browser.close();}
