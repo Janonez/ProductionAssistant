@@ -60,7 +60,7 @@ async function main() {
       await page.setContent(`<div id="tabs"><div class="leaf extra"><span>甲表</span></div><div class="leaf"><span>乙表</span></div></div><input id="address" value="A1"><input id="business-data" value="内容"><style>.leaf{display:inline-block;padding:12px}</style>`);
       await page.locator('#tabs').evaluate((parent,styleOnly)=>{
         const select=chosen=>{for(const node of parent.children){const text=node.querySelector('span');if(styleOnly)text.style.color=node===chosen?'rgb(1, 90, 200)':'rgb(30, 30, 30)';else text.setAttribute('data-mode',node===chosen?'x1':'x0');}};
-        select(parent.firstElementChild);parent.onclick=e=>select(e.target.closest('.leaf'));
+        select(parent.lastElementChild);parent.onclick=e=>select(e.target.closest('.leaf'));
       },styleOnly);
       const sheetTab=await pick(page,'sheetTab',page.getByText('甲表',{exact:true}));
       assert.equal(sheetTab.strategies[0].selectedSelector,'');
@@ -77,18 +77,25 @@ async function main() {
       await page.setContent(fixture());
       await page.evaluate(hasTarget=>{
         const address=document.querySelector('#address'),editor=document.querySelector('#business-data');
+        if(!hasTarget)for(const tab of document.querySelector('#tabs').children)tab.setAttribute('aria-selected',String(tab.textContent==='项目月报 8月'));
         address.value=hasTarget?'J9':'Y9';editor.readOnly=hasTarget;window.businessInputs=0;
+        window.testTabClicks=[];
         editor.addEventListener('input',()=>window.businessInputs++);
-        document.querySelector('#tabs').addEventListener('click',()=>{address.value='J9';editor.readOnly=true;});
+        document.querySelector('#tabs').addEventListener('click',e=>{window.testTabClicks.push(e.target.textContent);address.value='J9';editor.readOnly=true;});
         address.addEventListener('keydown',e=>{if(e.key==='Enter')editor.readOnly=address.value!=='Y9';});
       },!!testTarget);
       const profile={sheetTab:{frame:[],sampleText:'项目月报 8月',strategies:[{type:'collection',parentSelector:'#tabs',itemSelector:':scope > button',selectedSelector:'[aria-selected="true"]'}]},cellAddressBox:{frame:[],sampleText:'',strategies:[{type:'css',value:'#address'}]},cellEditor:{frame:[],sampleText:'',strategies:[{type:'css',value:'#business-data'}]}};
       const steps=await site.testControls(page,profile,3000,testTarget);
       assert.equal(await page.locator('#address').inputValue(),'Y9');
       assert.equal(await page.evaluate(()=>window.businessInputs),0);
+      assert.deepEqual(await page.evaluate(()=>window.testTabClicks),testTarget?['项目月报 9月']:[]);
       assert.equal(await page.locator('#business-data').inputValue(),'业务内容未修改');
       assert.ok(steps.some(step=>step.label==='名称框定位 Y9'));
       assert.equal(await (await site.resolveControl(page,profile.sheetTab,'sheetTab',true)).innerText(),testTarget?.sheet || profile.sheetTab.sampleText);
+      const clicks=await page.evaluate(()=>window.testTabClicks);
+      await assert.rejects(site.testControls(page,profile,500,{date:'2026-10-01',sheet:'项目月报 10月',address:'F9'}),/未找到或不唯一/);
+      assert.deepEqual(await page.evaluate(()=>window.testTabClicks),clicks);
+      assert.equal(await page.locator('#address').inputValue(),'Y9');
     }
     await page.setContent(fixture());
     const cancelling=site.recordControl(page,'sheetTab');

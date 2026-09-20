@@ -42,7 +42,7 @@ async function main(){
   }
   await fixture(page,false,true);
   const stuck=await controls(page,'8月'),before=JSON.stringify(stuck);
-  await assert.rejects(site.testControls(page,stuck,400),/未能确认切换到「8月」.*未确认切回/);
+  await assert.rejects(site.testControls(page,stuck,400),/未能确认切换到「8月」.*未定位任何单元格/);
   assert.equal(JSON.stringify(stuck),before,'failed learning must not change the binding');
   assert.deepEqual((await page.evaluate(()=>window.events)).map(event=>event.name),['8月'],'timeout must not start later clicks');
   assert.equal(await page.locator('[aria-selected=true]').innerText(),'9月');

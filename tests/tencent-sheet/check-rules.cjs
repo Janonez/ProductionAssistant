@@ -62,5 +62,7 @@ assert.deepEqual(core.controlTestTarget(todayConfig,Date.parse('2026-09-19T16:00
 assert.equal(core.controlTestTarget(todayConfig,Date.parse('2026-09-19T15:59:59Z')).address,'X9');
 assert.deepEqual(core.controlTestTarget(todayConfig,Date.parse('2026-09-30T16:00:00Z')),{date:'2026-10-01',sheet:'下料、装焊（26年10月）',address:'F9'});
 assert.equal(core.controlTestTarget(core.validate({})),null);
+assert.deepEqual(core.controlTestTarget(core.validate({webControls:{sheetTab:{sampleText:'下料、装焊（26年8月）'}}}),Date.parse('2026-09-20T00:00:00Z')),{date:'2026-09-20',sheet:'下料、装焊（26年9月）',address:null});
+assert.equal(core.controlTestTarget(core.validate({webControls:{sheetTab:{sampleText:'项目月报 8月'}}}),Date.parse('2026-09-20T00:00:00Z')).sheet,'项目月报 9月');
 assert.throws(()=>core.controlTestTarget(core.validate(fixed),Date.parse('2026-10-09T00:00:00Z')),/跨月/);
 console.log('PASS: control tests use Beijing today, monthly target and existing rules; no-rule tasks require current selection');

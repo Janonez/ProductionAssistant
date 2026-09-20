@@ -178,7 +178,7 @@ function ElementPicker({kind,session,savedPattern}) {
       for(const node of siblings)for(const c of node.classList)
         if(/active|selected|current/i.test(c) && !/inactive|unselected|(?:not|non)[-_]?(?:active|selected|current)/i.test(c))selectors.push('.'+CSS.escape(c));
       const selectedSelector=selectors.find(selector=>siblings.filter(node=>node.matches(selector)).length===1);
-      // Selection is learned by switching tabs during the explicit adapter test.
+      // The test confirms selection on today's sheet without visiting older months.
       const strategies=LocatorBuilder(parent,true).filter(value=>value.type==='css').map(value=>({type:'collection',parentSelector:value.value,itemSelector,selectedSelector:selectedSelector || ''}));
       if(!strategies.length)continue;
       if(!el.textContent.trim())continue;
@@ -283,11 +283,11 @@ async function assertNoLogin(page) {
   }
 }
 
-async function learnSelection(page, binding, timeout) {
+async function learnSelection(page, binding, timeout, targetName = binding.sampleText) {
   const tabs=await waitForControl(page,binding,'sheetTab',timeout,{collectionOnly:true});
   const names=(await tabs.allTextContents()).map(text=>text.trim());
-  const first=names.indexOf(binding.sampleText),second=names.findIndex((name,index)=>index!==first && name && names.filter(value=>value===name).length===1);
-  if(first<0 || names.filter(value=>value===binding.sampleText).length!==1 || second<0)throw Error('标签集合已找到，但需要两个名称不同且唯一的可见标签才能学习选中状态。');
+  const first=names.indexOf(targetName);
+  if(first<0 || names.filter(value=>value===targetName).length!==1)throw Error('今天的测试工作表未找到或不唯一：'+targetName+'。已停止，未切换历史月份。');
   const unique=(states,index,key)=>states[index].includes(key) && states.every((keys,i)=>i===index || !keys.includes(key));
   async function collection() {
     const current=await resolveControl(page,binding,'sheetTab',false,true);
@@ -317,7 +317,7 @@ async function learnSelection(page, binding, timeout) {
   const recorded=binding.strategies.map(strategy=>JSON.stringify(strategy.selectedStyle
     ? {selectedStyle:strategy.selectedStyle} : {selectedSelector:strategy.selectedSelector}));
   const known=recorded.filter(key=>before.some((_,index)=>unique(before,index,key)));
-  async function select(index, keys, initial=false) {
+  async function select(index, keys) {
     const current=await collection();
     await current.nth(index).click();
     await current.nth(index).evaluate(el=>el.blur());
@@ -340,31 +340,26 @@ async function learnSelection(page, binding, timeout) {
       previous=signature;
       await page.waitForTimeout(50);
     }
-    // With no known selection rule, clicking an already selected tab can be a no-op.
-    // This is only a provisional baseline: the next two switches must prove the rule.
-    if(initial && JSON.stringify(last)===JSON.stringify(before))return last;
-    throw Error('未能确认切换到「'+names[index]+'」：等待选中状态超时。已停止后续切换，未确认切回录制标签；请检查网页并重试测试。');
+    throw Error('未能确认切换到「'+names[index]+'」：等待选中状态超时。已停止，未定位任何单元格；请检查网页并重试测试。');
   }
   // A new unknown rule must first move from another tab to the clicked tab.
   // Known rules can confirm an already selected target without a needless wait.
   const moved=before.flatMap((rules,index)=>index===first?[]:rules.filter(key=>unique(before,index,key)));
-  const a=await select(first,known.length?known:moved,!known.length);
-  const initial=a[first].filter(key=>unique(a,first,key));
-  const b=await select(second,known.length?known:initial);
-  const transferable=initial.filter(key=>unique(b,second,key));
-  const again=await select(first,known.length?known:transferable);
-  const candidates=transferable.filter(key=>unique(again,first,key));
+  const a=known.some(key=>unique(before,first,key))?before:await select(first,known.length?known:moved);
+  const candidates=(known.length?known:moved).filter(key=>unique(a,first,key));
   candidates.sort((left,right)=>Number(left.includes('selectedStyle'))-Number(right.includes('selectedStyle')));
-  if(!candidates.length)throw Error('未发现能随 Sheet 来回切换的选中状态，未保存控件；请检查网页当前工作表后重试测试。');
+  if(!candidates.length)throw Error('无法确认今天工作表的选中状态，未切换其他月份。请重新录制 Sheet 标签并重试。');
   const learned=JSON.parse(candidates[0]);
   for(const strategy of binding.strategies) {delete strategy.selectedStyle;strategy.selectedSelector=learned.selectedSelector || '';if(learned.selectedStyle)strategy.selectedStyle=learned.selectedStyle;}
-  await waitForControl(page,binding,'sheetTab',timeout,{active:true,text:binding.sampleText});
+  await waitForControl(page,binding,'sheetTab',timeout,{active:true,text:targetName});
 }
 
 async function testControls(page, controls, timeout = 10000, testTarget = null) {
   const steps=[];
   await assertNoLogin(page);
-  // Capture before switching tabs, which can change the current cell selection.
+  // Resolve the month before touching any cell or editor in the old sheet.
+  const sample=testTarget?.sheet || controls.sheetTab.sampleText;
+  await learnSelection(page,controls.sheetTab,timeout,sample);
   const initialName=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
   const address=testTarget?.address || String(await initialName.evaluate(el=>el.value??el.textContent)).replaceAll('$','').trim().toUpperCase();
   require('./core.js').addressParts(address);
@@ -373,14 +368,11 @@ async function testControls(page, controls, timeout = 10000, testTarget = null) 
     if(!['saved','idle'].includes(status.state))throw Error('保存状态控件尚未显示已保存或上次修改时间，请等待后重试测试。');
     steps.push({label:'读取保存状态',detail:status.text});
   }
-  await learnSelection(page,controls.sheetTab,timeout);
   const tabs=await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{collectionOnly:true});
   steps.push({label:'找到 Sheet 标签集合',detail:`${await tabs.count()} 个标签`});
-  const sample=testTarget?.sheet || controls.sheetTab.sampleText;
   const target=tabs.filter({hasText:new RegExp('^'+sample.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$')});
   if(!sample || await target.count()!==1)throw Error('测试工作表未找到或不唯一：'+sample+'。请确认今天对应的工作表已打开。');
   await assertNoLogin(page);
-  if(testTarget)await target.click();
   await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{active:true,text:sample});
   steps.push({label:'按名称找到并切换工作表',detail:sample});
   const name=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
