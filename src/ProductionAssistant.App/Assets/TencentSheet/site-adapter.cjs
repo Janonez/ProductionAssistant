@@ -2,7 +2,7 @@
 
 const controlNames = {sheetTab:'Sheet 标签',cellAddressBox:'单元格名称框',cellEditor:'内容编辑区／公式栏',saveStatus:'保存状态'};
 const editable = 'input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
-const savedPattern = /保存成功|已(?:自动|成功)?保存|已同步|all changes saved|\bsaved\b/i;
+const savedPattern = /保存成功|已(?:自动|成功)?保存|最近保存\s*[:：]?\s*(?:[01]?\d|2[0-3])[:：][0-5]\d(?!\d)|已同步|all changes saved|\bsaved\b/i;
 function classifySaveState(text) {
   if(/保存失败|无法保存|同步失败|未保存|尚未保存|无法同步|未同步|离线|断网|save failed|not saved|unsaved|offline/i.test(text))return 'failed';
   if(/正在保存|保存中|同步中|正在同步|\bsaving\b|\bsyncing\b/i.test(text))return 'saving';
@@ -35,7 +35,7 @@ function normalizeControls(raw = {}) {
       return strategy.type === 'role' ? {type:strategy.type,value:strategy.value,name:strategy.name} : {type:strategy.type,value:strategy.value};
     });
     if (typeof value.sampleText !== 'string' || value.sampleText.length > 300) throw Error('控件示例文字无效。');
-    if(key==='saveStatus' && classifySaveState(value.sampleText)!=='saved')throw Error('请在显示“保存成功／已保存”时录制保存状态。');
+    if(key==='saveStatus' && classifySaveState(value.sampleText)!=='saved')throw Error('请在显示“已保存／已自动保存／最近保存 + 时间”时录制保存状态。');
     // Evidence is display-only. Never execute or use user-supplied evidence as a locator.
     const evidence = value.evidence && JSON.stringify(value.evidence).length < 16000 ? value.evidence : {};
     controls[key] = {frame:[...value.frame],strategies,sampleText:value.sampleText,evidence};
@@ -187,7 +187,7 @@ function ElementPicker({kind,session,savedPattern}) {
   }
   return new Promise(resolve=>{
     const banner=document.createElement('div'),outline=document.createElement('div');
-    banner.textContent=kind==='saveStatus'?'请点击网页中显示“保存成功／已保存”的状态控件，Esc 取消。':kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
+    banner.textContent=kind==='saveStatus'?'请点击网页中显示“已保存／已自动保存／最近保存 + 时间”的状态控件，Esc 取消。':kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
     banner.dataset.paSitePicker=session;
     Object.assign(banner.style,{position:'fixed',...(kind==='saveStatus'?{bottom:'0'}:{top:'0'}),left:'0',right:'0',padding:'14px',background:'#292524',color:'#fff',zIndex:'2147483647',pointerEvents:'none'});
     Object.assign(outline.style,{position:'fixed',border:'2px solid #C2703D',background:'#C2703D18',zIndex:'2147483646',pointerEvents:'none',display:'none'});
@@ -209,7 +209,7 @@ function ElementPicker({kind,session,savedPattern}) {
             const strategies=LocatorBuilder(el);
             if(strategies.length){finish({binding:{strategies,sampleText:text,evidence:ElementAnalyzer(el),count:1}});return;}
           }
-          throw Error('请选择显示“保存成功／已保存”文字或提示的状态控件，不要选择表格内容或整块工具栏。');
+          throw Error('未能识别所选控件的保存状态或稳定位置。请点击显示“已保存／已自动保存／最近保存 + 时间”的控件；仅有自动保存说明或上次修改信息无法确认保存状态。');
         }
         let el=e.target.closest('input,textarea,[contenteditable]') || e.target;
         if(!el.matches('input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]')) {

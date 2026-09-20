@@ -8,7 +8,7 @@ async function main(){
   const page=await browser.newPage();page.setDefaultTimeout(3000);
   try {
     for(const attribute of ['text','title','aria-label']){
-      await page.setContent(`<button id="save" class="save-indicator saved" onclick="window.clicked=true" ${attribute==='text'?'':`${attribute}="已保存"`}>${attribute==='text'?'已保存':'✓'}</button><div role="status">已保存</div>`);
+      await page.setContent(`<button id="save" class="save-indicator saved" onclick="window.clicked=true" ${attribute==='text'?'':`${attribute}="最近保存 14:59"`}>${attribute==='text'?'最近保存 14:59':'✓'}</button><div role="status">已保存</div>`);
       await page.mouse.move(0,0);
       const pending=site.recordControl(page,'saveStatus');
       pending.catch(()=>{});
@@ -23,7 +23,7 @@ async function main(){
       const config={webControls:site.normalizeControls(JSON.parse(JSON.stringify({saveStatus:binding})))};
       const client=new TencentSheetClient({page,requirePage:()=>{}});
       assert.equal(await client.saveState(config),'saved');
-      for(const [text,state] of [['正在保存','saving'],['保存成功','saved'],['未保存','failed'],['离线','failed'],['状态未知','unknown']]){
+      for(const [text,state] of [['正在保存','saving'],['已自动保存','saved'],['最近保存 15:01','saved'],['保存成功','saved'],['未保存','failed'],['离线','failed'],['状态未知','unknown']]){
         await page.locator('#save').evaluate((el,{attribute,text})=>{el.className='save-indicator saving';if(attribute==='text')el.textContent=text;else el.setAttribute(attribute,text);},{attribute,text});
         if(state==='failed')await assert.rejects(client.saveState(config),/不会重复写入/);
         else assert.equal(await client.saveState(config),state);
@@ -32,6 +32,9 @@ async function main(){
       assert.equal(await client.saveState(config),'unknown');
     }
     for(const text of ['未保存','not saved','unsaved','保存失败'])assert.equal(site.classifySaveState(text),'failed');
+    for(const text of ['所有编辑内容都会自动保存到云端','上次修改在1小时前','最近保存','最近保存 99:99'])assert.equal(site.classifySaveState(text),'unknown');
+    assert.equal(site.classifySaveState('最近保存 14:59 正在保存'),'saving');
+    assert.equal(site.classifySaveState('最近保存 14:59 保存失败'),'failed');
     assert.throws(()=>site.normalizeControls({saveStatus:{frame:[],sampleText:'未保存',strategies:[{type:'css',value:'#save'}]}}),/已保存/);
     console.log('PASS: recorded text/title/aria-label status survives transitions; picker suppresses original click; missing status never falls back to unrelated saved label; failures stop confirmation');
   }finally{await browser.close();}
