@@ -98,8 +98,8 @@ async function dispatch(request) {
       browser.requirePage(config);
       if(!tested || tested.token!==request.token || tested.proof!==proof() || tested.expires<Date.now())throw Error('控件测试已失效，请重新测试后保存。');
       await site.assertNoLogin(browser.page);
-      for(const key of ['sheetTab','cellAddressBox','cellEditor'])await site.waitForControl(browser.page,controls[key],key,config.timeout*1000,{active:key==='sheetTab'});
-      if(controls.saveStatus && !['saved','idle'].includes((await site.readSaveStatus(await site.waitForControl(browser.page,controls.saveStatus,'saveStatus',config.timeout*1000))).state))throw Error('保存状态已变化，请等待保存完成后重新测试。');
+      for(const key of ['sheetTab','cellAddressBox','cellEditor'])await site.waitForControl(browser.page,controls[key],key,config.timeout*1000,{collectionOnly:key==='sheetTab',locationOnly:true});
+      if(controls.saveStatus)await site.waitForControl(browser.page,controls.saveStatus,'saveStatus',config.timeout*1000);
       return {controls,message:'控件测试通过，可以保存。'};
     }
     if(operation==='siteOpen')return browser.open(config);
@@ -108,7 +108,7 @@ async function dispatch(request) {
       await site.assertNoLogin(browser.page);
       const binding=await site.recordControl(browser.page,request.key);
       controls[request.key]=binding;
-      return {controls:site.normalizeControls(controls),count:binding.count,message:request.key==='sheetTab'?`已识别 ${binding.count} 个同类 Sheet 标签。`:request.key==='cellEditor'?'已录制内容编辑区。':'已录制单元格名称框。'};
+      return {controls:site.normalizeControls(controls),count:binding.count,message:request.key==='sheetTab'?`已识别 ${binding.count} 个同类 Sheet 标签。`:request.key==='cellEditor'?'已录制内容编辑区。':request.key==='saveStatus'?'已录制保存状态位置。':'已录制单元格名称框。'};
     }
     if(operation==='siteTest') {
       const steps=await site.testControls(browser.page,controls,config.timeout*1000,core.controlTestTarget({...config,webControls:controls}));

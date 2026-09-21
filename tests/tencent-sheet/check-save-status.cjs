@@ -8,7 +8,7 @@ async function main(){
   const page=await browser.newPage();page.setDefaultTimeout(3000);
   try {
     for(const attribute of ['text','title','aria-label']){
-      await page.setContent(`<button id="save" class="save-indicator saved" onclick="window.clicked=true" ${attribute==='text'?'':`${attribute}="上次修改是在36分钟前进行的"`}>${attribute==='text'?'上次修改是在36分钟前进行的':'✓'}</button><div role="status">已保存</div>`);
+      await page.setContent(`<button id="save" class="save-indicator saved" onclick="window.clicked=true" ${attribute==='text'?'':`${attribute}="上次修改是沙漠之舟在15小时前进行的"`}>${attribute==='text'?'上次修改是沙漠之舟在15小时前进行的':'✓'}</button><div role="status">已保存</div>`);
       await page.mouse.move(0,0);
       const pending=site.recordControl(page,'saveStatus');
       pending.catch(()=>{});
@@ -35,16 +35,21 @@ async function main(){
     for(const text of ['所有编辑内容都会自动保存到云端','上次修改在1小时前','最近保存','最近保存 99:99'])assert.equal(site.classifySaveState(text),'unknown');
     assert.equal(site.classifySaveState('最近保存 14:59 正在保存'),'saving');
     assert.equal(site.classifySaveState('最近保存 14:59 保存失败'),'failed');
-    for(const [html,expected] of [
-      ['<button id="history">上次修改在1小时前</button>',/未读到可识别的保存状态.*button#history.*上次修改/],
-      ['<span>最近保存 14:59</span><span>最近保存 14:59</span>',/已读到保存状态，但无法生成唯一/]
-    ]){
-      await page.setContent(html);await page.mouse.move(0,0);
-      const pending=site.recordControl(page,'saveStatus');const rejected=assert.rejects(pending,expected);
+    for(const text of ['', '正在保存', '保存失败', '任意提示文字']){
+      await page.setContent('<div id="save-tips-container" style="width:200px;height:30px"></div>');
+      await page.locator('#save-tips-container').evaluate((el,text)=>el.textContent=text,text);
+      const pending=site.recordControl(page,'saveStatus');pending.catch(()=>{});
       await page.locator('[data-pa-site-picker]').waitFor({state:'attached'});
-      await page.locator('body > :first-child').click();await rejected;
+      await page.locator('#save-tips-container').click();
+      const binding=await pending;
+      assert.equal(site.normalizeControls({saveStatus:binding}).saveStatus.sampleText,text);
+      const client=new TencentSheetClient({page,requirePage:()=>{}});
+      if(text==='保存失败')await assert.rejects(client.saveState({webControls:{saveStatus:binding}}),/不会重复写入/);
+      else assert.equal(await client.saveState({webControls:{saveStatus:binding}}),text==='正在保存'?'saving':'unknown');
     }
-    assert.throws(()=>site.normalizeControls({saveStatus:{frame:[],sampleText:'未保存',strategies:[{type:'css',value:'#save'}]}}),/已保存/);
+    await page.setContent('<span>提示</span><span>提示</span>');
+    const ambiguous=site.recordControl(page,'saveStatus');const rejected=assert.rejects(ambiguous,/无法生成唯一/);
+    await page.locator('[data-pa-site-picker]').waitFor({state:'attached'});await page.locator('body > :first-child').click();await rejected;
     console.log('PASS: recorded text/title/aria-label status survives transitions; picker suppresses original click; missing status never falls back to unrelated saved label; failures stop confirmation');
   }finally{await browser.close();}
 }

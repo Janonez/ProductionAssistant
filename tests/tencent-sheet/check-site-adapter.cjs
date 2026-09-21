@@ -25,6 +25,18 @@ async function main() {
   const browser=await chromium.launch({channel:'msedge',headless:true});
   const page=await browser.newPage();page.setDefaultTimeout(5000);
   try {
+    await page.setContent('<input id="empty-address" readonly><div id="readonly-editor" contenteditable="false" style="width:200px;height:40px"></div>');
+    const empty=await pick(page,'cellAddressBox',page.locator('#empty-address'));
+    assert.equal(site.normalizeControls({cellAddressBox:empty}).cellAddressBox.strategies[0].value,'#empty-address');
+    await assert.rejects(site.resolveControl(page,empty,'cellAddressBox'),error=>error.reason.includes('不可编辑'));
+    await page.locator('#empty-address').evaluate(el=>el.readOnly=false);
+    await assert.rejects(site.resolveControl(page,empty,'cellAddressBox'),error=>error.reason.includes('有效单元格地址'));
+    await page.locator('#empty-address').fill('Y9');
+    assert.equal(await (await site.resolveControl(page,empty,'cellAddressBox')).inputValue(),'Y9');
+    const readonly=await pick(page,'cellEditor',page.locator('#readonly-editor'));
+    await assert.rejects(site.resolveControl(page,readonly,'cellEditor'),error=>error.reason.includes('不可编辑'));
+    await page.locator('#readonly-editor').evaluate(el=>el.contentEditable='true');
+    assert.equal(await (await site.resolveControl(page,readonly,'cellEditor')).innerText(),'');
     for(const custom of [false,true]) {
       await page.setContent(fixture(custom));
       const sheetTab=await pick(page,'sheetTab',page.getByText('项目月报 8月',{exact:true}));
@@ -81,7 +93,7 @@ async function main() {
         address.value=hasTarget?'J9':'Y9';editor.readOnly=hasTarget;window.businessInputs=0;
         window.testTabClicks=[];
         editor.addEventListener('input',()=>window.businessInputs++);
-        document.querySelector('#tabs').addEventListener('click',e=>{window.testTabClicks.push(e.target.textContent);address.value='J9';editor.readOnly=true;});
+        document.querySelector('#tabs').addEventListener('click',e=>{window.testTabClicks.push(e.target.textContent);address.value='';editor.readOnly=true;});
         address.addEventListener('keydown',e=>{if(e.key==='Enter')editor.readOnly=address.value!=='Y9';});
       },!!testTarget);
       const profile={sheetTab:{frame:[],sampleText:'项目月报 8月',strategies:[{type:'collection',parentSelector:'#tabs',itemSelector:':scope > button',selectedSelector:'[aria-selected="true"]'}]},cellAddressBox:{frame:[],sampleText:'',strategies:[{type:'css',value:'#address'}]},cellEditor:{frame:[],sampleText:'',strategies:[{type:'css',value:'#business-data'}]}};

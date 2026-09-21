@@ -3,7 +3,7 @@
 const controlNames = {sheetTab:'Sheet 标签',cellAddressBox:'单元格名称框',cellEditor:'内容编辑区／公式栏',saveStatus:'保存状态'};
 const editable = 'input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
 const savedPattern = /保存成功|已(?:自动|成功)?保存|最近保存\s*[:：]?\s*(?:[01]?\d|2[0-3])[:：][0-5]\d(?!\d)|已同步|all changes saved|\bsaved\b/i;
-const idlePattern = /上次修改(?:是)?在\s*\d+\s*(?:秒|分钟|小时|天)前进行的/;
+const idlePattern = /上次修改(?:是.{0,80}?)?在\s*\d+\s*(?:秒|分钟|小时|天)前进行的/;
 function classifySaveState(text) {
   if(/保存失败|无法保存|同步失败|未保存|尚未保存|无法同步|未同步|离线|断网|save failed|not saved|unsaved|offline/i.test(text))return 'failed';
   if(/正在保存|保存中|同步中|正在同步|\bsaving\b|\bsyncing\b/i.test(text))return 'saving';
@@ -36,7 +36,6 @@ function normalizeControls(raw = {}) {
       return strategy.type === 'role' ? {type:strategy.type,value:strategy.value,name:strategy.name} : {type:strategy.type,value:strategy.value};
     });
     if (typeof value.sampleText !== 'string' || value.sampleText.length > 300) throw Error('控件示例文字无效。');
-    if(key==='saveStatus' && !['saved','idle'].includes(classifySaveState(value.sampleText)))throw Error('请在显示“已保存／最近保存／上次修改时间”时录制保存状态。');
     // Evidence is display-only. Never execute or use user-supplied evidence as a locator.
     const evidence = value.evidence && JSON.stringify(value.evidence).length < 16000 ? value.evidence : {};
     controls[key] = {frame:[...value.frame],strategies,sampleText:value.sampleText,evidence};
@@ -48,7 +47,7 @@ function scopeFor(page, frame) {
   return frame.reduce((scope, selector) => scope.frameLocator(selector), page);
 }
 
-async function resolveControl(page, binding, key, active = false, collectionOnly = false) {
+async function resolveControl(page, binding, key, active = false, collectionOnly = false, {locationOnly=false,requireAddress=true} = {}) {
   if (!binding) throw Error('尚未录制'+controlNames[key]+'，请先录制网页控件。');
   const scope = scopeFor(page,binding.frame);
   const reasons=new Set();
@@ -80,10 +79,10 @@ async function resolveControl(page, binding, key, active = false, collectionOnly
         : strategy.type === 'placeholder' ? scope.getByPlaceholder(strategy.value,{exact:true}) : scope.locator(strategy.value)).filter({visible:true});
       const count=await locator.count();
       if (count !== 1) {ambiguous ||= count>1;reasons.add(count?'匹配到了多个可见控件':'尚未出现可见控件');continue;}
-      if(key==='saveStatus')return locator;
+      if(locationOnly || key==='saveStatus')return locator;
       if (!await locator.evaluate((el,selector)=>el.matches(selector) && !el.disabled && !el.readOnly && el.getAttribute('aria-readonly')!=='true',editable)) {reasons.add('控件尚不可编辑');continue;}
       const address = await locator.evaluate(el=>/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent);
-      if(key==='cellAddressBox' && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(String(address).trim())) {reasons.add('名称框尚未显示有效单元格地址');continue;}
+      if(key==='cellAddressBox' && requireAddress && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(String(address).trim())) {reasons.add('名称框尚未显示有效单元格地址');continue;}
       return locator;
     } catch { reasons.add('定位规则无法解析或控件正在更新'); }
   }
@@ -95,14 +94,14 @@ async function resolveControl(page, binding, key, active = false, collectionOnly
 }
 
 // Read-only readiness probes. Never retry navigation, typing or submission here.
-async function waitForControl(page, binding, key, timeout, {active=false,collectionOnly=false,text} = {}) {
+async function waitForControl(page, binding, key, timeout, {active=false,collectionOnly=false,text,requireAddress=true,locationOnly=false} = {}) {
   const deadline=Date.now()+timeout;
   let last;
   do {
     if(page.isClosed())throw Error('专用浏览器已关闭，操作已中断。');
     await assertNoLogin(page);
     try {
-      let locator=await resolveControl(page,binding,key,active,collectionOnly);
+      let locator=await resolveControl(page,binding,key,active,collectionOnly,{requireAddress,locationOnly});
       if(text!==undefined) {
         if(collectionOnly) {
           const exact=new RegExp('^'+text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$');
@@ -125,7 +124,7 @@ async function waitForControl(page, binding, key, timeout, {active=false,collect
 
 // Runs in each visible document. Analysis and locator construction stay next to the picker
 // so the injected code has no dependency on page globals or private application state.
-function ElementPicker({kind,session,savedPattern}) {
+function ElementPicker({kind,session}) {
   const stableClasses = el => [...el.classList].filter(value=>!/(?:active|selected|current|hover|focus|disabled)|\d{5}|^[a-f\d]{8,}$/i.test(value) && !(kind==='saveStatus' && /(?:saved|saving|success|error|failed|pending|complete)/i.test(value))).sort();
   const attr = (key,value) => '['+key+'='+JSON.stringify(value)+']';
   function ElementAnalyzer(el) {
@@ -188,7 +187,7 @@ function ElementPicker({kind,session,savedPattern}) {
   }
   return new Promise(resolve=>{
     const banner=document.createElement('div'),outline=document.createElement('div');
-    banner.textContent=kind==='saveStatus'?'请点击网页中显示“已保存／最近保存／上次修改时间”的状态控件，Esc 取消。':kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击显示单元格内容、可以输入文字的编辑区或公式栏，Esc 取消。':'请点击左上角显示当前单元格地址的输入框，Esc 取消。';
+    banner.textContent=kind==='saveStatus'?'请点击保存状态控件的位置，无需等待特定提示文字。Esc 取消。':kind==='sheetTab'?'请点击任意一个 Sheet 标签。鼠标高亮仅用于录制，Esc 取消。':kind==='cellEditor'?'请点击内容编辑区或公式栏的位置，当前为空或只读也可录制。Esc 取消。':'请点击左上角单元格名称框的位置，当前没有地址也可录制。Esc 取消。';
     banner.dataset.paSitePicker=session;
     Object.assign(banner.style,{position:'fixed',...(kind==='saveStatus'?{bottom:'0'}:{top:'0'}),left:'0',right:'0',padding:'14px',background:'#292524',color:'#fff',zIndex:'2147483647',pointerEvents:'none'});
     Object.assign(outline.style,{position:'fixed',border:'2px solid #C2703D',background:'#C2703D18',zIndex:'2147483646',pointerEvents:'none',display:'none'});
@@ -204,26 +203,21 @@ function ElementPicker({kind,session,savedPattern}) {
       try {
         if(kind==='sheetTab'){finish({binding:collection(e.target)});return;}
         if(kind==='saveStatus') {
-          const inspected=[];let matchedState=false;
+          const inspected=[];
           for(let el=e.target,depth=0;el && el!==document.body && depth<4;el=el.parentElement,depth++) {
             const text=[el.innerText || el.textContent || '',el.getAttribute('title'),el.getAttribute('aria-label'),el.getAttribute('data-tooltip')].filter(Boolean).join(' ').trim();
             inspected.push(`${el.tagName.toLowerCase()}${el.id?'#'+el.id:''}${[...el.classList].slice(0,4).map(value=>'.'+value).join('')}：${text?JSON.stringify(text.slice(0,160)):'（无文字或提示）'}${text.length>300?'（内容超过控件范围）':''}`);
-            if(!text || text.length>300 || !new RegExp(savedPattern,'i').test(text))continue;
-            matchedState=true;
             const strategies=LocatorBuilder(el);
-            if(strategies.length){finish({binding:{strategies,sampleText:text,evidence:ElementAnalyzer(el),count:1}});return;}
+            if(strategies.length){finish({binding:{strategies,sampleText:text.slice(0,300),evidence:ElementAnalyzer(el),count:1}});return;}
           }
-          throw Error((matchedState?'已读到保存状态，但无法生成唯一、可复用的控件定位。':'点击位置及其上层元素未读到可识别的保存状态。')+' 实际读取：'+inspected.join(' → '));
+          throw Error('无法生成唯一、可复用的控件定位，请点选控件自身或其外层。实际读取：'+inspected.join(' → '));
         }
         let el=e.target.closest('input,textarea,[contenteditable]') || e.target;
-        if(!el.matches('input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]')) {
-          const children=[...el.querySelectorAll('input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable="true"]')].filter(node=>node.getClientRects().length);
+        if(!el.matches('input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable]')) {
+          const children=[...el.querySelectorAll('input:not([type]),input[type="text"],input[type="search"],textarea,[contenteditable]')].filter(node=>node.getClientRects().length);
           if(children.length!==1)throw Error('请点击左上角显示单元格地址的输入框，不要选择普通页面区域。');
           el=children[0];
         }
-        if(el.disabled || el.readOnly)throw Error('此控件不可编辑，请先确认登录状态和文档权限。');
-        const value=/^(INPUT|TEXTAREA)$/.test(el.tagName)?el.value:el.textContent;
-        if(kind==='cellAddressBox' && !/^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i.test(value.trim()))throw Error('此控件没有显示单元格地址，请点击真正的名称框。');
         const strategies=LocatorBuilder(el);if(!strategies.length)throw Error('无法生成稳定的名称框定位规则，请重新选择。');
         finish({binding:{strategies,sampleText:'',evidence:ElementAnalyzer(el),count:1}});
       } catch(error){finish({error:error.message});}
@@ -261,11 +255,10 @@ async function recordControl(page, kind) {
   const session='__paSitePicker_'+require('node:crypto').randomUUID().replaceAll('-','');
   await page.bringToFront();
   try {
-    const {result,frame}=await Promise.race(frames.map(async frame=>({frame,result:await frame.evaluate(ElementPicker,{kind,session,savedPattern:savedPattern.source+'|'+idlePattern.source})})));
+    const {result,frame}=await Promise.race(frames.map(async frame=>({frame,result:await frame.evaluate(ElementPicker,{kind,session})})));
     if(result.error)throw Error(result.error);
     result.binding.frame=await framePath(frame);
-    const locator=await resolveControl(page,result.binding,kind,false,kind==='sheetTab');
-    if(kind==='saveStatus' && !['saved','idle'].includes((await readSaveStatus(locator)).state))throw Error('当前保存状态尚未稳定，请等待已保存或上次修改时间出现后重新录制。');
+    await resolveControl(page,result.binding,kind,false,kind==='sheetTab',{locationOnly:true});
     return result.binding;
   } finally {
     await Promise.allSettled(frames.map(frame=>frame.evaluate(session=>window[session]?.(),session)));
@@ -360,13 +353,12 @@ async function testControls(page, controls, timeout = 10000, testTarget = null) 
   // Resolve the month before touching any cell or editor in the old sheet.
   const sample=testTarget?.sheet || controls.sheetTab.sampleText;
   await learnSelection(page,controls.sheetTab,timeout,sample);
-  const initialName=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
+  const initialName=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout,{requireAddress:!testTarget?.address});
   const address=testTarget?.address || String(await initialName.evaluate(el=>el.value??el.textContent)).replaceAll('$','').trim().toUpperCase();
   require('./core.js').addressParts(address);
   if(controls.saveStatus) {
     const status=await readSaveStatus(await waitForControl(page,controls.saveStatus,'saveStatus',timeout));
-    if(!['saved','idle'].includes(status.state))throw Error('保存状态控件尚未显示已保存或上次修改时间，请等待后重试测试。');
-    steps.push({label:'读取保存状态',detail:status.text});
+    steps.push({label:'读取保存状态',detail:status.text || '控件位置可用，当前没有提示文字'});
   }
   const tabs=await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{collectionOnly:true});
   steps.push({label:'找到 Sheet 标签集合',detail:`${await tabs.count()} 个标签`});
@@ -375,7 +367,7 @@ async function testControls(page, controls, timeout = 10000, testTarget = null) 
   await assertNoLogin(page);
   await waitForControl(page,controls.sheetTab,'sheetTab',timeout,{active:true,text:sample});
   steps.push({label:'按名称找到并切换工作表',detail:sample});
-  const name=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout);
+  const name=await waitForControl(page,controls.cellAddressBox,'cellAddressBox',timeout,{requireAddress:false});
   steps.push({label:'找到单元格名称框',detail:'唯一可编辑控件'});
   await name.click();await assertNoLogin(page);await name.press('Control+A');await name.pressSequentially(address);await name.press('Enter');
   steps.push({label:'名称框定位 '+address,detail:(testTarget?'北京时间今天 '+testTarget.date:'使用测试前选中的单元格，请确认它属于今天')+'；未向业务单元格输入数值'});

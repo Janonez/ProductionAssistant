@@ -5,7 +5,8 @@ const {TencentDocsBrowser}=require('../../src/ProductionAssistant.App/Assets/Ten
 const {dispatch}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/runner.cjs');
 const controls={
   sheetTab:{frame:[],sampleText:'测试工作表',strategies:[{type:'collection',parentSelector:'#tabs',itemSelector:':scope > div',selectedSelector:'[aria-selected="true"]'}]},
-  cellAddressBox:{frame:[],sampleText:'',strategies:[{type:'css',value:'#address'}]}
+  cellAddressBox:{frame:[],sampleText:'',strategies:[{type:'css',value:'#address'}]},
+  saveStatus:{frame:[],sampleText:'',strategies:[{type:'css',value:'#status'}]}
 };
 const config={documentUrl:'https://docs.qq.com/sheet/test'};
 TencentDocsBrowser.prototype.requirePage=()=>{};
