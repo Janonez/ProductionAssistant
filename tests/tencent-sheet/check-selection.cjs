@@ -17,13 +17,30 @@ async function fixture(page,styleOnly=false,stuck=false) {
  })();</script>`);
 }
 async function controls(page,label){
- const pending=site.recordControl(page,'sheetTab');await page.locator('[data-pa-site-picker]').waitFor();await page.getByRole('tab',{name:label,exact:true}).click();
+ const pending=site.recordControl(page,'sheetTab');pending.catch(()=>{});await page.locator('[data-pa-site-picker]').waitFor({state:'attached'});await page.getByRole('tab',{name:label,exact:true}).click();
  return site.normalizeControls({sheetTab:await pending,cellAddressBox:{frame:[],sampleText:'',strategies:[{type:'css',value:'#address'}]},cellEditor:{frame:[],sampleText:'',strategies:[{type:'css',value:'#editor'}]}});
 }
 async function main(){
  const browser=await chromium.launch({channel:'msedge',headless:true});
  try {
   const page=await browser.newPage();page.setDefaultTimeout(5000);
+  // Shape and nested selected marker from the user's persisted sheetTab binding.
+  await page.setContent(`<div class="docs-tab-bar-scrollable-scroller drag-and-drop-scroller">
+    <div class="tab-bar-item-container"><div class="tab-bar-item">下料、装焊（26年8月）</div></div>
+    <div class="tab-bar-item-container"><div class="tab-bar-item tab-bar-item-selected">下料、装焊（26年9月）</div></div>
+    </div><input class="bar-label"><div id="alloy-simple-text-editor" contenteditable="false" style="height:30px">原内容</div>
+    <script>window.tabClicks=[];document.querySelector('.docs-tab-bar-scrollable-scroller').onclick=e=>window.tabClicks.push(e.target.textContent);document.querySelector('.bar-label').onkeydown=e=>{if(e.key==='Enter')document.querySelector('#alloy-simple-text-editor').contentEditable='true';};</script>`);
+  const nestedRecording=site.recordControl(page,'sheetTab');nestedRecording.catch(()=>{});
+  await page.locator('[data-pa-site-picker]').waitFor({state:'attached'});
+  await page.getByText('下料、装焊（26年8月）',{exact:true}).click();
+  const nested=site.normalizeControls({sheetTab:await nestedRecording,cellAddressBox:{frame:[],sampleText:'',strategies:[{type:'css',value:'input.bar-label'}]},cellEditor:{frame:[],sampleText:'',strategies:[{type:'css',value:'#alloy-simple-text-editor'}]}});
+  assert.equal(nested.sheetTab.strategies[0].selectedSelector,'');
+  await site.testControls(page,nested,500,{date:'2026-09-21',sheet:'下料、装焊（26年9月）',address:'Z9'});
+  assert.deepEqual(await page.evaluate(()=>window.tabClicks),[]);
+  assert.equal(nested.sheetTab.strategies[0].selectedSelector,':has(div.tab-bar-item-selected)');
+  assert.equal(await page.locator('input.bar-label').inputValue(),'Z9');
+  assert.equal(await page.locator('#alloy-simple-text-editor').innerText(),'原内容');
+  console.log('PASS: persisted Tencent nested selected marker, new location-only recording and empty address pass without clicking any month');
   for(const styleOnly of [false,true]) {
    await fixture(page,styleOnly);
    const recorded=await controls(page,'8月');

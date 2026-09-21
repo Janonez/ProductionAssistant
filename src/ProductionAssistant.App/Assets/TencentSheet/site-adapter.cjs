@@ -309,7 +309,14 @@ async function learnSelection(page, binding, timeout, targetName = binding.sampl
   const before=await snapshot();
   const recorded=binding.strategies.map(strategy=>JSON.stringify(strategy.selectedStyle
     ? {selectedStyle:strategy.selectedStyle} : {selectedSelector:strategy.selectedSelector}));
-  const known=recorded.filter(key=>before.some((_,index)=>unique(before,index,key)));
+  // A newly recorded collection may not yet have a selection rule. Recognize
+  // explicit current-state markers (including children) without leaving today's sheet.
+  const indicators=before.flat().filter(key=>{
+    const selector=JSON.parse(key).selectedSelector || '';
+    if(/\[aria-selected="true"\]|\[aria-current="(?:true|page|step|location|date|time)"\]/.test(selector))return true;
+    return (selector.match(/\.[\w-]+/g) || []).some(value=>/active|selected|current/i.test(value) && !/inactive|unselected|(?:not|non)[-_]?(?:active|selected|current)/i.test(value));
+  });
+  const known=[...new Set([...recorded,...indicators])].filter(key=>before.some((_,index)=>unique(before,index,key)));
   async function select(index, keys) {
     const current=await collection();
     await current.nth(index).click();
