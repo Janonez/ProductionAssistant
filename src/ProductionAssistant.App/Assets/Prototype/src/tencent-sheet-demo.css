@@ -1,7 +1,8 @@
 .tencent-demo {
+  color-scheme: light;
 
   & {
-    --bg: #F6F4EF;
+    --bg: #FFFFFF;
     --card: #FFFFFF;
     --card-alt: #FBFAF7;
     --border: #E4E0D6;
@@ -21,48 +22,6 @@
     --shadow: 0 1px 2px rgba(32,30,26,0.06), 0 1px 1px rgba(32,30,26,0.04);
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  &:not([data-theme="light"]) {
-    @media (prefers-color-scheme: dark) {
-      --bg: #17160F;
-      --card: #201F19;
-      --card-alt: #262418;
-      --border: #37352A;
-      --text: #EDEAE1;
-      --text-secondary: #B0AB98;
-      --text-tertiary: #7C7768;
-      --accent: #D57A4C;
-      --accent-hover: #E28A5D;
-      --accent-soft: #3A2A1E;
-      --success: #6FBF7E;
-      --success-soft: #223327;
-      --warning: #D9A24B;
-      --warning-soft: #3A2F1B;
-      --danger: #E0715C;
-      --chip-bg: #2A2820;
-      --focus: #6FA6DE;
-      --shadow: 0 1px 2px rgba(0,0,0,0.3);
-    }
-  }
-  &[data-theme="dark"] {
-    --bg: #17160F;
-    --card: #201F19;
-    --card-alt: #262418;
-    --border: #37352A;
-    --text: #EDEAE1;
-    --text-secondary: #B0AB98;
-    --text-tertiary: #7C7768;
-    --accent: #D57A4C;
-    --accent-hover: #E28A5D;
-    --accent-soft: #3A2A1E;
-    --success: #6FBF7E;
-    --success-soft: #223327;
-    --warning: #D9A24B;
-    --warning-soft: #3A2F1B;
-    --danger: #E0715C;
-    --chip-bg: #2A2820;
-    --focus: #6FA6DE;
-    --shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
   & { scroll-padding-top: env(safe-area-inset-top, 0px); box-sizing: border-box; }
   *, *::before, *::after { box-sizing: inherit; }
@@ -382,7 +341,6 @@
 /* Adapt existing business controls to the supplied Demo, within this module only. */
 .tencent-demo {
  --surface: var(--card); --surface-muted: var(--card-alt); --canvas: var(--card-alt); --text-muted: var(--text-secondary); --primary: var(--accent); --primary-soft: var(--accent-soft); --radius-control: 8px; --radius-panel: 12px;
- --font-ui: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
  min-height: 100vh; box-sizing: border-box;
  .page h1 { font-size: 22px; margin: 0; line-height: 1.55; letter-spacing: -.01em; }
  .tencent-sheet-workbench { display: block; max-width: 880px; }
