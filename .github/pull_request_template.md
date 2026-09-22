@@ -1,22 +1,17 @@
 ## 变更
 
-<!-- 说明改了什么、为什么改。一个 PR 只处理一个功能、修复或维护事项。 -->
+<!-- 说明具体问题和变更后的行为；按改动规模提供必要背景。 -->
 
 ## 验证
 
-- [ ] 已运行 `./scripts/verify.ps1`
-- [ ] 已启动 `deployments/development/ProductionAssistant.exe`
-- [ ] 已确认 `deployments/production/ProductionAssistant.exe` 为正式版输出
-- [ ] 已人工验收受影响模块
-- [ ] UI 改动已检查正常、悬停、按下、键盘焦点和不同窗口宽度
+<!-- 填实际执行的检查与结果。纯文档修改检查内容和链接；代码改动运行相关检查，交付构建时使用 scripts/verify.ps1。 -->
 
-已验收：
+已验证：
 
-未验收：
+未验收或不适用：
 
-<!-- build/test/publish 通过不能替代 WinUI、Notion、钉钉、任务计划或真实文件的人工验收。 -->
+<!-- build/test/publish 不能证明 WinUI、Notion、钉钉、任务计划或真实文件的人工验收。仅在请求包含桌面验收或正式部署时执行相应操作。 -->
 
 ## 发布影响
 
-- [ ] 无需发布
-- [ ] 需要更新版本、CHANGELOG 或公开说明
+<!-- 无需发布 / 仅 Development / 已授权同步 Production / 已授权版本化 GitHub Release。写明实际范围；普通 PR 不要求生成或启动生产版。 -->
