@@ -5,10 +5,10 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>ProductionAssistant</RootNamespace>
     <AssemblyName>ProductionAssistant</AssemblyName>
-    <Version>1.5.6</Version>
-    <AssemblyVersion>1.5.6.0</AssemblyVersion>
-    <FileVersion>1.5.6.0</FileVersion>
-    <InformationalVersion>1.5.6</InformationalVersion>
+    <Version>1.6.0</Version>
+    <AssemblyVersion>1.6.0.0</AssemblyVersion>
+    <FileVersion>1.6.0.0</FileVersion>
+    <InformationalVersion>1.6.0</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\production-assistant-logo.ico</ApplicationIcon>
@@ -24,6 +24,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="Assets\TencentSheet\*.cjs;Assets\TencentSheet\*.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Assets\TencentSheet\node_modules\playwright\**"
+             Link="Assets\TencentSheet\node_modules\playwright\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Assets\TencentSheet\node_modules\playwright-core\**"
+             Link="Assets\TencentSheet\node_modules\playwright-core\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.250907003" />
   </ItemGroup>
 
@@ -36,7 +43,7 @@
     <None Update="appsettings.Development.json;appsettings.Production.json"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest" />
-    <Content Remove="Assets\ReportEditor\editor-source.js;Assets\ReportEditor\package.json;Assets\ReportEditor\package-lock.json;Assets\ReportEditor\node_modules\**;Assets\Prototype\src\**;Assets\Prototype\node_modules\**;Assets\Prototype\package.json;Assets\Prototype\package-lock.json;Assets\Prototype\tsconfig*.json;Assets\Prototype\vite.config.ts;Assets\Prototype\vitest.config.ts" />
+    <Content Remove="Assets\TencentSheet\node_modules\**;Assets\TencentSheet\package.json;Assets\TencentSheet\package-lock.json;Assets\ReportEditor\editor-source.js;Assets\ReportEditor\package.json;Assets\ReportEditor\package-lock.json;Assets\ReportEditor\node_modules\**;Assets\Prototype\src\**;Assets\Prototype\node_modules\**;Assets\Prototype\package.json;Assets\Prototype\package-lock.json;Assets\Prototype\tsconfig*.json;Assets\Prototype\vite.config.ts;Assets\Prototype\vitest.config.ts" />
     <Content Include="Assets\Fonts\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\production-assistant-logo.png"
              CopyToOutputDirectory="PreserveNewest" />
@@ -58,6 +65,8 @@
   </PropertyGroup>
 
   <Target Name="ValidateRuntimeEnvironment" BeforeTargets="Publish">
+    <Error Condition="!Exists('Assets\TencentSheet\node_modules\playwright\package.json') or !Exists('Assets\TencentSheet\node_modules\playwright-core\package.json')"
+           Text="Restore TencentSheet dependencies with npm ci in Assets/TencentSheet before publishing." />
     <Error Condition="'$(RuntimeEnvironment)' != 'Development' and '$(RuntimeEnvironment)' != 'Production'"
            Text="RuntimeEnvironment must be Development or Production." />
   </Target>

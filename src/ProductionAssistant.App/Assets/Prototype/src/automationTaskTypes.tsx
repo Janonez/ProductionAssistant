@@ -4,6 +4,7 @@ import { MessageTemplatePage } from "./MessageTemplatePage";
 import { NotionFillPage } from "./NotionFillPage";
 import { DailyReportCreateWizard } from "./DailyReportCreateWizard";
 import { NotionFillCreateWizard } from "./NotionFillCreateWizard";
+import { TencentSheetCreate, TencentSheetPage } from "./TencentSheetPage";
 import type { DailyRun, NotionFillRun } from "./types";
 
 export type AutomationTaskEditorProps = {
@@ -34,6 +35,7 @@ export type AutomationTaskTypeDefinition = {
   taskType: string;
   name: string;
   description: string;
+  includeBasics?: boolean;
   renderCreate: (props: AutomationTaskCreateProps) => ReactNode;
   taskTabs: Array<{ id: string; label: string }>;
   resolveSection: (missingStep: string) => string;
@@ -43,6 +45,18 @@ export type AutomationTaskTypeDefinition = {
 };
 
 export const automationTaskTypes: AutomationTaskTypeDefinition[] = [
+  {
+    taskType: "tencent_sheet_fill",
+    name: "腾讯文档填报",
+    includeBasics: false,
+    description: "录制文档控件与业务位置，按执行规则从 Notion 取数填报。",
+    renderCreate: props => <TencentSheetCreate {...props} />,
+    taskTabs: [{ id: "configuration", label: "配置与填报" }],
+    resolveSection: () => "configuration",
+    issueTitle: () => "请完成文档连接与位置检查",
+    renderEditor: props => <TencentSheetPage key={props.id} id={props.id} changed={props.changed} />,
+    loadRuns: id => invoke<{ runs: { id: string; time: string; source: string; status: string; businessDate: string; message?: string; error?: string }[] }>("tencentSheet.runs", { id }).then(({ runs }) => runs.map(run => ({ ...run, source: run.source === "background-test" ? "后台自动测试" : run.source === "automatic" ? "定时填报" : "前台测试", title: run.businessDate, details: run.message ? [run.message] : [] }))),
+  },
   {
     taskType: "daily_report",
     name: "日报推送",

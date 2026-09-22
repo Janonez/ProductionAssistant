@@ -5,7 +5,7 @@ namespace ProductionAssistant;
 internal sealed partial class PrototypeBridge
 {
     private static async Task<object> ListAutomationTasksAsync() =>
-        new { tasks = await AppServices.AutomationTaskHandlers.ListTasksAsync() };
+        new { tasks = await AppServices.AutomationTaskHandlers.ListTasksAsync(), availableTaskTypes = AppServices.AutomationTaskHandlers.TaskTypes };
 
     private static async Task<object> SetAutomationTaskEnabledAsync(JsonElement payload)
     {

@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $editor = Join-Path $root 'src\ProductionAssistant.App\Assets\ReportEditor'
 $prototype = Join-Path $root 'src\ProductionAssistant.App\Assets\Prototype'
+$tencent = Join-Path $root 'src\ProductionAssistant.App\Assets\TencentSheet'
 $debugPublish = Join-Path $root 'deployments\development'
 $releasePublish = Join-Path $root 'deployments\production'
 $env:npm_config_cache = Join-Path $root '.npm-cache'
@@ -23,6 +24,8 @@ try {
         try { npm.cmd ci; Assert-NativeSuccess 'ReportEditor npm ci' } finally { Pop-Location }
         Push-Location $prototype
         try { npm.cmd ci; Assert-NativeSuccess 'Prototype npm ci' } finally { Pop-Location }
+        Push-Location $tencent
+        try { npm.cmd ci --ignore-scripts; Assert-NativeSuccess 'TencentSheet npm ci' } finally { Pop-Location }
         dotnet restore ProductionAssistant.sln -p:Platform=x64 -r win-x64
         Assert-NativeSuccess 'dotnet restore'
     }
