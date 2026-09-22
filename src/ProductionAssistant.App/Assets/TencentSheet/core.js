@@ -142,17 +142,13 @@
   }
   function controlTestTarget(config, now = Date.now()) {
     const date = new Date(Number(now) + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const field = config.fields.find(field => config.rules?.[field.id]);
-    if (!field) {
-      const sample = config.sheetReferenceName || config.webControls?.sheetTab?.sampleText;
-      if (!sample) return null;
-      const binding = sheetBinding(sample);
-      const sheet = binding.sheetMode === 'monthly' ? sheetName(binding, date)
-        : sample.replace(/\d{1,2}月/, dateParts(date).month + '月');
-      return { date, sheet, address: null };
-    }
-    const target = plan({ ...config, fields: [field], rules: { [field.id]: config.rules[field.id] } }, date, { [field.id]: 0 });
-    return { date, sheet: target.sheet, address: target.rows[0].address };
+    const sample = config.sheetReferenceName || config.webControls?.sheetTab?.sampleText;
+    if (!sample) return null;
+    const binding = sheetBinding(sample);
+    const sheet = binding.sheetMode === 'monthly' ? sheetName(binding, date)
+      : sample.replace(/\d{1,2}月/, dateParts(date).month + '月');
+    // Controls use a user-selected temporary cell; business rules never supply a test address.
+    return { date, sheet, address: null };
   }
   function cellText(value) {
     const text=String(value ?? '');

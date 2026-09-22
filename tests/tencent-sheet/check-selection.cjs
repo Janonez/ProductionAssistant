@@ -5,7 +5,7 @@ const {chromium}=require('playwright');
 const site=require('../../src/ProductionAssistant.App/Assets/TencentSheet/site-adapter.cjs');
 const {TencentSheetClient}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/client.cjs');
 async function fixture(page,styleOnly=false,stuck=false) {
- await page.setContent(`<style>#sheets button{padding:16px}</style><div id="sheets"><button role="tab"><span>9月</span></button><button role="tab"><span>8月</span></button></div><input id="address" value="A1"><input id="editor" value="原内容"><script>(()=>{
+ await page.setContent(`<style>#sheets button{padding:16px}</style><div id="sheets"><button role="tab"><span>9月</span></button><button role="tab"><span>8月</span></button></div><input id="address" value="A1"><input id="editor" value=""><script>(()=>{
  const loaded=new Set(['9月']);let busy=false;window.events=[];
  function select(target){for(const tab of document.querySelector('#sheets').children){if(${styleOnly})tab.querySelector('span').style.color=tab===target?'rgb(1, 90, 200)':'rgb(30, 30, 30)';else tab.setAttribute('aria-selected',String(tab===target));}}
  select(document.querySelector('#sheets button'));
@@ -28,18 +28,27 @@ async function main(){
   await page.setContent(`<div class="docs-tab-bar-scrollable-scroller drag-and-drop-scroller">
     <div class="tab-bar-item-container"><div class="tab-bar-item">下料、装焊（26年8月）</div></div>
     <div class="tab-bar-item-container"><div class="tab-bar-item tab-bar-item-selected">下料、装焊（26年9月）</div></div>
-    </div><input class="bar-label"><div id="alloy-simple-text-editor" contenteditable="false" style="height:30px">原内容</div>
+    </div><input class="bar-label"><div id="alloy-simple-text-editor" contenteditable="false" style="height:30px"></div>
     <script>window.tabClicks=[];document.querySelector('.docs-tab-bar-scrollable-scroller').onclick=e=>window.tabClicks.push(e.target.textContent);document.querySelector('.bar-label').onkeydown=e=>{if(e.key==='Enter')document.querySelector('#alloy-simple-text-editor').contentEditable='true';};</script>`);
   const nestedRecording=site.recordControl(page,'sheetTab');nestedRecording.catch(()=>{});
   await page.locator('[data-pa-site-picker]').waitFor({state:'attached'});
   await page.getByText('下料、装焊（26年8月）',{exact:true}).click();
   const nested=site.normalizeControls({sheetTab:await nestedRecording,cellAddressBox:{frame:[],sampleText:'',strategies:[{type:'css',value:'input.bar-label'}]},cellEditor:{frame:[],sampleText:'',strategies:[{type:'css',value:'#alloy-simple-text-editor'}]}});
   assert.equal(nested.sheetTab.strategies[0].selectedSelector,'');
-  await site.testControls(page,nested,500,{date:'2026-09-21',sheet:'下料、装焊（26年9月）',address:'Z9'});
+  const target={date:'2026-09-21',sheet:'下料、装焊（26年9月）',address:'Z9'};
+  const sheetSteps=await site.testSheet(page,{sheetTab:nested.sheetTab},500,target);
+  assert.equal(sheetSteps[0].names.length,2);
+  assert.match(sheetSteps[1].detail,/已选中，无需再次点击/);
+  assert.equal(await page.locator('input.bar-label').inputValue(),'','Sheet-only test must not touch address');
+  assert.equal(await page.locator('#alloy-simple-text-editor').getAttribute('contenteditable'),'false');
+  const learned=JSON.stringify(nested.sheetTab);
+  await assert.rejects(site.testCellControls(page,{...nested,cellEditor:{frame:[],sampleText:'',strategies:[{type:'css',value:'#missing-editor'}]}},200,target),/等待内容编辑区.*超时/);
+  assert.equal(JSON.stringify(nested.sheetTab),learned,'cell failure must preserve learned Sheet rule');
+  await site.testCellControls(page,nested,500,target);
   assert.deepEqual(await page.evaluate(()=>window.tabClicks),[]);
   assert.equal(nested.sheetTab.strategies[0].selectedSelector,':has(div.tab-bar-item-selected)');
   assert.equal(await page.locator('input.bar-label').inputValue(),'Z9');
-  assert.equal(await page.locator('#alloy-simple-text-editor').innerText(),'原内容');
+  assert.equal(await page.locator('#alloy-simple-text-editor').innerText(),'');
   console.log('PASS: persisted Tencent nested selected marker, new location-only recording and empty address pass without clicking any month');
   for(const styleOnly of [false,true]) {
    await fixture(page,styleOnly);
@@ -47,7 +56,7 @@ async function main(){
    assert.equal((await site.testControls(page,recorded,2000)).length,6,'cold first switch must pass without rerecording');
    assert.equal((await (await site.resolveControl(page,recorded.sheetTab,'sheetTab',true)).innerText()).trim(),'8月');
    assert.equal((await page.evaluate(()=>window.events)).filter(event=>event.busy).length,0,'no click while the previous switch is pending');
-   assert.equal(await page.locator('#editor').inputValue(),'原内容');
+   assert.equal(await page.locator('#editor').inputValue(),'');
    // New recording while both sheets are warm must still work in both directions.
    assert.equal((await site.testControls(page,await controls(page,'9月'),2000)).length,6);
    // The persisted style binding must also wait/reacquire during actual sheet selection.

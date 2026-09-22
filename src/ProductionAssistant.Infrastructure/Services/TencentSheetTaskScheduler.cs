@@ -7,11 +7,11 @@ namespace ProductionAssistant.Services;
 
 public static class TencentSheetTaskScheduler
 {
-    public static bool IsAvailable => RuntimeEnvironment.Current.IsDevelopment && RuntimeEnvironment.Current.SchedulerEnabled;
+    public static bool IsAvailable => RuntimeEnvironment.Current.SchedulerEnabled;
     public static string TaskName(string id)
     {
         if (!Guid.TryParseExact(id, "N", out _)) throw new InvalidOperationException("任务标识无效。");
-        return "ProductionAssistant-Development-TencentSheet-" + id;
+        return "ProductionAssistant-" + RuntimeEnvironment.Current.Name + "-TencentSheet-" + id;
     }
 
     public static string CreateXml(string id, string executable, string userId, JsonObject config)
@@ -30,13 +30,13 @@ public static class TencentSheetTaskScheduler
             E("Settings", E("MultipleInstancesPolicy", "IgnoreNew"), E("DisallowStartIfOnBatteries", "false"), E("StopIfGoingOnBatteries", "false"),
                 E("StartWhenAvailable", "false"), E("Enabled", "true"), E("ExecutionTimeLimit", "PT15M")),
             E("Actions", new XAttribute("Context", "Author"), E("Exec", E("Command", executable),
-                E("Arguments", $"--environment Development --run-automation-task --task-type {TencentSheetTaskHandler.Type} --task-id {id}"),
+                E("Arguments", $"--environment {RuntimeEnvironment.Current.Name} --run-automation-task --task-type {TencentSheetTaskHandler.Type} --task-id {id}"),
                 E("WorkingDirectory", Path.GetDirectoryName(executable)!))))).ToString();
     }
 
     public static async Task InstallAsync(string id, JsonObject config)
     {
-        if (!IsAvailable) throw new InvalidOperationException("当前 Development 环境未开放 Windows 定时任务；仍可使用前台和后台自动测试。");
+        if (!IsAvailable) throw new InvalidOperationException("当前环境未开放 Windows 定时任务；仍可使用前台和后台自动测试。");
         var executable = Environment.ProcessPath;
         if (string.IsNullOrEmpty(executable) || !File.Exists(executable)) throw new InvalidOperationException("程序路径无效。");
         var path = Path.Combine(Path.GetTempPath(), "tencent-schedule-" + Guid.NewGuid().ToString("N") + ".xml");

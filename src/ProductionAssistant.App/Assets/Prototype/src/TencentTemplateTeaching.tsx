@@ -51,7 +51,7 @@ export function TencentTemplateTeaching({ id, metrics, initialMetric, businessDa
   }
   return <fieldset className="tencent-sheet-panel tencent-teaching" disabled={disabled}>
     <legend>示范填报位置</legend>
-    <p className="tencent-sheet-help">为每个项目记录排列规则。示范两个日期的位置，程序学习向右或向下的间隔，再请你确认第三个位置。各项业务须完成位置示范。</p>
+    <p className="tencent-sheet-help">为每个项目记录排列规则。示范只读取位置与表头，受保护或已有数据的单元格也可使用，不检查是否可编辑、不填写数据。程序学习两个日期的排列关系，再请你确认第三个位置；正式填报前才检查目标是否可编辑。</p>
     <div className="tencent-teaching-rules">{metrics.map(item => <div key={item.value}><strong>{item.label}</strong><span>{rules?.[item.value] ? direction(rules[item.value]) : "待示范位置"}</span></div>)}</div>
     {error && <div className="notice error" role="alert"><div><strong>示范未完成</strong><span>{error}</span></div></div>}
     {!active ? <>
@@ -61,7 +61,7 @@ export function TencentTemplateTeaching({ id, metrics, initialMetric, businessDa
       <button className="secondary" disabled={disabled || !metric || !firstDate || !secondDate} onClick={() => call("start")}>{rules?.[metric] ? "重新示范此项目" : "开始示范此项目"}</button>
     </> : <>
       <ol className="tencent-teaching-steps" aria-label="示范进度">{slots.map((slot, index) => <li key={slot} aria-current={draft.step === slot ? "step" : undefined} className={captures[slot] ? "done" : ""}><span>{index + 1}. {labels[slot]}</span><strong>{captures[slot]?.address || "待选取"}</strong></li>)}</ol>
-      {slots.includes(draft.step) && <div className="tencent-teaching-prompt"><strong>请在网页中单击：{labels[draft.step]}</strong><p>{draft.step === "dateHeader" ? "选择显示该日期的单元格，程序会检查后续日期是否按同样间隔排列。" : draft.step === "label" ? "选择一处固定的文字标志，用于确认每次填写的仍是这个项目。" : "只选中单元格即可，不需要输入数据。已有数据的格子也可用于示范。"}</p><button className="primary" onClick={() => call("capture")}>记住当前选中的单元格</button></div>}
+      {slots.includes(draft.step) && <div className="tencent-teaching-prompt"><strong>请在网页中单击：{labels[draft.step]}</strong><p>{draft.step === "dateHeader" ? "选择显示该日期的单元格，程序会检查后续日期是否按同样间隔排列。" : draft.step === "label" ? "选择一处固定的文字标志，用于确认每次填写的仍是这个项目。" : "只选中单元格即可。受保护或已有数据的格子也可示范，无需解除保护或输入数据。"}</p><button className="primary" onClick={() => call("capture")}>记住当前选中的单元格</button></div>}
       {draft.step === "preview" && <button className="primary" onClick={() => call("preview")}>验证规则并查看第三个位置</button>}
       {draft.step === "confirm" && draft.rule && draft.prediction && <div className="tencent-teaching-prompt"><strong>{label}：{direction(draft.rule)}</strong><p>程序已选中 {draft.prediction.date} 的预测位置 <b>{draft.prediction.address}</b>。请查看网页，确认它确实是当天的填报格。</p><p>日期及“{draft.rule.labelAnchor.expected}”已通过只读校验。</p>{(draft.sheetMode === "fixed" || (!draft.sheetMode && fixedSheet)) && !draft.rule.dateAnchor.format.includes("{yyyy}") && <p>日期未包含完整年月。此固定工作表跨月时需重新示范确认。</p>}<div className="tencent-sheet-actions"><button className="secondary" onClick={() => call("preview")}>再次定位预测位置</button><button className="primary" onClick={() => call("confirm")}>位置正确，保存此项目</button></div></div>}
       <button className="ghost" onClick={() => call("cancel")}>取消示范，保留原配置</button>

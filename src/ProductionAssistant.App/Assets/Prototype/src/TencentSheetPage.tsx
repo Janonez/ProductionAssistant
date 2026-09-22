@@ -96,7 +96,7 @@ export function TencentSheetPage({ id, changed }: { id: string; changed: () => v
   const binding = fields.find(field => field.id === bindingField);
   const blocked = !!busy || teaching || !!binding || recording || loginOpen;
   return <div className="tencent-sheet-workbench" aria-busy={!!busy}>
-    <div className="tencent-sheet-intro"><div><h2>腾讯文档填报</h2><p>在同一任务中配置网页控件、业务位置和执行规则。目标格已有内容时会停止。</p></div><span>Development 测试</span></div>
+    <div className="tencent-sheet-intro"><div><h2>腾讯文档填报</h2><p>在同一任务中配置网页控件、业务位置和执行规则。目标格已有内容时会停止。</p></div></div>
     {notice && <div className={`notice ${failed ? "error" : "info"}`} role={failed ? "alert" : "status"}><div><strong>{failed ? "操作未完成" : "操作结果"}</strong><span>{notice}</span></div></div>}
     <fieldset disabled={blocked} className="tencent-sheet-panel"><legend>文档</legend>
       <label>文档链接<input type="url" disabled={job.enabled} value={config.documentUrl} onChange={event => edit({ ...config, documentUrl: event.target.value })} /></label>

@@ -25,6 +25,9 @@ async function main(){
         if(request.operation==='tencentSheet.save'){Object.assign(config,request.payload.config);window.savedConfig=request.payload.config;data={id:'fixture',config,businessDate:'2026-08-31'};}
         if(request.operation==='tencentSite.open')data={message:'已打开本地模拟文档'};
         if(request.operation==='tencentSite.pick')data={controls:{...request.payload.controls,[request.payload.key]:{frame:[],strategies:[{}],sampleText:'示例工作表'}},message:request.payload.key==='sheetTab'?'已识别 12 个同类 Sheet 标签。':'已录制单元格名称框。'};
+        if(request.operation==='tencentSite.pick' && request.payload.key==='cellAddressBox')data.testCell={sheet:'下料/装焊（26年9月）',address:'Z9'};
+        if(request.operation==='tencentSite.captureCell')data={testCell:{sheet:'下料/装焊（26年9月）',address:'AA20'},message:'已读取临时测试格'};
+        if(request.operation==='tencentSite.testSheet')data={controls:request.payload.controls,passed:true,steps:[{label:'找到 Sheet 标签集合',detail:'2 个标签',names:['下料/装焊（26年8月）','下料/装焊（26年9月）']},{label:'本月匹配与选中状态',detail:'下料/装焊（26年9月）；已选中，无需再次点击'}],message:'Sheet 检验通过，请继续配置单元格控件。'};
         if(request.operation==='tencentSite.test')data={token:'test-receipt',steps:['找到 Sheet 标签集合','按名称找到并切换工作表','找到单元格名称框','名称框定位 Y9','核对名称框地址'].map(label=>({label,detail:'本地模拟通过'})),message:'5 项适配测试全部通过，可以保存。'};
         if(request.operation==='tencentSite.save'){window.controlsTask=request.payload.id;config.webControls=request.payload.controls;data={message:'已保存本任务控件'};}
         if(request.operation==='tencentSheet.addField'){config.fields.push({id:'custom',name:request.payload.name,unit:request.payload.unit});data={id:'fixture',config,businessDate:'2026-08-31'};}
@@ -74,10 +77,17 @@ async function main(){
     await page.getByRole('button',{name:'录制网页控件',exact:true}).click();
     await page.getByRole('button',{name:'开始配置',exact:true}).click();
     await page.getByRole('button',{name:'录制 Sheet 标签',exact:true}).click();
+    await page.getByText('Sheet 检验通过',{exact:true}).waitFor();
+    assert.equal(await page.locator('.tencent-sheet-check').evaluate(el=>el.querySelector('strong').getBoundingClientRect().bottom<=el.querySelector('ol').getBoundingClientRect().top),true,'Sheet result heading must appear above its steps');
+    await page.screenshot({path:path.resolve(__dirname,'../../artifacts/tencent-sheet-independent-validation.png'),fullPage:true});
     await page.getByRole('button',{name:'录制单元格名称框',exact:true}).click();
-    assert.equal(await page.getByRole('button',{name:'测试网页控件',exact:true}).isDisabled(),true);
+    await page.getByText('临时测试格：下料/装焊（26年9月）!Z9',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'读取当前测试格',exact:true}).click();
+    await page.getByText('临时测试格：下料/装焊（26年9月）!AA20',{exact:true}).waitFor();
+    await page.screenshot({path:path.resolve(__dirname,'../../artifacts/tencent-cell-recording.png'),fullPage:true});
+    assert.equal(await page.getByRole('button',{name:'检验单元格控件',exact:true}).isDisabled(),true);
     await page.getByRole('button',{name:'录制内容编辑区',exact:true}).click();
-    await page.getByRole('button',{name:'测试网页控件',exact:true}).click();
+    await page.getByRole('button',{name:'检验单元格控件',exact:true}).click();
     await page.getByRole('button',{name:'保存网页控件',exact:true}).click();
     await page.getByText('网页控件',{exact:true}).waitFor();
     assert.deepEqual(await page.locator('.tencent-sheet-workbench > fieldset > legend').allTextContents(),['文档','网页控件','业务字段与填写位置','执行规则','前台测试','后台自动测试']);

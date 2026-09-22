@@ -7,7 +7,7 @@ const {TencentSheetClient}=require('../../src/ProductionAssistant.App/Assets/Ten
 function fixture(custom=false) {
   return `<style>body{font-family:sans-serif}button,.leaf{display:inline-block;padding:15px}input{padding:10px}</style>
   <nav><button role="tab" aria-selected="true">与表格无关的标签</button></nav>
-  <section id="workbook" class="workbook"><input id="address" class="address-control" aria-label="自定义地址" placeholder="请选择单元格" value="A1"><input id="business-data" value="业务内容未修改"></section>
+  <section id="workbook" class="workbook"><input id="address" class="address-control" aria-label="自定义地址" placeholder="请选择单元格" value="A1"><input id="business-data" value=""></section>
   <div id="tabs" class="tabs-container">${['7','8','9'].map((month,i)=>custom?`<div class="leaf ${i===0?'is-active':''}"><span>项目月报 ${month}月</span></div>`:`<button class="sheet-item" role="tab" aria-selected="${i===0}"><span>项目月报 ${month}月</span></button>`).join('')}</div>
   <script>window.tabClicks=0;document.querySelector('#tabs').onclick=e=>{const el=e.target.closest('#tabs > *');if(!el)return;window.tabClicks++;for(const tab of el.parentElement.children){${custom?"tab.classList.toggle('is-active',tab===el)":"tab.setAttribute('aria-selected',String(tab===el))"}}};document.querySelector('#address').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();window.lastAddress=e.target.value;}};</script>`;
 }
@@ -47,7 +47,7 @@ async function main() {
       const profile=site.normalizeControls({sheetTab,cellAddressBox,cellEditor:{sampleText:'',frame:cellAddressBox.frame,strategies:[{type:'css',value:'#business-data'}]}});
       assert.equal((await site.testControls(page,profile)).length,6);
       assert.equal(await page.evaluate(()=>window.lastAddress),'A1');
-      assert.equal(await page.locator('#business-data').inputValue(),'业务内容未修改');
+      assert.equal(await page.locator('#business-data').inputValue(),'');
       // Simulate another workbook, changed id, reordered tabs and a new month.
       await page.setContent(fixture(custom));
       await page.locator('#address').evaluate(el=>{el.removeAttribute('id');el.removeAttribute('aria-label');});
@@ -69,7 +69,7 @@ async function main() {
       await assert.rejects(client.selectSheet(config,'项目月报 10月'),/Sheet 标签定位失败|唯一/);
     }
     for(const styleOnly of [false,true]) {
-      await page.setContent(`<div id="tabs"><div class="leaf extra"><span>甲表</span></div><div class="leaf"><span>乙表</span></div></div><input id="address" value="A1"><input id="business-data" value="内容"><style>.leaf{display:inline-block;padding:12px}</style>`);
+      await page.setContent(`<div id="tabs"><div class="leaf extra"><span>甲表</span></div><div class="leaf"><span>乙表</span></div></div><input id="address" value="A1"><input id="business-data" value=""><style>.leaf{display:inline-block;padding:12px}</style>`);
       await page.locator('#tabs').evaluate((parent,styleOnly)=>{
         const select=chosen=>{for(const node of parent.children){const text=node.querySelector('span');if(styleOnly)text.style.color=node===chosen?'rgb(1, 90, 200)':'rgb(30, 30, 30)';else text.setAttribute('data-mode',node===chosen?'x1':'x0');}};
         select(parent.lastElementChild);parent.onclick=e=>select(e.target.closest('.leaf'));
@@ -101,7 +101,7 @@ async function main() {
       assert.equal(await page.locator('#address').inputValue(),'Y9');
       assert.equal(await page.evaluate(()=>window.businessInputs),0);
       assert.deepEqual(await page.evaluate(()=>window.testTabClicks),testTarget?['项目月报 9月']:[]);
-      assert.equal(await page.locator('#business-data').inputValue(),'业务内容未修改');
+      assert.equal(await page.locator('#business-data').inputValue(),'');
       assert.ok(steps.some(step=>step.label==='名称框定位 Y9'));
       assert.equal(await (await site.resolveControl(page,profile.sheetTab,'sheetTab',true)).innerText(),testTarget?.sheet || profile.sheetTab.sampleText);
       const clicks=await page.evaluate(()=>window.testTabClicks);

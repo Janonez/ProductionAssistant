@@ -1,0 +1,8 @@
+{
+  "name": "production-assistant-tencent-sheet",
+  "private": true,
+  "version": "1.6.0",
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}

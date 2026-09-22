@@ -28,7 +28,7 @@ async function main() {
       <div id="grid" role="grid" tabindex="0">表格键盘操作区</div>
       <script>
       const cells=${JSON.stringify(cells)},nameBox=document.querySelector('#name'),valueBox=document.querySelector('#value'),grid=document.querySelector('#grid');let address='N2',editAddress='N2';
-      function render(){nameBox.value=address;valueBox.value=cells[address]??'';}
+      function render(){nameBox.value=address;valueBox.value=cells[address]??'';valueBox.readOnly=${denyEdit} || ['N2','J8','J18','N34','O34','B9','B19','B35','A4','A5','A6','C2','D2','E2','F2'].includes(address);}
       render();
       document.querySelectorAll('[role=tab]').forEach(tab=>tab.onclick=()=>{document.querySelectorAll('[role=tab]').forEach(t=>t.setAttribute('aria-selected','false'));tab.setAttribute('aria-selected','true');});
       nameBox.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();address=nameBox.value;render();grid.focus();}};
@@ -57,7 +57,7 @@ async function main() {
     await blankEditor.evaluate(el=>el.textContent='0');assert.equal(await driver.text(blankEditor,false),'0');
     await blankEditor.evaluate(el=>el.remove());
     const diagnosis=await driver.diagnose(config,'N9');assert.equal(diagnosis.returnedAddress,'N9');assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');
-    await assert.rejects(driver.prepareEdit(config,'N2','unexpected'),/写前原值不一致/);
+    await assert.rejects(driver.prepareEdit(config,'N9','unexpected'),/写前原值不一致/);
     assert.equal(writes,0);
     await driver.page.locator('#value').evaluate(el=>el.addEventListener('focus',()=>{el.value='stale';}));
     await assert.rejects(driver.diagnose(config,'N9'),/聚焦内容编辑区后的原值不一致/);
@@ -71,7 +71,7 @@ async function main() {
     await assert.rejects(driver.write(config,plan,inputBaseline),/内容编辑区输入未生效/);
     assert.equal(writes,0);assert.equal(cells.N2,'2026/9/9');await driver.page.reload();
     if(process.argv.includes('--location-only'))return;
-    await driver.ready(config);
+    await driver.page.locator('#name').evaluate(el=>el.value='');
     const check=await driver.inspect(config,plan);assert.equal(check.anchors.length,8);assert.equal(writes,0);
     const sharedConfig=config;
     reloadDelay=600;
@@ -79,7 +79,10 @@ async function main() {
     reloadDelay=0;
     const recoveredAddress=await driver.page.locator('#name').inputValue();
     await driver.page.locator('#name').evaluate(el=>el.value='');
+    await driver.waitForReloadControls(sharedConfig,Date.now()+250);
+    await driver.page.locator('#name').evaluate(el=>el.hidden=true);
     await assert.rejects(driver.waitForReloadControls(sharedConfig,Date.now()+250),/恢复超时/);
+    await driver.page.locator('#name').evaluate(el=>el.hidden=false);
     assert.equal(writes,4);
     await driver.page.locator('#name').evaluate((el,address)=>el.value=address,recoveredAddress);
     await driver.page.evaluate(()=>{const dialog=document.createElement('div');dialog.setAttribute('role','dialog');dialog.textContent='请先登录';document.body.append(dialog);});

@@ -8,7 +8,6 @@ internal sealed partial class PrototypeBridge
 {
     private static async Task<object> TencentSiteAsync(string operation, JsonElement payload, CancellationToken cancellationToken)
     {
-        TencentSheetService.RequireDevelopment();
         var id = ReadString(payload, "id");
         var job = TencentSheetTaskHandler.Find(id);
         if ((bool?)job["enabled"] == true) throw new InvalidOperationException("请先停用定时填报，再录制网页控件。");
@@ -18,7 +17,7 @@ internal sealed partial class PrototypeBridge
             ["operation"] = "site" + char.ToUpperInvariant(operation[0]) + operation[1..],
             ["jobId"] = id,
             ["configSignature"] = signature,
-            ["config"] = new JsonObject { ["documentUrl"] = (string?)job["config"]?["documentUrl"] },
+            ["config"] = job["config"]!.DeepClone(),
             ["controls"] = JsonNode.Parse(payload.GetProperty("controls").GetRawText()),
             ["key"] = ReadString(payload, "key"),
             ["token"] = ReadString(payload, "token")

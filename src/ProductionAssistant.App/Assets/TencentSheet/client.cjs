@@ -35,12 +35,12 @@ class TencentSheetClient {
   scope(config) {
     return (config.webControls?.cellAddressBox?.frame || []).reduce((scope,selector)=>scope.frameLocator(selector),this.page);
   }
-  async one(config, key) {
+  async one(config, key, {locationOnly=false,requireAddress=true} = {}) {
     const role={nameBox:'cellAddressBox',activeSheet:'sheetTab',valueBox:'cellEditor'}[key];
-    return site.waitForControl(this.page,config.webControls?.[role],role,config.timeout*1000,{active:key==='activeSheet'});
+    return site.waitForControl(this.page,config.webControls?.[role],role,config.timeout*1000,{active:key==='activeSheet',locationOnly,requireAddress});
   }
-  async control(config,key) {
-    let locator=await this.one(config,key);
+  async control(config,key,options) {
+    let locator=await this.one(config,key,options);
     const supported=await locator.evaluate((el,selector)=>el.matches(selector) || el.isContentEditable,textControls);
     if(!supported) {
       const children=locator.locator(':is('+textControls+'):visible');
@@ -55,14 +55,18 @@ class TencentSheetClient {
     const value=await locator.evaluate(el => /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) ? el.value : el.innerText ?? el.textContent ?? '');
     return trim?value.trim():core.cellText(value);
   }
-  async ready(config) {
+  async ready(config, {readOnly=false} = {}) {
     this.requirePage(config);
     await site.assertNoLogin(this.page);
     const deadline=Date.now()+config.timeout*1000;
-    for(const key of ['nameBox','valueBox'])await this.control({...config,timeout:Math.max(0,deadline-Date.now())/1000},key);
-    return {message:'网页编辑控件可用；尚未校验目标工作表与单元格。'};
+    for(const key of ['nameBox','valueBox']) {
+      const remaining={...config,timeout:Math.max(0,deadline-Date.now())/1000};
+      if(readOnly)await this.one(remaining,key,{locationOnly:true});
+      else await this.control(remaining,key);
+    }
+    return {message:readOnly?'网页控件可读取；尚未校验示范位置。':'网页编辑控件可用；尚未校验目标工作表与单元格。'};
   }
-  async selectSheet(config, sheet) {
+  async selectSheet(config, sheet, {readOnly=true} = {}) {
     this.requirePage(config);
     const binding=config.webControls?.sheetTab,deadline=Date.now()+config.timeout*1000;
     const remaining=()=>Math.max(0,deadline-Date.now());
@@ -78,15 +82,15 @@ class TencentSheetClient {
       }
       if(current!==sheet)await target.click({timeout:Math.max(1,remaining())});
       await site.waitForControl(this.page,binding,'sheetTab',remaining(),{active:true,text:sheet});
-      await this.ready({...config,timeout:remaining()/1000});
+      await this.ready({...config,timeout:remaining()/1000},{readOnly});
     } finally {
       if(this.page && !this.page.isClosed())this.page.setDefaultTimeout(config.timeout*1000);
     }
   }
-  async locate(config, address) {
+  async locate(config, address, {readOnly=false} = {}) {
     a1(address);
     await this.page.bringToFront();
-    const name = await this.control(config,'nameBox');
+    const name = await this.control(config,'nameBox',{requireAddress:false});
     await name.click();
     await name.press('Control+A');
     await name.pressSequentially(address);
@@ -97,35 +101,39 @@ class TencentSheetClient {
     await new Promise(resolve => setTimeout(resolve,100));
     const selected = (await this.text(name)).replace(/\$/g,'').toUpperCase();
     if (selected !== address) throw Error('选中地址不一致：期望 '+address+'，实际 '+selected);
-    return this.control(config,'valueBox');
+    return readOnly?this.one(config,'valueBox',{locationOnly:true}):this.control(config,'valueBox');
   }
-  async read(config, address) { return this.text(await this.locate(config,address),false); }
+  async read(config, address, options={readOnly:true}) { return this.text(await this.locate(config,address,options),false); }
   async selectedAddress(config) {
     return (await this.text(await this.control(config,'nameBox'))).replace(/\$/g,'').toUpperCase();
   }
   async captureSelection(config, expectedSheet) {
-    await this.ready(config);
+    await this.ready(config,{readOnly:true});
     const sheet = await this.text(await this.one(config,'activeSheet'));
     if (!sheet || (expectedSheet && sheet !== expectedSheet)) throw Error('示范期间工作表发生变化，请回到原工作表后再记住位置');
-    const address = await this.selectedAddress(config);
+    const nameBox=await this.one(config,'nameBox',{locationOnly:true});
+    const address = (await this.text(nameBox)).replace(/\$/g,'').toUpperCase();
     core.addressParts(address);
-    const value = await this.read(config,address);
+    // Capture the user's selection without focusing or editing either cell control.
+    const value = await this.text(await this.one(config,'valueBox',{locationOnly:true}),false);
+    if((await this.text(nameBox)).replace(/\$/g,'').toUpperCase()!==address || await this.text(await this.one(config,'activeSheet'))!==sheet)
+      throw Error('记住位置期间选区发生变化，请重新选择后再记住位置');
     return { sheet, address, value };
   }
   async verifyTeaching(config, rule) {
-    await this.ready(config);
+    await this.ready(config,{readOnly:true});
     const sheet = core.sheetName(config,rule.samples[0].date);
     if (await this.text(await this.one(config,'activeSheet')) !== sheet) throw Error('请回到示范时选中的工作表');
     let formats = core.dateFormats;
     const checks = [];
     for (const sample of [...rule.samples,rule.confirmation]) {
       const address = core.ruleAddress(rule,sample.date,rule.dateAnchor.address);
-      const actual = await this.read(config,address);
+      const actual = await this.read(config,address,{readOnly:true});
       formats = formats.filter(format => core.formatDate(sample.date,format) === actual);
       if (!formats.length) throw Error('日期校验未通过：'+sample.date+' 对应 '+address+'，读到「'+actual+'」。请确认日期表头也按相同间隔排列，并重新示范');
       checks.push({date:sample.date,address,actual});
     }
-    const label = await this.read(config,rule.labelAnchor.address);
+    const label = await this.read(config,rule.labelAnchor.address,{readOnly:true});
     if (label !== rule.labelAnchor.expected) throw Error('项目名称或公司表头在示范期间发生变化，请重新示范');
     rule.dateAnchor.format = formats[0];
     // Date/identity cells must never also be target cells for this metric.
@@ -135,7 +143,7 @@ class TencentSheetClient {
       if(target===core.ruleAddress(rule,date,rule.dateAnchor.address)||target===rule.labelAnchor.address)
         throw Error('填报位置与日期或项目名称重叠，请重新示范');
     }
-    await this.read(config,rule.confirmation.address);
+    await this.read(config,rule.confirmation.address,{readOnly:true});
     return {rule:core.normalizeRule(rule),checks};
   }
   async prepareEdit(config,address,expected) {
@@ -165,7 +173,9 @@ class TencentSheetClient {
         {label:row.label+'日期',address:core.ruleAddress(rule,plan.date,rule.dateAnchor.address),expected:core.formatDate(plan.date,rule.dateAnchor.format)},
         {label:row.label+'项目标志',...rule.labelAnchor}
       ]) {
-        const actual=await this.read(config,check.address);
+        let actual;
+        try {actual=await this.read(config,check.address);}
+        catch(error) {error.message='读取'+check.label+'（'+check.address+'）失败：'+error.message;throw error;}
         if(actual!==check.expected)throw Error(check.label+'校验失败：'+check.address+' 期望「'+check.expected+'」，实际「'+actual+'」；未开始填报');
         results.push({...check,actual});
       }
@@ -194,7 +204,7 @@ class TencentSheetClient {
       if (inspection.rows.some((row,i) => row.current !== baseline.rows[i].current)) throw Error('网页数据在预览后发生变化，请重新检查');
       for (const row of inspection.rows) {
         // Recheck immediately before each write; web sheets do not offer atomic batch transactions.
-        await this.ready(config);
+        await this.ready(config,{readOnly:true});
         if (await this.text(await this.one(config,'activeSheet')) !== plan.sheet) throw Error('当前工作表发生变化');
         const current = await this.read(config,row.address);
         if (current !== row.current) throw Error(row.address+' 在执行期间被修改，停止后续写入');
@@ -278,7 +288,7 @@ class TencentSheetClient {
         this.requirePage(probe);
         await site.assertNoLogin(this.page);
         try {
-          await this.ready(probe);
+          await this.ready(probe,{readOnly:true});
           await this.one(probe,'activeSheet');
           return;
         } catch(error) {

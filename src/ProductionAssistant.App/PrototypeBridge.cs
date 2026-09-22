@@ -119,6 +119,8 @@ internal sealed partial class PrototypeBridge
             "tencentSite.open" => await TencentSiteAsync("open", payload, cancellationToken),
             "tencentSite.pick" => await TencentSiteAsync("pick", payload, cancellationToken),
             "tencentSite.test" => await TencentSiteAsync("test", payload, cancellationToken),
+            "tencentSite.testSheet" => await TencentSiteAsync("testSheet", payload, cancellationToken),
+            "tencentSite.captureCell" => await TencentSiteAsync("captureCell", payload, cancellationToken),
             "tencentSite.save" => await TencentSiteAsync("save", payload, cancellationToken),
             "notionFill.create" => CreateNotionFillJob(payload),
             "notionFill.get" => await GetNotionFillJobAsync(payload),

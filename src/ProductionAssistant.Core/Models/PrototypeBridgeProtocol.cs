@@ -33,7 +33,7 @@ public static class PrototypeBridgeProtocol
         "tencentSheet.login", "tencentSheet.loginAgreement",
         "tencentSheet.open", "tencentSheet.close", "tencentSheet.backgroundTest", "tencentSheet.recognize", "tencentSheet.teach", "tencentSheet.inspect", "tencentSheet.write", "tencentSheet.runs",
         "tencentSheet.sources", "tencentSheet.schema", "tencentSheet.views", "tencentSheet.fetch", "tencentSheet.addField", "tencentSheet.updateField", "tencentSheet.deleteField",
-        "tencentSite.open", "tencentSite.pick", "tencentSite.test", "tencentSite.save",
+        "tencentSite.open", "tencentSite.pick", "tencentSite.testSheet", "tencentSite.captureCell", "tencentSite.test", "tencentSite.save",
         "notionFill.create",
         "notionFill.get",
         "notionFill.save",

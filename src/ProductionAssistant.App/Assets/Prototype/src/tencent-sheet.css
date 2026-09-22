@@ -30,6 +30,10 @@
 .tencent-site-recording { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 1.4fr); gap: 24px; background: var(--surface-muted); border-radius: var(--radius-control); padding: 20px; }
 .tencent-site-controls { display: grid; gap: 20px; }
 .tencent-site-controls button { margin-top: 10px; }
+.tencent-site-controls button + button { margin-left: 8px; }
+.tencent-site-instructions .tencent-sheet-check { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+.tencent-sheet-check .tencent-site-results span { display: block; margin-left: 0; }
+.tencent-sheet-check details { margin-top: 6px; }
 .tencent-site-instructions { display: grid; align-content: start; gap: 12px; color: var(--text-muted); }
 .tencent-site-instructions strong { color: var(--text); }
 .tencent-site-results { margin: 0; padding-left: 24px; }

@@ -11,15 +11,8 @@ public sealed class TencentSheetService
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _worker;
     private readonly string _profile = Path.Combine(RuntimeEnvironment.DataDirectory, "tencent-sheet-profile");
-    public static void RequireDevelopment()
-    {
-        if (!RuntimeEnvironment.Current.IsDevelopment)
-            throw new InvalidOperationException("腾讯文档填报目前仅在 Development 测试版开放。");
-    }
-
     public async Task<JsonElement> CallAsync(JsonObject request, CancellationToken cancellationToken = default)
     {
-        RequireDevelopment();
         if (!await _gate.WaitAsync(0, cancellationToken))
             throw new InvalidOperationException("已有文档操作正在进行，请等待完成。");
         try

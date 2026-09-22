@@ -26,7 +26,6 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
 
     public static JsonArray Load()
     {
-        TencentSheetService.RequireDevelopment();
         lock (StoreLock) return File.Exists(StorePath) ? JsonNode.Parse(File.ReadAllText(StorePath))!.AsArray() : new();
     }
     public static JsonObject Find(string id) => Load().OfType<JsonObject>().FirstOrDefault(job => (string?)job["id"] == id)
@@ -102,7 +101,6 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
     }
     public async Task<AutomationTaskRunResult> ExecuteAsync(AutomationTaskExecutionContext context, JsonElement config, CancellationToken cancellationToken)
     {
-        TencentSheetService.RequireDevelopment();
         Directory.CreateDirectory(RuntimeEnvironment.DataDirectory);
         FileStream lease;
         try { lease = new FileStream(Path.Combine(RuntimeEnvironment.DataDirectory, "tencent-sheet-execution.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }

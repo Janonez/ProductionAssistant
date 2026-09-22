@@ -9,7 +9,6 @@ internal sealed partial class PrototypeBridge
 {
     private static async Task<object> TencentSheetAsync(string operation, JsonElement payload, CancellationToken cancellationToken)
     {
-        TencentSheetService.RequireDevelopment();
         if (operation == "loginAgreement")
         {
             var url = ReadString(payload, "kind") switch
