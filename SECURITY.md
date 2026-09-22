@@ -4,4 +4,4 @@
 
 发现安全问题时，请使用仓库 **Security → Report a vulnerability** 私密报告，不要创建公开 Issue。
 
-本项目的用户配置保存在 `%LOCALAPPDATA%\ProductionAssistant`，Notion 令牌、各日报任务的钉钉凭据和报表中心 FineReport 凭据由当前 Windows 用户的 DPAPI 保护。FineReport storage state 仅用于本机后台采集，同样不得复制、记录或提交。配置、日志和真实业务样例不得提交到仓库。
+Production 配置保存在 `%LOCALAPPDATA%\ProductionAssistant`，Development 配置位于其 `Development` 子目录。Notion 令牌、全局 `notification-settings.json` 中的钉钉凭据、FineReport 凭据及 NotionFill 密码由当前 Windows 用户的 DPAPI 保护；日报任务不再各自保存钉钉凭据。FineReport storage state 仅用于本机后台采集，同样不得复制、记录或提交。配置、日志和真实业务样例不得提交到仓库。
