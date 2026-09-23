@@ -50,14 +50,14 @@ export function TencentWebControls({ id, value, disabled, onSaved, onActive }: {
     } catch (error) { setFailed(true); setNotice(error instanceof Error ? error.message : String(error)); invalidate(); }
     finally { setBusy(""); }
   }
-  return <fieldset className="tencent-web-controls tencent-sheet-panel" aria-busy={!!busy} disabled={disabled}>
-    <legend>网页控件</legend><p className="tencent-sheet-help">记录本任务的单元格名称框、内容编辑区和 Sheet 标签。可补录保存状态，用于等待网页保存完成；业务填写位置在下方独立配置。</p>
+  return <fieldset className="card tencent-web-controls tencent-sheet-panel" aria-busy={!!busy} disabled={disabled}>
+    <h2>网页控件录制</h2><p className="tencent-sheet-help">记录本任务的单元格名称框、内容编辑区和 Sheet 标签。可补录保存状态，用于等待网页保存完成；业务填写位置在“业务字段”中单独配置。</p>
     {!draft ? <>
-      <p>{controls.map(control => `${control.title}：${value?.[control.key] ? "已录制" : control.key === "saveStatus" ? "未配置" : "待录制"}`).join("　")}</p>
+      <div className="checklist">{controls.map(control => <div className="check-item" key={control.key}><span className={`mark ${value?.[control.key] ? "" : "pending"}`}>{value?.[control.key] ? "✓" : "·"}</span>{control.title.slice(2)}<span className="tencent-control-state">{value?.[control.key] ? "已录制" : control.key === "saveStatus" ? "未配置" : "待录制"}</span></div>)}</div>
       <button className="secondary" onClick={begin}>{value ? "重新录制网页控件" : "录制网页控件"}</button>
     </> : <>
       <fieldset className="tencent-site-fields" disabled={disabled || !!busy}>
-        <button className="primary" onClick={() => run("open")}>{opened ? "重新打开配置文档" : "开始配置"}</button>
+        <button className={opened ? "secondary" : "primary"} onClick={() => run("open")}>{opened ? "重新打开配置文档" : "开始配置"}</button>
         <div className="tencent-site-recording">
           <div className="tencent-site-controls">{controls.map(control => <div key={control.key}><strong>{control.title}</strong><span className="tencent-control-state">{control.key === "sheetTab" && sheetCheck?.passed ? "已录制 · 检验通过" : draft[control.key] ? "已录制" : "未配置"}{control.key === "saveStatus" && draft.saveStatus ? ` · ${draft.saveStatus.sampleText}` : ""}</span><button className="secondary" disabled={!opened || (control.key !== "sheetTab" && !sheetCheck?.passed) || (control.key === "cellEditor" && !testCell)} onClick={() => run("pick", control.key)}>录制{control.key === "sheetTab" ? " Sheet 标签" : control.key === "cellEditor" ? "内容编辑区" : control.key === "saveStatus" ? "保存状态" : "单元格名称框"}</button>{control.key === "sheetTab" && draft.sheetTab && <button className="secondary" disabled={!opened} onClick={() => run("testSheet")}>重新检验 Sheet</button>}{control.key === "saveStatus" && draft.saveStatus && <button className="secondary" onClick={() => { const next = { ...draft }; delete next.saveStatus; setDraft(next); invalidate(); }}>移除保存状态</button>}</div>)}</div>
           <div className="tencent-site-instructions"><strong>{controls.some(control => control.key === busy) ? "正在等待网页点选" : busy === "testSheet" ? "正在检验 Sheet" : "控件录制模式"}</strong><p>先点击“录制 Sheet 标签”，再在文档中点选任意一个标签。程序会立即独立检验集合、本月匹配和选中状态，通过后再录制其他控件。按 Esc 取消点选。</p><p>录制点击只记录位置。检验时，本月已选中则不重复点击，否则仅切换到本月；不定位单元格或填写数据。登录提示自动发现，无需录制。</p>
@@ -68,7 +68,7 @@ export function TencentWebControls({ id, value, disabled, onSaved, onActive }: {
         {!!steps?.length && <ol className="tencent-site-results">{steps.map(step => <li key={step.label}><strong>{step.label}</strong><span>{step.detail}</span></li>)}</ol>}
         <p className="tencent-sheet-help">录制的是名称框和编辑区两个通用控件。检验时仅跳转到上方临时测试格，确认空白、可编辑且地址正确，不输入测试值。正式填写始终按业务规则计算目标位置。单元格检验失败保留 Sheet 结果；全部通过后统一保存。</p>
         <p className="tencent-sheet-help">保存状态可单独补录，已有三个控件无需重录。录制后填写会等待保存状态稳定，再刷新回读；上次修改时间仅表示空闲，不能单独证明本次保存成功。未配置时沿用原确认方式。</p>
-        <div className="tencent-sheet-actions"><button className="secondary" disabled={!opened || !sheetCheck?.passed || !testCell || !draft.cellAddressBox || !draft.cellEditor} onClick={() => run("test")}>检验单元格控件</button><button className="primary" disabled={!token} onClick={() => run("save")}>保存网页控件</button><button className="secondary" onClick={() => { setDraft(undefined); setSheetCheck(undefined); setTestCell(undefined); onActive(false); invalidate(); setNotice(""); }}>取消</button></div>
+        <div className="tencent-sheet-actions"><button className="secondary" disabled={!opened || !sheetCheck?.passed || !testCell || !draft.cellAddressBox || !draft.cellEditor} onClick={() => run("test")}>检验单元格控件</button><button className={opened ? "primary" : "secondary"} disabled={!token} onClick={() => run("save")}>保存网页控件</button><button className="secondary" onClick={() => { setDraft(undefined); setSheetCheck(undefined); setTestCell(undefined); onActive(false); invalidate(); setNotice(""); }}>取消</button></div>
       </fieldset>
     </>}
     {notice && <div className={`notice ${failed ? "error" : "info"}`} role={failed ? "alert" : "status"}>{notice}</div>}

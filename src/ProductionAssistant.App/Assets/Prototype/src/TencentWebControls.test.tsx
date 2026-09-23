@@ -18,7 +18,7 @@ it('owns three controls within the task, requires testing, and invalidates the p
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root!.render(<TencentWebControls id="job" disabled={false} onSaved={saved} onActive={active} />));
   expect(invoke).not.toHaveBeenCalled();
-  expect(container.querySelector('legend')?.textContent).toBe('网页控件');
+  expect(container.querySelector('h2')?.textContent).toBe('网页控件录制');
   expect(container.textContent).not.toMatch(/共享|适配名称|选择网页适配/);
   const button = (text: string) => [...container.querySelectorAll('button')].find(button => button.textContent === text)!;
   await act(async () => button('录制网页控件').click());

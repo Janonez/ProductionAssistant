@@ -1,0 +1,399 @@
+.tencent-demo {
+  color-scheme: light;
+
+  & {
+    --bg: #FAFAF9;
+    --card: #FFFFFF;
+    --card-alt: #FBFAF7;
+    --border: #E4E0D6;
+    --text: #201E1A;
+    --text-secondary: #6F6A5D;
+    --text-tertiary: #A39D8C;
+    --accent: #B65C34;
+    --accent-hover: #9F4C29;
+    --accent-soft: #F3E2D7;
+    --success: #3F7D4C;
+    --success-soft: #E4EFE5;
+    --warning: #A9752B;
+    --warning-soft: #F6ECDA;
+    --danger: #B4432F;
+    --chip-bg: #EFEBE1;
+    --focus: #2F6FB0;
+    --shadow: 0 1px 2px rgba(32,30,26,0.06), 0 1px 1px rgba(32,30,26,0.04);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  & { scroll-padding-top: env(safe-area-inset-top, 0px); box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: inherit; }
+  & {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+  }
+  .crumb {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+    cursor: default;
+  }
+  .titlebar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .badge.success { background: var(--success-soft); color: var(--success); }
+  .badge.warning { background: var(--warning-soft); color: var(--warning); }
+  .badge.neutral { background: var(--chip-bg); color: var(--text-secondary); }
+
+  /* 停用横幅 */
+  .banner {
+    margin-top: 18px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--warning-soft);
+    border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .banner.hidden { display: none; }
+  .banner p {
+    margin: 0;
+    font-size: 13.5px;
+    color: var(--text);
+  }
+  .banner strong { color: var(--warning); }
+
+  /* 状态总览条 */
+  .status-strip {
+    margin-top: 18px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .status-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--chip-bg);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+  .status-chip .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success);
+    flex: none;
+  }
+  .status-chip.pending .dot { background: var(--warning); }
+  .status-chip.ok { color: var(--text); }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-top: 26px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    appearance: none;
+    background: none;
+    border: none;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 10px 16px 12px;
+    cursor: pointer;
+    position: relative;
+    white-space: nowrap;
+    border-radius: 6px 6px 0 0;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .tab.active::after {
+    content: "";
+    position: absolute;
+    left: 10px; right: 10px; bottom: 0;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+  .panel { display: none; padding-top: 22px; }
+  .panel.active { display: block; animation: tencent-demo-fade .18s ease; }
+  @keyframes tencent-demo-fade { from { opacity: 0; transform: translateY(2px);} to { opacity: 1; transform: translateY(0);} }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .card + .card { margin-top: 16px; }
+  .card h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .card .hint {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0 0 16px;
+  }
+
+  label.field-label {
+    display: block;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  input[type="text"], input[type="url"], select {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-alt);
+    color: var(--text);
+    font-size: 13.5px;
+    font-family: inherit;
+  }
+  input:focus, select:focus, button:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 220px; }
+
+  /* 按钮层级 */
+  .btn {
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    border-radius: 8px;
+    padding: 9px 16px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: var(--card); border-color: var(--border); color: var(--text); }
+  .btn-secondary:hover { border-color: var(--text-tertiary); }
+  .btn-ghost { background: none; color: var(--text-secondary); padding: 9px 8px; }
+  .btn-ghost:hover { color: var(--text); }
+  .btn-danger-ghost { background: none; color: var(--danger); padding: 9px 8px; }
+  .btn-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+  .divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+  /* 已绑定字段列表 */
+  .field-list { display: flex; flex-direction: column; gap: 8px; }
+  .field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card-alt);
+    flex-wrap: wrap;
+  }
+  .field-row .name { font-weight: 600; font-size: 13.5px; }
+  .field-row .meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .field-row .actions { display: flex; gap: 4px; }
+  .add-field-toggle {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px;
+  }
+  .add-field-form {
+    display: none;
+    background: var(--card-alt);
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .add-field-form.open { display: block; }
+
+  /* 网页控件 checklist */
+  .checklist { display: flex; flex-direction: column; gap: 10px; }
+  .check-item { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+  .check-item .mark {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--success-soft); color: var(--success);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex: none;
+  }
+
+  /* 测试与上线：分段控件 */
+  .segmented {
+    display: inline-flex;
+    background: var(--chip-bg);
+    border-radius: 9px;
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 16px;
+  }
+  .segmented button {
+    font: inherit;
+    font-size: 13px;
+    border: none;
+    background: none;
+    padding: 7px 14px;
+    border-radius: 7px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .segmented button.active {
+    background: var(--card);
+    color: var(--text);
+    font-weight: 600;
+    box-shadow: var(--shadow);
+  }
+  .test-mode { display: none; }
+  .test-mode.active { display: block; animation: tencent-demo-fade .18s ease; }
+  .test-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    background: var(--card-alt);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+  }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(24px, env(safe-area-inset-bottom, 0px) + 16px);
+    transform: translateX(-50%) translateY(12px);
+    background: var(--text);
+    color: var(--bg);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+
+  .note {
+    margin-top: 24px;
+    font-size: 12.5px;
+    color: var(--text-tertiary);
+    line-height: 1.7;
+  }
+
+  @media (max-width: 520px) {
+    .page { padding: 20px 14px 60px; }
+    h1 { font-size: 19px; }
+    .card { padding: 16px; }
+  }
+
+}
+/* Adapt existing business controls to the supplied Demo, within this module only. */
+.tencent-demo {
+ --surface: var(--card); --surface-muted: var(--card-alt); --canvas: var(--card-alt); --text-muted: var(--text-secondary); --primary: var(--accent); --primary-soft: var(--accent-soft); --radius-control: 8px; --radius-panel: 12px;
+ min-height: 100vh; box-sizing: border-box;
+ .page h1 { font-size: 22px; margin: 0; line-height: 1.55; letter-spacing: -.01em; }
+ .tencent-sheet-workbench { display: block; max-width: 880px; }
+ .crumb { border: 0; padding: 0; background: none; font-family: inherit; }
+ .tencent-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+ .tencent-sheet-panel { display: block; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow); margin: 0; }
+ .tencent-sheet-panel + .tencent-sheet-panel { margin-top: 16px; }
+ .tencent-sheet-panel h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+ .tencent-sheet-panel legend { font-size: 15px; }
+ .tencent-sheet-panel label { font-size: 12.5px; color: var(--text-secondary); font-weight: 400; gap: 6px; }
+ .tencent-sheet-help, .tencent-control-state { color: var(--text-secondary); font-size: 13px; }
+ .tencent-sheet-help { margin: 0 0 16px; }
+ .tencent-sheet-panel input:not([type=checkbox]), .tencent-sheet-panel select, .tencent-test-fields input:not([type=checkbox]) { min-height: 0; padding: 9px 11px; border-radius: 8px; background: var(--card-alt); color: var(--text); font: inherit; font-size: 13.5px; }
+ button.primary, button.secondary, button.ghost, button.btn-danger-ghost { font: inherit; font-size: 13.5px; font-weight: 500; border-radius: 8px; padding: 9px 16px; min-height: 0; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; box-shadow: none; cursor: pointer; }
+ button.primary { background: var(--accent); color: white; }
+ button.primary:hover { background: var(--accent-hover); }
+ button.secondary { background: var(--card); border-color: var(--border); color: var(--text); }
+ button.secondary:hover { border-color: var(--text-tertiary); }
+ button.ghost, button.btn-danger-ghost { background: none; color: var(--text-secondary); padding: 9px 8px; }
+ button.btn-danger-ghost { color: var(--danger); }
+ button:disabled { opacity: .45; cursor: not-allowed; }
+ .tencent-sheet-grid { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 16px; }
+ .tencent-sheet-grid > * { flex: 1 1 220px; min-width: 0; }
+ .tencent-sheet-actions { gap: 4px; }
+ .tencent-control-state { font-size: 12px; margin-top: 2px; }
+ .field-row strong { font-size: 13.5px; font-weight: 600; }
+ .check-item .mark.pending { background: var(--chip-bg); color: var(--text-secondary); }
+ .checklist { margin-bottom: 14px; }
+ .tencent-test-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+ .tencent-test-fields > button { margin: 14px 10px 0 0; }
+ .tencent-test-fields > p { font-size: 13px; color: var(--text-secondary); }
+ .tencent-sheet-table th, .tencent-sheet-table td { border-color: var(--border); }
+ .tencent-sheet-guidance { background: var(--card-alt); }
+ .tencent-site-recording { display: flex; flex-wrap: wrap; }
+ .tencent-site-recording > * { flex: 1 1 220px; }
+ .tencent-run-history { margin-top: 24px; font-size: 13px; color: var(--text-secondary); }
+ .toast { max-width: min(640px, calc(100vw - 28px)); display: flex; align-items: center; gap: 12px; }
+ .toast button.ghost { color: inherit; }
+ .toast.error { background: var(--danger); color: white; }
+ @media (max-width: 520px) { .page h1 { font-size: 19px; } .tencent-sheet-panel { padding: 16px; } }
+ @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+}
+
+.tencent-demo {
+ .tencent-document-check { margin-top: 18px; font-size: 13px; color: var(--text-secondary); }
+ .tencent-document-check .tencent-sheet-help { margin-top: 12px; }
+ .tencent-sheet-actions input[type=time] { flex: 0 0 160px; width: 160px; }
+ .card .hint { margin: 0 0 16px; }
+ .add-field-toggle .hint { margin-bottom: 0; }
+ .tencent-web-controls .tencent-sheet-help { margin-bottom: 16px; }
+ .tencent-test-fields .tencent-sheet-date-mode { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+ :where(button, input, select, .card, .field-row) { corner-shape: round; }
+}

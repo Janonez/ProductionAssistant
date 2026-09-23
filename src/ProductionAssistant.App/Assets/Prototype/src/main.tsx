@@ -21,5 +21,6 @@ import './database-viewer.css'
 import './polish.css'
 import './field-pill.css'
 import './control-refinements.css'
+import './tencent-sheet-demo.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

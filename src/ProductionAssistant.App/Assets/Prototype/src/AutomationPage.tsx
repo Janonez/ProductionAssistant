@@ -1,3 +1,4 @@
+import { TencentSheetPage } from "./TencentSheetPage";
 import { MessageTemplatePage } from "./MessageTemplatePage";
 import { NotionFillPage } from "./NotionFillPage";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -191,6 +192,7 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
     document.getElementById(`automation-tab-${tabs[next].id}`)?.focus();
   }
 
+  if (task.taskType === "tencent_sheet_fill") return <TencentSheetPage key={task.id} id={task.id} name={task.name} back={back} changed={() => { refresh().catch(() => undefined); }} />;
   if (isDaily) return <MessageTemplatePage id={task.id} back={back} changed={refresh} openSettings={openSettings} />;
   if (task.taskType === "notion_fill") return <NotionFillPage id={task.id} back={back} changed={refresh} openSettings={openSettings} />;
 
