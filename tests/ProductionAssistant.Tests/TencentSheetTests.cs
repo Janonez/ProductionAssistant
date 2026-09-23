@@ -61,13 +61,14 @@ public sealed class TencentSheetTests
         var id = "0123456789abcdef0123456789abcdef";
         Assert.Equal("ProductionAssistant-" + RuntimeEnvironment.Current.Name + "-TencentSheet-" + id, TencentSheetTaskScheduler.TaskName(id));
         Assert.Equal(RuntimeEnvironment.Current.SchedulerEnabled, TencentSheetTaskScheduler.IsAvailable);
-        var xml = System.Xml.Linq.XDocument.Parse(TencentSheetTaskScheduler.CreateXml(id, @"C:\Test & App\ProductionAssistant.exe", "S-1-5-test", config));
+        var xml = System.Xml.Linq.XDocument.Parse(TencentSheetTaskScheduler.CreateXml(id, @"C:\工作 & App\ProductionAssistant.exe", "S-1-5-test", config));
         var elements = xml.Descendants().ToArray();
         Assert.Equal(2, elements.Count(element => element.Name.LocalName == "CalendarTrigger"));
         Assert.Equal(["2026-01-01T08:00:00+08:00", "2026-01-01T17:30:00+08:00"], elements.Where(element => element.Name.LocalName == "StartBoundary").Select(element => element.Value));
         Assert.All(elements.Where(element => element.Name.LocalName == "DaysOfWeek"), element => Assert.Equal(["Sunday", "Monday", "Friday"], element.Elements().Select(day => day.Name.LocalName)));
         Assert.Contains(elements, element => element.Name.LocalName == "Arguments" && element.Value == $"--environment {RuntimeEnvironment.Current.Name} --run-automation-task --task-type tencent_sheet_fill --task-id {id}");
-        Assert.Contains(elements, element => element.Name.LocalName == "Command" && element.Value == @"C:\Test & App\ProductionAssistant.exe");
+        Assert.Contains(elements, element => element.Name.LocalName == "Command" && element.Value == @"C:\工作 & App\ProductionAssistant.exe");
+        Assert.Contains(elements, element => element.Name.LocalName == "WorkingDirectory" && element.Value == @"C:\工作 & App");
         Assert.Contains(elements, element => element.Name.LocalName == "MultipleInstancesPolicy" && element.Value == "IgnoreNew");
         Assert.Contains(elements, element => element.Name.LocalName == "StartWhenAvailable" && element.Value == "false");
         Assert.DoesNotContain(elements, element => element.Name.LocalName == "RestartOnFailure");
