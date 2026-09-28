@@ -24,7 +24,7 @@
             <Grid.Resources>
                 <Style x:Key="SkeletonBlock" TargetType="Border">
                     <Setter Property="Background" Value="#E7E5E4" />
-                    <Setter Property="CornerRadius" Value="3" />
+                    <Setter Property="CornerRadius" Value="20" />
                     <Setter Property="Height" Value="16" />
                 </Style>
             </Grid.Resources>
