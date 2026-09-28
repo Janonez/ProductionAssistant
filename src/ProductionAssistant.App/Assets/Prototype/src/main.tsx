@@ -23,4 +23,5 @@ import './field-pill.css'
 import './control-refinements.css'
 import './tencent-sheet-demo.css'
 
+performance.mark('module-entry')
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

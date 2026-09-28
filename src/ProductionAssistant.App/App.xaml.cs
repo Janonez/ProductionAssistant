@@ -8,6 +8,7 @@ public partial class App : Application
 
     public App()
     {
+        Services.PrototypeWebViewRuntime.Mark("app-constructor");
         InitializeComponent();
         UnhandledException += (_, args) =>
         {
@@ -56,6 +57,7 @@ public partial class App : Application
             return;
         }
 
+        Services.PrototypeWebViewRuntime.Mark("window-create-start");
         MainWindow = new MainWindow();
         MainWindow.Activate();
         Services.PrototypeWebViewRuntime.Mark("window-activated");

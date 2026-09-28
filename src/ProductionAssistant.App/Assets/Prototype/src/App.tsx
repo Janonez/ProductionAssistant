@@ -1,16 +1,34 @@
-import { useEffect, useState } from 'react'
+import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { invoke, notifyReady } from './bridge'
 import type { Route } from './types'
-import { AutomationPage } from './AutomationPage'
-import { DailyWeldPage } from './DailyWeldPage'
 import { OperationSidebar } from './OperationSidebar'
 import ProductionMessagePage from './ProductionMessagePage'
-import { PlanPdfPage } from './PlanPdfPage'
-import { ProductionMeetingPage } from './ProductionMeetingPage'
-import { ReportCenterPage } from './ReportCenterPage'
-import SettingsModal from './SettingsModal'
-import { DatabaseViewerPage } from './DatabaseViewerPage'
+const AutomationPage = lazy(() => import('./AutomationPage').then(module => ({ default: module.AutomationPage })))
+const DailyWeldPage = lazy(() => import('./DailyWeldPage').then(module => ({ default: module.DailyWeldPage })))
+const PlanPdfPage = lazy(() => import('./PlanPdfPage').then(module => ({ default: module.PlanPdfPage })))
+const ProductionMeetingPage = lazy(() => import('./ProductionMeetingPage').then(module => ({ default: module.ProductionMeetingPage })))
+const ReportCenterPage = lazy(() => import('./ReportCenterPage').then(module => ({ default: module.ReportCenterPage })))
+const DatabaseViewerPage = lazy(() => import('./DatabaseViewerPage').then(module => ({ default: module.DatabaseViewerPage })))
+const SettingsModal = lazy(() => import('./SettingsModal'))
+
+// Keep the handshake inside Suspense: a pending route is not ready yet.
+function RouteReady({ route, navigation }: { route: string; navigation: string }) {
+  useEffect(() => { notifyReady(route, navigation) }, [route, navigation])
+  return null
+}
+
+class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    if (!this.state.failed) return this.props.children
+    const error = <div className="route-load-status" role="alert">界面加载失败，请重新加载。<button className="secondary" onClick={() => window.location.reload()}>重新加载</button>{this.props.onClose && <button className="secondary" onClick={this.props.onClose}>关闭</button>}</div>
+    return this.props.onClose ? <div className="settings-overlay"><div className="settings-window">{error}</div></div> : error
+  }
+}
+
+const loading = <div className="route-load-status" role="status">正在加载界面…</div>
 
 export function App() {
   const [location, setLocation] = useState(() => window.location.search)
@@ -36,7 +54,6 @@ export function App() {
   const navigation = search.get('navigation') || ''
   const reduced = useReducedMotion()
 
-  useEffect(() => { notifyReady(route, navigation) }, [route, navigation])
   const goNative = (tag: string) => invoke('app.navigateNative', { tag }).catch(() => undefined)
   const active = route.startsWith('navigation:') ? route.slice('navigation:'.length) : route
   const native = route.startsWith('navigation:')
@@ -57,7 +74,7 @@ export function App() {
       <OperationSidebar active={active} navigate={goNative} openSettings={() => setSettingsOpen(true)} />
     </div>
     <div className={`desktop-shell-content ${native ? 'desktop-shell-content-native' : ''}`}>
-      {native ? <div className="native-content-slot" aria-hidden="true" />
+      {native ? <><div className="native-content-slot" aria-hidden="true" /><RouteReady route={route} navigation={navigation} /></>
         : <AnimatePresence mode="wait">
             <motion.div
               key={route}
@@ -68,10 +85,15 @@ export function App() {
               exit={reduced ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: .2 }}
             >
-              {route === 'production-message' ? <ProductionMessagePage /> : route === 'daily-weld' ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === 'production-meeting' ? <ProductionMeetingPage /> : route === 'plan-pdf' ? <PlanPdfPage /> : route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+              <LoadBoundary key={navigation}>
+                <Suspense fallback={loading}>
+                  {route === 'production-message' ? <ProductionMessagePage /> : route === 'daily-weld' ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === 'production-meeting' ? <ProductionMeetingPage /> : route === 'plan-pdf' ? <PlanPdfPage /> : route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+                  <RouteReady route={route} navigation={navigation} />
+                </Suspense>
+              </LoadBoundary>
             </motion.div>
           </AnimatePresence>}
     </div>
-    <SettingsModal open={settingsOpen} onClose={closeSettings} />
+    {settingsOpen && <LoadBoundary onClose={closeSettings}><Suspense fallback={<div className="settings-overlay"><div className="settings-window"><div className="route-load-status" role="status">正在加载设置…<button className="secondary" onClick={closeSettings}>取消</button></div></div></div>}><SettingsModal open onClose={closeSettings} /></Suspense></LoadBoundary>}
   </div>
 }

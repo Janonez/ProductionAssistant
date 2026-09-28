@@ -1,2 +1,3 @@
 .app-shell { display: block; }
 .app-shell main { grid-column: auto; }
+.route-load-status { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 160px; padding: 24px; color: var(--text-muted); }

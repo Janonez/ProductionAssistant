@@ -13,6 +13,7 @@ public sealed partial class PrototypePage : Page
     private string _route = "production-message";
     private string _navigationId = string.Empty;
     private bool _initialized;
+    private bool _reactVisible;
     private CancellationTokenSource? _readyTimeout;
 
     public PrototypePage()
@@ -68,7 +69,11 @@ public sealed partial class PrototypePage : Page
                 "WEBVIEW2_DEFAULT_BACKGROUND_COLOR",
                 "00000000",
                 EnvironmentVariableTarget.Process);
-            await PrototypeWebView.EnsureCoreWebView2Async(await PrototypeWebViewRuntime.GetEnvironmentAsync());
+            PrototypeWebViewRuntime.Mark("page-initialize-start");
+            var environment = await PrototypeWebViewRuntime.GetEnvironmentAsync();
+            PrototypeWebViewRuntime.Mark("webview-create-start");
+            await PrototypeWebView.EnsureCoreWebView2Async(environment);
+            PrototypeWebViewRuntime.Mark("webview-ready");
             PrototypeWebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
             PrototypeWebView.CoreWebView2.Settings.IsPinchZoomEnabled = false;
             PrototypeWebView.CoreWebView2.NavigationStarting += (_, args) =>
@@ -107,10 +112,13 @@ public sealed partial class PrototypePage : Page
         _readyTimeout?.Cancel();
         using var readyTimeout = new CancellationTokenSource();
         _readyTimeout = readyTimeout;
-        ShowLoading();
+        if (!_reactVisible) ShowLoading();
         var query = $"route={Uri.EscapeDataString(_route)}&navigation={_navigationId}";
         if (initial)
+        {
+            PrototypeWebViewRuntime.Mark("navigation-start");
             PrototypeWebView.Source = new Uri($"https://{PrototypeHost}/index.html?{query}");
+        }
         else
             await PrototypeWebView.CoreWebView2.ExecuteScriptAsync(
                 $"history.replaceState(null,'','?{query}');window.dispatchEvent(new PopStateEvent('popstate'));" );
@@ -131,11 +139,11 @@ public sealed partial class PrototypePage : Page
         }
     }
 
-    private async Task NavigateRouteSafelyAsync()
+    private async Task NavigateRouteSafelyAsync(bool initial = false)
     {
         try
         {
-            await NavigateRouteAsync();
+            await NavigateRouteAsync(initial);
         }
         catch (Exception ex)
         {
@@ -150,6 +158,7 @@ public sealed partial class PrototypePage : Page
             return;
         _readyTimeout?.Cancel();
         PrototypeWebViewRuntime.Mark("react-ready");
+        _reactVisible = true;
         LoadingLayer.Visibility = Visibility.Collapsed;
         LoadError.Visibility = Visibility.Collapsed;
         PrototypeWebView.Visibility = Visibility.Visible;
@@ -159,7 +168,7 @@ public sealed partial class PrototypePage : Page
     {
         _navigationId = Guid.NewGuid().ToString("N");
         if (_initialized)
-            await NavigateRouteSafelyAsync();
+            await NavigateRouteSafelyAsync(initial: true);
         else
             await InitializeAsync();
     }
@@ -173,6 +182,7 @@ public sealed partial class PrototypePage : Page
 
     private void ShowLoadError(string message)
     {
+        _reactVisible = false;
         LoadErrorText.Text = message;
         LoadingLayer.Visibility = Visibility.Collapsed;
         PrototypeWebView.Visibility = Visibility.Collapsed;

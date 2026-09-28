@@ -23,7 +23,9 @@ webview()?.addEventListener('message', event => receive(event.data as BridgeResp
 export function notifyReady(route: string, navigation: string) {
   if (navigation && readyNavigations.has(navigation)) return
   if (navigation) readyNavigations.add(navigation)
-  webview()?.postMessage({ type: 'app.ready', route, navigation })
+  webview()?.postMessage({ type: 'app.ready', route, navigation,
+    moduleEntryMs: Math.round(performance.getEntriesByName('module-entry')[0]?.startTime || 0),
+    readyMs: Math.round(performance.now()) })
 }
 
 export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 30000, onProgress?: (value: unknown) => void): Promise<T> {
