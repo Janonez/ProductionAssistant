@@ -19,20 +19,6 @@ export function AutomationSkeleton() {
   </div>
 }
 
-export function SettingsContentSkeleton() {
-  return <div role="status" aria-label="正在加载设置" aria-busy="true" className="skeleton-settings-content">
-    <SkeletonBlock className="skeleton-title" /><SkeletonLines rows={2} />
-    {[0, 1, 2].map(i => <div className="skeleton-field" key={i}><SkeletonBlock className="skeleton-short" /><SkeletonBlock className="skeleton-input" /></div>)}
-  </div>
-}
-
-export function SettingsSkeleton({ close }: { close: () => void }) {
-  return <div className="settings-overlay"><div className="settings-window" role="dialog" aria-label="加载设置" aria-modal="true">
-    <aside className="settings-sidebar" aria-hidden="true"><SkeletonBlock className="skeleton-input" /><SkeletonLines rows={4} /></aside>
-    <main className="settings-main"><button className="settings-close" onClick={close} aria-label="关闭设置">×</button><div className="settings-content"><SettingsContentSkeleton /></div></main>
-  </div></div>
-}
-
 export function TaskSkeleton({ kind = 'message' }: { kind?: 'message' | 'notion' | 'tencent' }) {
   if (kind === 'tencent') return <div className="tencent-demo" role="status" aria-label="正在加载填报配置" aria-busy="true"><div className="page tencent-sheet-workbench" aria-hidden="true">
     <button className="crumb" disabled tabIndex={-1}><Text>← 返回任务列表</Text></button>

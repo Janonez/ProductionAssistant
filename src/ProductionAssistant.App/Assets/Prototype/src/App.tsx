@@ -1,5 +1,5 @@
-import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
-import { RouteSkeleton, SettingsSkeleton } from './LoadingSkeleton'
+import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { RouteSkeleton } from './LoadingSkeleton'
 import { invoke, notifyReady } from './bridge'
 import type { Route } from './types'
 import { OperationSidebar } from './OperationSidebar'
@@ -10,7 +10,7 @@ const PlanPdfPage = lazy(() => import('./PlanPdfPage').then(module => ({ default
 const ProductionMeetingPage = lazy(() => import('./ProductionMeetingPage').then(module => ({ default: module.ProductionMeetingPage })))
 const ReportCenterPage = lazy(() => import('./ReportCenterPage').then(module => ({ default: module.ReportCenterPage })))
 const DatabaseViewerPage = lazy(() => import('./DatabaseViewerPage').then(module => ({ default: module.DatabaseViewerPage })))
-const SettingsModal = lazy(() => import('./SettingsModal'))
+import SettingsModal from './SettingsModal'
 
 // Keep the handshake inside Suspense: a pending route is not ready yet.
 function RouteReady({ route, navigation }: { route: string; navigation: string }) {
@@ -63,11 +63,11 @@ export function App() {
     return () => document.body.classList.remove('settings-over-native')
   }, [native, settingsOpen])
 
-  const closeSettings = () => {
+  const closeSettings = useCallback(() => {
     setSettingsOpen(false)
     window.dispatchEvent(new Event('production-settings-updated'))
     invoke('settings.close').catch(() => undefined)
-  }
+  }, [])
 
   return <div className={`desktop-shell ${native && settingsOpen ? 'settings-over-native' : ''}`}>
     <div className="production-message-demo desktop-shell-navigation">
@@ -89,6 +89,6 @@ export function App() {
               </LoadBoundary>
             </div>}
     </div>
-    {settingsOpen && <LoadBoundary onClose={closeSettings}><Suspense fallback={<SettingsSkeleton close={closeSettings} />}><SettingsModal open onClose={closeSettings} /></Suspense></LoadBoundary>}
+    {settingsOpen && <LoadBoundary onClose={closeSettings}><SettingsModal open onClose={closeSettings} /></LoadBoundary>}
   </div>
 }

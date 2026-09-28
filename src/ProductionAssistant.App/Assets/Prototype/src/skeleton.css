@@ -18,7 +18,7 @@
 .skeleton-page .skeleton-pane { padding: 24px; min-height: 300px; min-width: 0; }
 .skeleton-page .skeleton-pane + .skeleton-pane { border-left: 1px solid var(--border); }
 .skeleton-actions { display: flex; justify-content: flex-end; margin-top: 24px; }
-.skeleton-page .skeleton-steps .step-circle, .skeleton-page .skeleton-steps .step-line, .skeleton-steps .step > span { background: #e7e5e4; color: transparent; border-color: transparent; animation: none; }
+.skeleton-page .skeleton-steps .step-circle, .skeleton-page .skeleton-steps .step-line, .skeleton-steps .step > span { background: #e7e5e4; color: transparent; border-color: transparent; box-shadow: none; animation: none; }
 .skeleton-steps .step > span { border-radius: var(--radius-skeleton, 20px); corner-shape: squircle; }
 .skeleton-steps .step-line::before, .skeleton-steps .step-line::after { display: none; }
 .skeleton-task { padding: 30px 36px; max-width: 1420px; margin: auto; }

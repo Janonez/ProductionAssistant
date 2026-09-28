@@ -48,11 +48,23 @@
                 <Grid.RowDefinitions><RowDefinition Height="44" /><RowDefinition Height="114" /><RowDefinition Height="560" /></Grid.RowDefinitions>
                 <controls:SkeletonShape Style="{StaticResource SkeletonBlock}" Width="182" Height="30" HorizontalAlignment="Left" />
                 <controls:SkeletonShape Style="{StaticResource SkeletonBlock}" Width="44" Height="44" HorizontalAlignment="Right" />
-                <Grid Grid.Row="1" MaxWidth="760" Margin="0,22,0,30">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-                    <controls:SkeletonShape Style="{StaticResource SkeletonBlock}" Width="136" Height="28" HorizontalAlignment="Left" />
-                    <controls:SkeletonShape Grid.Column="1" Style="{StaticResource SkeletonBlock}" Width="136" Height="28" />
-                    <controls:SkeletonShape Grid.Column="2" Style="{StaticResource SkeletonBlock}" Width="136" Height="28" HorizontalAlignment="Right" />
+                <!-- Match ThreeStepProgress: 32px number, 10px gap, label, flexible connectors. -->
+                <Grid Grid.Row="1" MaxWidth="760" Margin="0,22,0,30" ColumnSpacing="18">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" MinWidth="70" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" MinWidth="70" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Ellipse Width="32" Height="32" Fill="#E7E5E4" />
+                        <controls:SkeletonShape Style="{StaticResource SkeletonBlock}" Width="60" Height="21" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Height="1" Background="#E7E5E4" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Ellipse Width="32" Height="32" Fill="#E7E5E4" />
+                        <controls:SkeletonShape Style="{StaticResource SkeletonBlock}" Width="60" Height="21" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Border Grid.Column="3" Height="1" Background="#E7E5E4" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <Ellipse Width="32" Height="32" Fill="#E7E5E4" />
+                        <controls:SkeletonShape Style="{StaticResource SkeletonBlock}" Width="60" Height="21" VerticalAlignment="Center" />
+                    </StackPanel>
                 </Grid>
                 <Grid Grid.Row="2">
                     <controls:SkeletonShape Fill="#E7E5E4" />
