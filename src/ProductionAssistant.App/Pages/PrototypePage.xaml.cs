@@ -14,6 +14,7 @@ public sealed partial class PrototypePage : Page
     private string _navigationId = string.Empty;
     private bool _initialized;
     private bool _reactVisible;
+    private long _routeStarted;
     private CancellationTokenSource? _readyTimeout;
 
     public PrototypePage()
@@ -112,6 +113,8 @@ public sealed partial class PrototypePage : Page
         _readyTimeout?.Cancel();
         using var readyTimeout = new CancellationTokenSource();
         _readyTimeout = readyTimeout;
+        _routeStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        PrototypeWebViewRuntime.Mark($"route-start-{_route}");
         if (!_reactVisible) ShowLoading();
         var query = $"route={Uri.EscapeDataString(_route)}&navigation={_navigationId}";
         if (initial)
@@ -158,6 +161,7 @@ public sealed partial class PrototypePage : Page
             return;
         _readyTimeout?.Cancel();
         PrototypeWebViewRuntime.Mark("react-ready");
+        PrototypeWebViewRuntime.Mark($"route-ready-{_route}-wait={System.Diagnostics.Stopwatch.GetElapsedTime(_routeStarted).TotalMilliseconds:F0}ms");
         _reactVisible = true;
         LoadingLayer.Visibility = Visibility.Collapsed;
         LoadError.Visibility = Visibility.Collapsed;

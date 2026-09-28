@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FileSpreadsheet, FolderOpen, LoaderCircle } from 'lucide-react'
 import { invoke } from './bridge'
+import { SkeletonLines } from './LoadingSkeleton'
 import './production-meeting.css'
 
 interface Result { resultId: string; outputPath: string; meetingDate: string; sheetNames: string[] }
@@ -43,7 +44,7 @@ export function ProductionMeetingPage() {
           <div className="meeting-actions"><button className="primary" disabled={!!busy || !path.trim()} onClick={() => void perform('export')}>{busy === 'export' ? '正在拆分…' : result ? '重新拆分' : '开始拆分'}</button></div>
         </section>
         <section className="meeting-result" aria-live="polite"><div className="meeting-result-heading"><h2>拆分结果</h2>{result && <span>{result.sheetNames.length} 个工作表</span>}</div>
-          {result ? <><div className="meeting-file"><FileSpreadsheet /><div><h3>{name(result.outputPath)}</h3><p>开会日期 · {result.meetingDate}</p></div></div><ol>{result.sheetNames.map(sheet => <li key={sheet}>{sheet}</li>)}</ol><div className="meeting-output"><span>文件位置</span><p>{result.outputPath}</p><button className="secondary" disabled={!!busy} onClick={() => void perform('open')}><FolderOpen />打开文件位置</button></div></> : <div className="meeting-empty">{busy === 'export' ? <LoaderCircle className="spin" /> : <FileSpreadsheet />}<strong>{busy === 'export' ? '正在生成拆分文件' : '尚未生成拆分文件'}</strong><p>{busy === 'export' ? '正在检查并处理工作表，请稍候。' : '选择源文件后开始拆分。'}</p></div>}
+          {result ? <><div className="meeting-file"><FileSpreadsheet /><div><h3>{name(result.outputPath)}</h3><p>开会日期 · {result.meetingDate}</p></div></div><ol>{result.sheetNames.map(sheet => <li key={sheet}>{sheet}</li>)}</ol><div className="meeting-output"><span>文件位置</span><p>{result.outputPath}</p><button className="secondary" disabled={!!busy} onClick={() => void perform('open')}><FolderOpen />打开文件位置</button></div></> : <div className="meeting-empty">{busy === 'export' ? <SkeletonLines rows={4} label="正在加载拆分结果" /> : <FileSpreadsheet />}<strong>{busy === 'export' ? '正在生成拆分文件' : '尚未生成拆分文件'}</strong><p>{busy === 'export' ? '正在检查并处理工作表，请稍候。' : '选择源文件后开始拆分。'}</p></div>}
         </section>
       </div>
     </div>

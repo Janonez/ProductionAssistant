@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, LoaderCircle, X } from "lucide-react";
 import { invoke } from "./bridge";
+import { SkeletonBlock } from './LoadingSkeleton';
 
 type LoginState = { state: "loading" | "consent" | "waiting" | "scanned" | "expired" | "failed" | "success"; qr?: string; message?: string };
 // One desktop worker owns the profile. Route cleanup must finish before the next dialog starts.
@@ -72,7 +73,7 @@ export function TencentLoginDialog({ id, onClose }: { id: string; onClose: (logg
     <Dialog.Content className="tencent-login-dialog" onPointerDownOutside={event => event.preventDefault()}>
       <div className="tencent-login-header"><Dialog.Title>登录腾讯文档</Dialog.Title><button className="secondary" aria-label="关闭登录弹窗" disabled={closing} onClick={() => actions.current?.close()}><X size={20} /></button></div>
       <div className="tencent-login-method">企业微信扫码</div>
-      <div className="tencent-login-qr">{result.state === "waiting" && result.qr ? <img src={result.qr} alt="企业微信登录二维码" /> : result.state === "success" ? <Check size={48} /> : result.state === "loading" ? <LoaderCircle className="spin" size={36} /> : <span>{result.state === "scanned" ? "等待确认" : result.state === "consent" ? "登录协议" : result.state === "expired" ? "已过期" : "请重试"}</span>}</div>
+      <div className="tencent-login-qr">{result.state === "waiting" && result.qr ? <img src={result.qr} alt="企业微信登录二维码" /> : result.state === "success" ? <Check size={48} /> : result.state === "loading" ? <SkeletonBlock /> : <span>{result.state === "scanned" ? "等待确认" : result.state === "consent" ? "登录协议" : result.state === "expired" ? "已过期" : "请重试"}</span>}</div>
       <div className="tencent-login-status" aria-live="polite"><h3>{heading}</h3><Dialog.Description>{result.message || hint}</Dialog.Description></div>
       {result.state === "consent" && <p className="tencent-login-terms"><a href="https://docs.qq.com/doc/p/41c65c813fe78d2f262bf35b825c214f0f459bfe" onClick={event => { event.preventDefault(); void openAgreement("service"); }}>服务协议</a><span>与</span><a href="https://docs.qq.com/doc/p/79d8f25f4f022ccca80949ea89b3fe8a137d8940" onClick={event => { event.preventDefault(); void openAgreement("privacy"); }}>隐私政策</a></p>}
       {agreementError && <p role="alert" className="tencent-sheet-help">{agreementError}</p>}

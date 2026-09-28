@@ -59,7 +59,11 @@ internal sealed partial class PrototypeBridge
 
             _activeOperation?.Dispose();
             _activeOperation = new CancellationTokenSource();
+            var timedRead = operation is "production.getBindings" or "automation.list";
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (timedRead) PrototypeWebViewRuntime.Mark($"bridge-start-{operation}");
             var result = await DispatchAsync(id, operation, payload, _activeOperation.Token);
+            if (timedRead) PrototypeWebViewRuntime.Mark($"bridge-end-{operation}-duration={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0}ms");
             Respond(id, result);
         }
         catch (OperationCanceledException)

@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { RouteSkeleton, SettingsSkeleton } from './LoadingSkeleton'
 import { invoke, notifyReady } from './bridge'
 import type { Route } from './types'
 import { OperationSidebar } from './OperationSidebar'
@@ -28,7 +28,7 @@ class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void
   }
 }
 
-const loading = <div className="route-load-status" role="status">正在加载界面…</div>
+
 
 export function App() {
   const [location, setLocation] = useState(() => window.location.search)
@@ -52,7 +52,7 @@ export function App() {
       : 'production-message'
   ) as Route
   const navigation = search.get('navigation') || ''
-  const reduced = useReducedMotion()
+
 
   const goNative = (tag: string) => invoke('app.navigateNative', { tag }).catch(() => undefined)
   const active = route.startsWith('navigation:') ? route.slice('navigation:'.length) : route
@@ -75,25 +75,20 @@ export function App() {
     </div>
     <div className={`desktop-shell-content ${native ? 'desktop-shell-content-native' : ''}`}>
       {native ? <><div className="native-content-slot" aria-hidden="true" /><RouteReady route={route} navigation={navigation} /></>
-        : <AnimatePresence mode="wait">
-            <motion.div
+        : <div
               key={route}
               className={route === 'production-message' || route === 'daily-weld' ? 'production-message-demo production-message-content' : 'app-shell'}
               data-page-route={route}
-              initial={reduced ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduced ? undefined : { opacity: 0, y: -6 }}
-              transition={{ duration: .2 }}
             >
               <LoadBoundary key={navigation}>
-                <Suspense fallback={loading}>
-                  {route === 'production-message' ? <ProductionMessagePage /> : route === 'daily-weld' ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === 'production-meeting' ? <ProductionMeetingPage /> : route === 'plan-pdf' ? <PlanPdfPage /> : route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+                <Suspense fallback={<RouteSkeleton route={route} />}>
                   <RouteReady route={route} navigation={navigation} />
+                  {route === 'production-message' ? <ProductionMessagePage /> : route === 'daily-weld' ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === 'production-meeting' ? <ProductionMeetingPage /> : route === 'plan-pdf' ? <PlanPdfPage /> : route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+
                 </Suspense>
               </LoadBoundary>
-            </motion.div>
-          </AnimatePresence>}
+            </div>}
     </div>
-    {settingsOpen && <LoadBoundary onClose={closeSettings}><Suspense fallback={<div className="settings-overlay"><div className="settings-window"><div className="route-load-status" role="status">正在加载设置…<button className="secondary" onClick={closeSettings}>取消</button></div></div></div>}><SettingsModal open onClose={closeSettings} /></Suspense></LoadBoundary>}
+    {settingsOpen && <LoadBoundary onClose={closeSettings}><Suspense fallback={<SettingsSkeleton close={closeSettings} />}><SettingsModal open onClose={closeSettings} /></Suspense></LoadBoundary>}
   </div>
 }

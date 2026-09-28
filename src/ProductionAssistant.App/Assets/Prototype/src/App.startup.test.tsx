@@ -34,7 +34,7 @@ it('opens production messages first and keeps navigation usable while another ro
       history.replaceState({}, '', '?route=daily-weld&navigation=waiting')
       window.dispatchEvent(new PopStateEvent('popstate'))
     })
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('正在加载')
+    expect(container.querySelector('[role="status"]')?.getAttribute('aria-label')).toContain('正在加载')
     expect(notifyReady).not.toHaveBeenCalledWith('daily-weld', 'waiting')
     await act(async () => { container.querySelector<HTMLButtonElement>('.sidebar-nav button')!.click() })
     expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'production-message' })

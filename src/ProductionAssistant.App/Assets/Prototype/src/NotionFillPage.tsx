@@ -7,6 +7,9 @@ import html from './notion-fill.html?raw';
 import interFont from '../../Fonts/Inter.ttf?url';
 import chineseFont from '../../Fonts/NotoSansSC.ttf?url';
 import { invoke } from './bridge';
+import { TaskSkeleton } from './LoadingSkeleton';
+import skeletonStyles from './skeleton.css?raw';
+import { setRegionLoading } from './skeletonRegion';
 import type { NotionFillJobDetail, NotionFillRun, NotionFillRunNowResult, NotionFillSourceTestResult, NotionFillTestResult } from './types';
 
 type Callbacks = { back: () => void; changed: () => unknown; openSettings?: () => void };
@@ -18,22 +21,27 @@ const yesterday = () => {
 export function NotionFillPage({ id, ...callbacks }: Callbacks & { id: string }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     let disposed = false;
     let runtime: ReturnType<typeof createNotionFillRuntime> | undefined;
     const el = frame.current!;
     setError('');
+    setLoading(true);
     invoke<NotionFillJobDetail>('notionFill.get', { id }).then(job => {
       if (disposed) return;
       runtime = createNotionFillRuntime(job, callbacks);
-      el.onload = () => { if (!disposed && el.contentDocument?.getElementById('date-picker')) runtime!.connect(el.contentDocument); };
+      el.onload = () => { if (!disposed && el.contentDocument?.getElementById('date-picker')) {
+        try { runtime!.connect(el.contentDocument); void Promise.resolve(el.contentDocument.fonts?.ready).then(() => { if (!disposed) setLoading(false); }); }
+        catch (error) { setError(String(error)); }
+      } };
       // Keep the approved Demo markup; only the service binding and shared date picker change.
       el.srcdoc = html.replace('../../src/ProductionAssistant.App/Assets/Fonts/Inter.ttf', new URL(interFont, window.location.href).href)
         .replace('../../src/ProductionAssistant.App/Assets/Fonts/NotoSansSC.ttf', new URL(chineseFont, window.location.href).href);
     }).catch(e => { if (!disposed) setError(String(e.message || e)); });
     return () => { disposed = true; el.onload = null; runtime?.dispose(); };
   }, [id]);
-  return <div className="message-template-host">{error && <p role="alert">{error}</p>}<iframe ref={frame} title="原材料自动入库" /></div>;
+  return <div className="message-template-host">{error && <p role="alert">{error}</p>}<iframe ref={frame} title="原材料自动入库" style={{visibility: loading ? 'hidden' : undefined}} />{loading && !error && <TaskSkeleton kind="notion" />}</div>;
 }
 
 export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks: Callbacks) {
@@ -121,17 +129,19 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
   }
   async function loadRuns() {
     const version = ++runsRevision;
+    setRegionLoading(node('runs-body'), true);
     try {
       const result = await invoke<{ runs: NotionFillRun[] }>('notionFill.runs', { id: job.id });
       if (!disposed && version === runsRevision) renderRuns(result.runs);
     } catch (error) {
       if (!disposed && version === runsRevision) node('runs-body').textContent = `运行记录读取失败：${errorText(error)}；重新展开可重试。`;
-    }
+    } finally { if (!disposed && version === runsRevision) setRegionLoading(node('runs-body'), false); }
   }
   function changed() { Promise.resolve(callbacks.changed()).catch(() => undefined); }
   async function read(sourceOnly: boolean) {
     if (busy || !selectedDate) return;
     busy = true; clearPreview('正在读取…');
+    setRegionLoading(node('source-empty'), true); setRegionLoading(node('target-empty'), true);
     const version = revision;
     controls(); message('');
     try {
@@ -147,7 +157,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
     } catch (error) {
       if (disposed || version !== revision) return;
       clearPreview('本次预览未完成'); node('source-error').hidden = false; node('source-error').textContent = errorText(error);
-    } finally { if (!disposed) { busy = false; controls(); void loadRuns(); } }
+    } finally { if (!disposed) { setRegionLoading(node('source-empty'), false); setRegionLoading(node('target-empty'), false); busy = false; controls(); void loadRuns(); } }
   }
   async function run() {
     if (busy || !preview || !dialog('confirm').open) return;
@@ -227,7 +237,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
     connect(document: Document) {
       dateRoot?.unmount(); doc = document;
       const style = doc.createElement('style');
-      style.textContent = sharedControls + '\n' + controlRefinements + '\nbody{color:#292524}#date-picker{width:163px;display:inline-block}';
+      style.textContent = sharedControls + '\n' + controlRefinements + '\n' + skeletonStyles + '\nbody{color:#292524}#date-picker{width:163px;display:inline-block}';
       doc.head.append(style);
       const marker = doc.createElement('span'); marker.className = 'production-message-demo'; marker.hidden = true; doc.body.append(marker);
       dateRoot = createRoot(node('date-picker'));

@@ -5,6 +5,7 @@ import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "r
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, ArrowLeft, ArrowRight, Ellipsis, FileText, LoaderCircle, Plus, RotateCw, Trash2 } from "lucide-react";
 import { invoke } from "./bridge";
+import { AutomationSkeleton, SkeletonLines } from './LoadingSkeleton';
 import type { AutomationTaskSummary } from "./types";
 import { automationTaskTypes, findAutomationTaskType, type AutomationRunView, type AutomationTaskTypeDefinition } from "./automationTaskTypes";
 
@@ -18,6 +19,7 @@ const errorNotice = (error: unknown): NoticeValue => ({
 
 export function AutomationPage({ openSettings }: { openSettings?: () => void }) {
   const [tasks, setTasks] = useState<AutomationTaskSummary[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AutomationTaskSummary>();
   const [focusStep, setFocusStep] = useState("");
   const [busy, setBusy] = useState("");
@@ -37,7 +39,7 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
     return nextTasks;
   });
 
-  useEffect(() => { refresh().catch((error) => setNotice(errorNotice(error))); }, []);
+  useEffect(() => { refresh().catch((error) => setNotice(errorNotice(error))).finally(() => setLoading(false)); }, []);
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(undefined);
@@ -87,6 +89,7 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
     finally { setBusy(""); }
   }
 
+  if (loading) return <AutomationSkeleton />;
   if (selected) {
     const definition = findAutomationTaskType(selected.taskType);
     if (definition) return <AutomationTaskDetail openSettings={openSettings} task={selected} definition={definition} focusStep={focusStep} notice={notice} refresh={refresh} back={() => {
@@ -217,6 +220,7 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
       {(tab === "runs") && <section className="surface automation-runs"><div className="automation-runs-heading"><div><h2>运行记录</h2><p>查看任务执行结果和错误详情。</p></div><button className="secondary" disabled={loadingRuns} onClick={loadRuns}>{loadingRuns ? <LoaderCircle className="spin" /> : <RotateCw />}刷新</button></div>
         {runsError && <div className="notice error" role="alert"><div><strong>运行记录读取失败</strong><span>{runsError}</span></div></div>}
         <div className="automation-run-list">{runs?.map(run => <details key={run.id}><summary><span>{run.time}</span><span>{run.source}</span><strong>{run.title}</strong><b className={run.error ? "error-text" : ""}>{run.status}</b></summary><div>{run.details.map(detail => <p key={detail}>{detail}</p>)}{run.error && <p className="run-error">错误：{run.error}</p>}</div></details>)}</div>
+        {loadingRuns && !runs && <SkeletonLines label="正在加载运行记录" />}
         {!loadingRuns && runs && !runs.length && <p className="automation-empty">暂无运行记录</p>}
       </section>}
     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from './bridge'
 import { clearDailyFieldCache } from './dailyFieldCache'
+import { SettingsContentSkeleton } from './LoadingSkeleton'
 
 type SettingsPage = 'connection' | 'notification' | 'data' | 'about'
 type SettingsRule = { eventType: string; name: string; enabled: boolean; level: string }
@@ -125,7 +126,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           <CloseIcon />
         </button>
         <div className="settings-content">
-          {busy === 'settings.open' && !state ? <div className="settings-loading">正在读取本机设置…</div> : <>
+          {busy === 'settings.open' && !state ? <SettingsContentSkeleton /> : <>
             {page === 'connection' && state && <ConnectionSettings state={state} busy={busy} run={run} />}
             {page === 'notification' && state && <NotificationSettings state={state} busy={busy} run={run} />}
             {page === 'data' && state && <DataSettings state={state} busy={busy} run={run} />}

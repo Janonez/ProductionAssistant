@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, RefreshCw, Settings2 } from "lucide-react";
 import { invoke } from "./bridge";
+import { SkeletonLines } from './LoadingSkeleton';
 import DatePicker from "./DatePicker";
 import { ChoicePicker } from "./FormPickers";
 import type { BindingState, Draft, ImportField, ImportResult } from "./types";
@@ -189,7 +190,7 @@ export default function ProductionMessagePage() {
       </section>
 
       <section className="review-pane">
-        {!parsed ? <div className="review-empty"><h2>解析结果</h2><p>解析消息后，Notion 数据检查结果将在这里显示。</p>
+        {!parsed ? <div className="review-empty"><h2>解析结果</h2>{busy === 'parse' ? <SkeletonLines rows={5} label="正在加载解析结果" /> : <p>解析消息后，Notion 数据检查结果将在这里显示。</p>}
           {(bindingError || bindings?.configured === false || bindings && (!bindings.cutting.bound || !bindings.towerDaily.bound)) && <div className="pm-notice" role="alert">{bindingError || (bindings?.configured === false ? "Notion 连接尚未配置。" : "数据库已变更，请点击右上角“数据库绑定”重新选择下料和塔筒主数据库。")}</div>}
         </div> : <>
           <div className="review-header"><h2>解析结果</h2><div className="review-summary"><span>新增<strong>{summary.newFields}</strong></span><i>·</i><span>一致<strong>{summary.same}</strong></span><i>·</i><span>待确认<strong>{summary.confirm}</strong></span><i>·</i><span>异常<strong>{summary.exception}</strong></span></div></div>
