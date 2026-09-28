@@ -1,12 +1,12 @@
 /* Static neutral placeholders: never animate position, size or opacity on arrival. */
-.skeleton-block, .skeleton-text, .skeleton-page .skeleton-block { background: #e7e5e4; border-radius: var(--radius-control, 14px); color: transparent; user-select: none; }
+.skeleton-block, .skeleton-text, .skeleton-page .skeleton-block { background: #e7e5e4; border-radius: var(--skeleton-radius, 3px); corner-shape: var(--skeleton-corner, squircle); color: transparent; user-select: none; }
 .skeleton-block { display: block; height: 16px; width: 100%; flex-shrink: 0; }
 .skeleton-title { width: 180px; height: 28px; }
 .skeleton-short { width: 88px; }
-.skeleton-icon { width: 44px; height: 44px; border-radius: 14px; }
-.skeleton-button { width: 116px; height: 44px; border-radius: 14px; }
-.skeleton-toggle { width: 38px; height: 22px; border-radius: 999px; }
-.skeleton-input { height: 44px; border-radius: 14px; flex-shrink: 1; }
+.skeleton-icon { width: 44px; height: 44px; --skeleton-radius: var(--radius-control, 14px); }
+.skeleton-button { width: 116px; height: 44px; --skeleton-radius: var(--radius-control, 14px); }
+.skeleton-toggle { width: 38px; height: 22px; --skeleton-radius: 999px; --skeleton-corner: round; }
+.skeleton-input { height: 44px; --skeleton-radius: var(--radius-control, 14px); flex-shrink: 1; }
 .skeleton-lines { display: grid; gap: 16px; padding: 16px 0; min-width: 0; width: 100%; }
 .plan-inspection > .skeleton-lines { min-height: 250px; }
 .skeleton-lines .skeleton-block:nth-child(even) { width: 78%; }
@@ -19,11 +19,11 @@
 .skeleton-page .skeleton-pane + .skeleton-pane { border-left: 1px solid var(--border); }
 .skeleton-actions { display: flex; justify-content: flex-end; margin-top: 24px; }
 .skeleton-page .skeleton-steps .step-circle, .skeleton-page .skeleton-steps .step-line, .skeleton-steps .step > span { background: #e7e5e4; color: transparent; border-color: transparent; animation: none; }
-.skeleton-steps .step > span { border-radius: var(--radius-control, 14px); }
+.skeleton-steps .step > span { border-radius: 3px; corner-shape: squircle; }
 .skeleton-steps .step-line::before, .skeleton-steps .step-line::after { display: none; }
 .skeleton-task { padding: 30px 36px; max-width: 1420px; margin: auto; }
 .skeleton-task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-.skeleton-workspace { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); min-height: 440px; border: 1px solid #e7e5e4; border-radius: 20px; background: white; overflow: hidden; }
+.skeleton-workspace { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); min-height: 440px; border: 1px solid #e7e5e4; border-radius: var(--radius-panel, 20px); corner-shape: squircle; background: white; overflow: hidden; }
 .skeleton-workspace > div { padding: 24px; min-width: 0; }
 .skeleton-workspace > div + div { border-left: 1px solid #e7e5e4; }
 .skeleton-task-tencent { max-width: 1160px; }
@@ -31,10 +31,10 @@
 .message-template-host > .skeleton-task { position: absolute; inset: 0; background: var(--canvas); }
 .desktop-shell-content { scrollbar-gutter: stable; }
 .plan-content, .meeting-content, .report-content, .settings-main { scrollbar-gutter: stable; }
-.picker-trigger[aria-busy="true"] > span { color: transparent; background: #e7e5e4; border-radius: var(--radius-control, 14px); min-width: 55%; height: 16px; }
+.picker-trigger[aria-busy="true"] > span { color: transparent; background: #e7e5e4; border-radius: 3px; corner-shape: squircle; min-width: 55%; height: 16px; }
 .picker-trigger[aria-busy="true"] { opacity: 1; }
 /* The iframe adapters use the same blocks without replacing editable DOM nodes. */
 .skeleton-region { position: relative; min-height: 100px; color: transparent !important; }
 .skeleton-region > * { visibility: hidden; }
-.skeleton-region::after { content: ''; position: absolute; inset: 16px 0; width: 85%; background: repeating-linear-gradient(to bottom, #e7e5e4 0 14px, transparent 14px 32px); border-radius: var(--radius-control, 14px); pointer-events: none; }
+.skeleton-region::after { content: ''; position: absolute; inset: 16px 0; width: 85%; background: repeating-linear-gradient(to bottom, #e7e5e4 0 14px, transparent 14px 32px); border-radius: 3px; corner-shape: squircle; pointer-events: none; }
 .tencent-login-qr > .skeleton-block { width: 100%; height: 100%; }
