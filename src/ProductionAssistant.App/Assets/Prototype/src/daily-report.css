@@ -160,7 +160,7 @@
   display: block;
   width: 42px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: var(--radius-panel, 20px); corner-shape: squircle;
   background: #d6d3d1;
   padding: 3px;
   transition: 0.16s;
@@ -170,7 +170,7 @@
   display: block;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: var(--radius-panel, 20px); corner-shape: squircle;
   background: white;
   box-shadow: 0 2px 6px #29252425;
   transition: 0.16s;

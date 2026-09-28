@@ -14,6 +14,7 @@
   --radius-control: 14px;
   --radius-card: 17px;
   --radius-panel: 20px;
+  --radius-skeleton: var(--radius-panel);
   color: var(--text);
   background: var(--canvas);
   font-family: var(--font-ui);
@@ -75,7 +76,7 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
 /* Rectangular controls and working surfaces use continuous corners.
-   Circular icons, switches and status pills retain their existing shapes. */
+   Circular icons and status pills retain their existing shapes. */
 :where(button, input:not([type="checkbox"]):not([type="radio"]), select, textarea,
   .surface, .dialog, .daily-job-list, .daily-job-card, .automation-tabs,
   .automation-issues, .automation-create-dialog, .job-context-menu,

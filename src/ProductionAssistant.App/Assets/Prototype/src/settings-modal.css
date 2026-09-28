@@ -195,8 +195,8 @@ body.settings-over-native #root,
 .settings-button-secondary { border: 1px solid rgb(215, 213, 208); background: #fff; color: rgb(77, 75, 70); }
 .settings-button-secondary:hover { border-color: rgb(198, 196, 190); background: rgb(249, 248, 246); }
 .settings-button-primary:disabled, .settings-button-secondary:disabled, .settings-text-button:disabled { opacity: 0.55; cursor: default; }
-.settings-switch { position: relative; width: 34px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: rgb(211, 209, 204); cursor: pointer; transition: background-color 130ms ease; }
-.settings-switch span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14); transition: transform 130ms ease; }
+.settings-switch { position: relative; width: 34px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-panel, 20px); corner-shape: squircle; background: rgb(211, 209, 204); cursor: pointer; transition: background-color 130ms ease; }
+.settings-switch span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: var(--radius-panel, 20px); corner-shape: squircle; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14); transition: transform 130ms ease; }
 .settings-switch.checked { background: rgb(49, 48, 44); }
 .settings-switch.checked span { transform: translateX(14px); }
 .settings-connected { display: flex; align-items: center; gap: 7px; color: rgb(96, 94, 88); font-size: 12.5px; }
