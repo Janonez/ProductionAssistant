@@ -87,9 +87,13 @@ Notion 自动填报首个业务为原材料入库：每天按任务设置的时�
 应用按“数据文件处理、数据同步、自动化任务”组织入口，每个业务模块从侧边栏一级入口直接打开；这些名称是产品分类，不是统一执行引擎。挂网计划 PDF 和生产会资料拆分使用 React 文件处理工作台；各自的检查、修复、拆分与导出规则仍由原业务服务负责。生产消息在三步页面内完成录入、自动检查、逐字段确认和写入，日报推送独立管理定时任务。
 
 
-## 1.6.1 腾讯文档填报
+## 1.6.2 稳定版
 
-[下载 1.6.1 正式版](https://github.com/Janonez/ProductionAssistant/releases/tag/v1.6.1)。本机正式版位于 `deployments/production/ProductionAssistant.exe`，测试版位于 `deployments/development/ProductionAssistant.exe`。
+[下载 1.6.2 正式版](https://github.com/Janonez/ProductionAssistant/releases/tag/v1.6.2)。本机正式版位于 `deployments/production/ProductionAssistant.exe`，测试版位于 `deployments/development/ProductionAssistant.exe`。
+
+每日焊接填写支持“日记录＋月计划”的新数据库结构，通过“所属月份”关联同步月计划，不再依赖旧周库；同时保留旧结构兼容。本版还包含冷启动与加载骨架优化、共享文档定位及调度修复。
+
+### 腾讯文档填报
 
 腾讯文档配置现按五个 Tab 展示，顶部保留状态与停用提示，前台／后台测试通过分段控件切换；字体与其他模块统一，背景为 `#FAFAF9`。
 
