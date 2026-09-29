@@ -670,7 +670,7 @@ public sealed class NotionImportService : INotionImportService
         return NotionImportResult.Success(message + "。");
     }
 
-    // 保留给后续“缺少日期时创建记录”的实现；当前导入流程不会调用。
+    // 当前月/日结构按关联定位月库；旧月/周/日结构继续兼容。
     public async Task<NotionImportResult> ImportWeldHierarchyAsync(
         NotionImportRequest request,
         IProgress<NotionImportProgress>? progress = null,
@@ -685,46 +685,56 @@ public sealed class NotionImportService : INotionImportService
         var validation = Validate(settings, dayTarget);
         if (validation is not null) return validation;
 
-        var monthSource = settings.CachedDataSources.FirstOrDefault(source =>
+        var daySchema = await GetSchemaAsync(settings.Token, dayTarget!.Id, cancellationToken);
+        if (!daySchema.Succeeded) return NotionImportResult.Failure(daySchema.Message);
+        var monthlyRelation = FindProperty(daySchema, "relation", "所属月份");
+        if (monthlyRelation is not null && string.IsNullOrWhiteSpace(monthlyRelation.RelationDataSourceId))
+            return NotionImportResult.Failure("“所属月份”关联未返回目标数据源，请检查月计划库授权。");
+        var monthSource = monthlyRelation is not null
+            ? settings.CachedDataSources.FirstOrDefault(source => source.Id == monthlyRelation.RelationDataSourceId)
+                ?? new NotionDataSourceOption(monthlyRelation.RelationDataSourceId, "所属月份关联库", string.Empty)
+            : settings.CachedDataSources.FirstOrDefault(source =>
             source.Name == "每月焊接量" ||
             source.Path.Contains("焊接数据库") && source.Name.Contains("每月焊接量"));
-        var weekSource = settings.CachedDataSources.FirstOrDefault(source =>
+        var weekSource = monthlyRelation is not null ? null : settings.CachedDataSources.FirstOrDefault(source =>
             source.Name == "上周焊接量" ||
             source.Path.Contains("焊接数据库") && source.Name.Contains("上周焊接量"));
-        if (monthSource is null || weekSource is null)
+        if (monthSource is null || (monthlyRelation is null && weekSource is null))
             return NotionImportResult.Failure(
                 "未找到“每月焊接量”或“上周焊接量”数据源，请先在设置中刷新数据源。");
 
         var monthSchema = await GetSchemaAsync(settings.Token, monthSource.Id, cancellationToken);
-        var weekSchema = await GetSchemaAsync(settings.Token, weekSource.Id, cancellationToken);
-        var daySchema = await GetSchemaAsync(settings.Token, dayTarget!.Id, cancellationToken);
+        var weekSchema = weekSource is null ? new NotionSchemaResult(true, string.Empty, [])
+            : await GetSchemaAsync(settings.Token, weekSource.Id, cancellationToken);
         if (!monthSchema.Succeeded || !weekSchema.Succeeded || !daySchema.Succeeded)
             return NotionImportResult.Failure(
-                $"读取三层数据库结构失败：{monthSchema.Message} {weekSchema.Message} {daySchema.Message}");
+                $"读取焊接数据库结构失败：{monthSchema.Message} {weekSchema.Message} {daySchema.Message}");
 
-        var monthTitle = FindProperty(monthSchema, "title", "月份");
-        var monthQuantity = FindProperty(monthSchema, "number", "产量/吨", "产量");
-        var monthDate = FindProperty(monthSchema, "date", "日期变量");
+        var monthTitle = FindProperty(monthSchema, "title", "月份", "业务");
+        var monthQuantity = FindProperty(monthSchema, "number", "产量/吨", "产量", "焊接（吨）");
+        var monthDate = FindProperty(monthSchema, "date", "日期变量", "日期");
         var weekTitle = FindProperty(weekSchema, "title", "周期");
         var weekRange = FindProperty(weekSchema, "date", "日期范围");
         var dayTitle = FindProperty(daySchema, "title", dayTarget.TitleProperty);
         var dayQuantity = FindProperty(daySchema, "number", dayTarget.QuantityProperty);
         var dayDate = FindProperty(daySchema, "date", dayTarget.DateProperty);
         var dayToMonth = FindRelation(daySchema, monthSource.Id);
-        var dayToWeek = FindRelation(daySchema, weekSource.Id);
+        var dayToWeek = weekSource is null ? null : FindRelation(daySchema, weekSource.Id);
         var missingSchema = new[]
         {
             (monthTitle, "月.月份"), (monthQuantity, "月.产量"), (monthDate, "月.日期变量"),
-            (weekTitle, "周.周期"), (weekRange, "周.日期范围"),
             (dayTitle, "日.日期"), (dayQuantity, "日.每日数据"), (dayDate, "日.日期变量"),
-            (dayToMonth, "日→月 Relation"), (dayToWeek, "日→周 Relation")
-        }.Where(item => item.Item1 is null).Select(item => item.Item2).ToArray();
+            (dayToMonth, "日→月 Relation")
+        }.Concat(weekSource is null ? [] : new[]
+        {
+            (weekTitle, "周.周期"), (weekRange, "周.日期范围"), (dayToWeek, "日→周 Relation")
+        }).Where(item => item.Item1 is null).Select(item => item.Item2).ToArray();
         if (missingSchema.Length > 0)
             return NotionImportResult.Failure(
-                $"三层数据库字段或关联不完整：{string.Join("、", missingSchema)}。\n\n" +
+                $"焊接数据库字段或关联不完整：{string.Join("、", missingSchema)}。\n\n" +
                 $"程序选中的月库：{monthSource.Name}\n路径：{monthSource.Path}\nID：{monthSource.Id}\n" +
                 $"实际字段：{DescribeSchema(monthSchema)}\n\n" +
-                $"程序选中的周库：{weekSource.Name}\n路径：{weekSource.Path}\nID：{weekSource.Id}\n" +
+                $"程序选中的周库：{weekSource?.Name ?? "不适用"}\n路径：{weekSource?.Path}\nID：{weekSource?.Id}\n" +
                 $"实际字段：{DescribeSchema(weekSchema)}\n\n" +
                 $"程序选中的日库：{dayTarget.Name}\n路径：{dayTarget.Path}\nID：{dayTarget.Id}\n" +
                 $"实际字段：{DescribeSchema(daySchema)}");
@@ -735,7 +745,7 @@ public sealed class NotionImportService : INotionImportService
                                        value.Date.Month != monthStart.Month))
             return NotionImportResult.Failure("一次导入只能包含同一个自然月的数据。");
         var monthKey = monthStart.ToString("yyyy-MM");
-        var weekStarts = orderedValues.Select(value => GetBusinessWeekStart(value.Date))
+        var weekStarts = weekSource is null ? [] : orderedValues.Select(value => GetBusinessWeekStart(value.Date))
             .Distinct().OrderBy(date => date).ToArray();
 
         var monthPages = await QueryDataSourceAsync(
@@ -754,21 +764,25 @@ public sealed class NotionImportService : INotionImportService
             return NotionImportResult.Failure($"月数据库存在重复月份 {monthKey}，已停止导入。");
 
         var weekKeys = weekStarts.ToDictionary(start => start, GetBusinessWeekKey);
-        var weekPages = await QueryDataSourceAsync(
-            settings.Token, weekSource.Id,
-            new
-            {
-                or = weekKeys.Values.Select(key =>
-                    (object)new { property = weekTitle!.Name, title = new { equals = key } }).ToArray()
-            }, cancellationToken);
-        if (!weekPages.Succeeded) return NotionImportResult.Failure(weekPages.Message);
-        var weekPagesByKey = weekPages.Pages
-            .GroupBy(page => ReadTitle(page, weekTitle!.Name))
-            .ToDictionary(group => group.Key, group => group.ToArray());
-        var duplicatedWeek = weekPagesByKey.FirstOrDefault(pair => pair.Value.Length > 1);
-        if (!string.IsNullOrWhiteSpace(duplicatedWeek.Key))
-            return NotionImportResult.Failure(
-                $"周数据库存在重复周期 {duplicatedWeek.Key}，已停止导入。");
+        var weekPagesByKey = new Dictionary<string, JsonElement[]>();
+        if (weekSource is not null)
+        {
+            var weekPages = await QueryDataSourceAsync(
+                settings.Token, weekSource.Id,
+                new
+                {
+                    or = weekKeys.Values.Select(key =>
+                        (object)new { property = weekTitle!.Name, title = new { equals = key } }).ToArray()
+                }, cancellationToken);
+            if (!weekPages.Succeeded) return NotionImportResult.Failure(weekPages.Message);
+            weekPagesByKey = weekPages.Pages
+                .GroupBy(page => ReadTitle(page, weekTitle!.Name))
+                .ToDictionary(group => group.Key, group => group.ToArray());
+            var duplicatedWeek = weekPagesByKey.FirstOrDefault(pair => pair.Value.Length > 1);
+            if (!string.IsNullOrWhiteSpace(duplicatedWeek.Key))
+                return NotionImportResult.Failure(
+                    $"周数据库存在重复周期 {duplicatedWeek.Key}，已停止导入。");
+        }
 
         var dayFilters = new List<object>
         {
@@ -837,7 +851,7 @@ public sealed class NotionImportService : INotionImportService
             var pageId = matches is { Length: 1 }
                 ? matches[0].GetProperty("id").GetString()
                 : await CreateDataSourcePageAsync(
-                    settings.Token, weekSource.Id, properties, $"创建周期 {key}", cancellationToken);
+                    settings.Token, weekSource!.Id, properties, $"创建周期 {key}", cancellationToken);
             if (string.IsNullOrWhiteSpace(pageId))
                 return NotionImportResult.Failure($"创建周期 {key} 失败。");
             if (matches is { Length: 1 })
@@ -857,9 +871,10 @@ public sealed class NotionImportService : INotionImportService
                 [dayTitle!.Name] = TitleValue(BuildWeldTitle(value.Date)),
                 [dayQuantity!.Name] = new { number = value.Quantity },
                 [dayDate!.Name] = DateValue(value.Date),
-                [dayToMonth!.Name] = RelationValue(monthPageId),
-                [dayToWeek!.Name] = RelationValue(weekPageIds[GetBusinessWeekStart(value.Date)])
+                [dayToMonth!.Name] = RelationValue(monthPageId)
             };
+            if (dayToWeek is not null)
+                properties[dayToWeek.Name] = RelationValue(weekPageIds[GetBusinessWeekStart(value.Date)]);
             dayPagesByDate.TryGetValue(dateKey, out var matches);
             if (matches is { Length: 1 })
             {
@@ -884,7 +899,8 @@ public sealed class NotionImportService : INotionImportService
 
         progress?.Report(new(orderedValues.Length, orderedValues.Length, DateTime.MinValue, "写入完成"));
         return NotionImportResult.Success(
-            $"已同步月份 {monthKey}、{weekStarts.Length} 个周期；每日记录新增 {created} 条、更新 {updated} 条。");
+            $"已同步月份 {monthKey}" + (weekSource is null ? "" : $"、{weekStarts.Length} 个周期") +
+            $"；每日记录新增 {created} 条、更新 {updated} 条。");
     }
 
     private static NotionPropertyOption? FindProperty(
