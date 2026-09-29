@@ -31,6 +31,7 @@ internal static class PrototypeWebViewRuntime
 
     private static async Task<CoreWebView2Environment> CreateEnvironmentAsync()
     {
+        Mark("environment-create-start");
         if (RuntimeEnvironment.Current.IsDevelopment)
             Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", RuntimeEnvironment.CacheDirectory);
         var environment = await CoreWebView2Environment.CreateAsync();

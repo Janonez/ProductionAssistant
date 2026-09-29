@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Principal;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 
@@ -42,7 +43,8 @@ public static class TencentSheetTaskScheduler
         var path = Path.Combine(Path.GetTempPath(), "tencent-schedule-" + Guid.NewGuid().ToString("N") + ".xml");
         try
         {
-            await File.WriteAllTextAsync(path, CreateXml(id, executable, WindowsIdentity.GetCurrent().User!.Value, config));
+            // schtasks needs a BOM to preserve non-ASCII executable and working-directory paths.
+            await File.WriteAllTextAsync(path, CreateXml(id, executable, WindowsIdentity.GetCurrent().User!.Value, config), Encoding.Unicode);
             await RunAsync(["/Create", "/TN", TaskName(id), "/XML", path, "/F"]);
         }
         finally { File.Delete(path); }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Copy, FileSpreadsheet, LoaderCircle, Settings2, X } from 'lucide-react'
 import { invoke } from './bridge'
+import { RouteSkeleton, SkeletonLines } from './LoadingSkeleton'
 import DatePicker from './DatePicker'
 import type { ReportCenterState, ReportRunProgress, ReportRunSummary } from './types'
 
@@ -98,6 +99,7 @@ export function ReportCenterPage() {
     catch { setError('无法复制，请选中文件路径手动复制。') }
   }
 
+  if (busy === 'load' && !state) return <RouteSkeleton route="report-center" />
   return <div className="page report-center-page">
     <header className="report-header"><h1>文件统计汇总</h1><div className="report-header-actions">
       <span className="report-status">{busy === 'load' ? '加载中' : state?.authenticated ? '已验证登录' : '未验证登录'}</span>
@@ -130,7 +132,7 @@ export function ReportCenterPage() {
             <dl className="report-result-stats"><div><dt>日报</dt><dd>{result.parsedReports} / {result.plannedReports} 份</dd></div><div><dt>设备</dt><dd>{result.deviceCount} 台</dd></div></dl>
             <div className="report-output"><span>文件位置</span><p>{result.summaryPath}</p><button className="secondary" onClick={copyPath}><Copy />{copied ? '已复制' : '复制路径'}</button></div>
             <details className="report-details"><summary>汇总明细</summary><p>数据点：{result.actualDataPoints} / {result.expectedDataPoints}</p>{result.warnings.map((warning, index) => <p key={index}>{warning}</p>)}</details>
-          </> : <div className="report-empty"><FileSpreadsheet /><strong>{busy === 'run' ? '正在生成汇总' : failed ? '未生成汇总文件' : '尚未生成汇总'}</strong><p>{busy === 'run' ? '完成后可在这里查看文件。' : failed ? '处理错误后，可重新汇总。' : '选择统计范围后开始汇总。'}</p></div>}
+          </> : <div className="report-empty">{busy === 'run' ? <SkeletonLines rows={4} label="正在加载汇总结果" /> : <FileSpreadsheet />}<strong>{busy === 'run' ? '正在生成汇总' : failed ? '未生成汇总文件' : '尚未生成汇总'}</strong><p>{busy === 'run' ? '完成后可在这里查看文件。' : failed ? '处理错误后，可重新汇总。' : '选择统计范围后开始汇总。'}</p></div>}
         </div>
       </section>
     </div>

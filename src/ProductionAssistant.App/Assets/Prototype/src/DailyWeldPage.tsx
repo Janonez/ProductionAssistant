@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Database, RefreshCw, Settings2, SlidersHorizontal, X } from 'lucide-react'
 import { invoke } from './bridge'
+import { RouteSkeleton } from './LoadingSkeleton'
 import DatePicker from './DatePicker'
 import { ChoicePicker } from './FormPickers'
 import { NumericInput } from './NumericInput'
@@ -106,6 +107,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
   function openBinding() { if (locked) return; setSelectedSource(state.selected); setSelectedBusiness(state.sources.find(source => source.id === state.selected)?.businessSection || ''); setError(''); setSettingsSection('database'); setBindingOpen(true) }
 
   const writePayload = { month, total, rows: rows.map(row => ({ date: row.date, qty: row.qty })) }
+  if (busy === 'state') return <RouteSkeleton route="daily-weld" />
   return <div className="app-shell"><main className="main-content">
     <header className="content-header"><h1>每日焊接数据模拟</h1><button type="button" className="template-config-button" disabled={locked} aria-label="焊接设置" title="焊接设置" onClick={openBinding}><Settings2 /></button></header>
     <div className="production-message-scroll daily-weld-page">

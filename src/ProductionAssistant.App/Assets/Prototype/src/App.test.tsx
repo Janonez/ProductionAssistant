@@ -379,6 +379,7 @@ describe('production message Demo UI', () => {
     const root = createRoot(container)
 
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
 
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
     expect(container.querySelector('.production-message-content')).toBeTruthy()
@@ -417,6 +418,7 @@ describe('production message Demo UI', () => {
     const { App } = await import('./App')
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
     await act(async () => { (container.querySelector('.template-config-button') as HTMLButtonElement).click() })
 
     expect(container.querySelectorAll('.pm-binding-dialog .picker-trigger')).toHaveLength(2)
@@ -440,6 +442,7 @@ describe('shared operation sidebar', () => {
     const root = createRoot(container)
 
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
 
     expect(container.querySelector('.production-message-content h1')?.textContent).toBe('每日焊接数据模拟')
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('每日焊接数据模拟')
@@ -459,6 +462,7 @@ describe('shared operation sidebar', () => {
     const root = createRoot(container)
 
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
 
     expect(container.textContent).toContain('数据文件处理')
     expect(container.textContent).toContain('挂网计划 PDF 导出')
@@ -497,10 +501,12 @@ describe('shared operation sidebar', () => {
     const { App } = await import('./App')
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
 
     const settings = [...container.querySelectorAll('button')]
       .find(button => button.textContent?.trim() === '设置') as HTMLButtonElement
     await act(async () => { settings.click(); await Promise.resolve() })
+    await act(async () => { await vi.dynamicImportSettled() })
 
     expect(container.querySelector('[role="dialog"]')).toBeTruthy()
     expect(container.querySelector('.settings-page-header h1')?.textContent).toBe('连接')
@@ -549,6 +555,7 @@ describe('host lifecycle', () => {
     const { App } = await import('./App')
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
     expect(notifyReady).toHaveBeenLastCalledWith('navigation:plan-pdf', 'first')
     const openProduction = [...container.querySelectorAll('button')]
       .find(button => button.textContent?.includes('生产消息 Notion 入库')) as HTMLButtonElement
@@ -559,6 +566,7 @@ describe('host lifecycle', () => {
       history.replaceState({}, '', '?route=daily-report&navigation=second')
       window.dispatchEvent(new PopStateEvent('popstate'))
     })
+    await act(async () => { await vi.dynamicImportSettled() })
     expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'second')
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
@@ -582,6 +590,7 @@ describe('automation task creation', () => {
     const { App } = await import('./App')
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
 
     const newTask = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('新建任务'))!
     await act(async () => { newTask.click() })
@@ -620,6 +629,7 @@ describe('automation task creation', () => {
     const { App } = await import('./App')
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
 
     await act(async () => { ([...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('新建任务'))!).click() })
     await act(async () => { ([...document.querySelectorAll<HTMLButtonElement>('.automation-create-types button')].find(button => button.textContent?.includes('Notion 自动填报'))!).click() })
@@ -654,6 +664,7 @@ describe('daily report message surface', () => {
     invoke.mockImplementation((operation:string)=>Promise.resolve(operation==='automation.list'?{tasks:[{id:'job-1',taskType:'daily_report',taskTypeName:'日报推送',name:'塔筒日报',schedule:'17:30',status:'ready'}]}:operation==='daily.get'?{id:'job-1',name:'塔筒日报',sendTime:'17:30',fields:[],sources:[],draftTemplate:'原有模板',draftTemplateDocument:''}:{}));
     const {App}=await import('./App');const root=createRoot(container);
     await act(async()=>{root.render(<App />)});
+    await act(async () => { await vi.dynamicImportSettled() });
     await act(async()=>{container.querySelector<HTMLElement>('.daily-job-card')!.click()});
     const frame=container.querySelector('iframe')!;
     expect(frame.srcdoc).toContain('输入 / 插入数据');
@@ -677,6 +688,7 @@ describe('Notion fill workflow', () => {
     const { App } = await import('./App')
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
     await act(async () => { (container.querySelector('.daily-job-card') as HTMLElement).click() })
     const frame = container.querySelector('iframe')!
     expect(frame.srcdoc).toContain('入库数据')

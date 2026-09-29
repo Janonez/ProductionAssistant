@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { invoke } from "./bridge";
+import { TaskSkeleton, SkeletonLines } from './LoadingSkeleton';
 import DatePicker from "./DatePicker";
 import { TencentTemplateTeaching, type LearnedRule } from "./TencentTemplateTeaching";
 import { TencentWebControls, type WebControls } from "./TencentWebControls";
@@ -96,7 +97,7 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
     if (result.sheets) setSheets([...new Set(result.sheets)]);
     await load();
   }
-  if (!job) return <div className="notice" role="status">{notice || "正在读取填报配置…"}</div>;
+  if (!job) return notice ? <div className="notice" role="alert">{notice}</div> : <TaskSkeleton kind="tencent" />;
   const config = job.config;
   const controlsReady = !!(config.webControls?.sheetTab && config.webControls.cellAddressBox && config.webControls.cellEditor);
   const fields = config.fields ?? [];
@@ -140,7 +141,7 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
       <label className="tencent-sheet-date-mode"><input type="checkbox" checked={manual} onChange={event => { setManual(event.target.checked); invalidate(); }} />指定补填日期</label>
       {manual ? <DatePicker label="本次业务日期" disabled={!!busy} value={date} onChange={value => { setDate(value); invalidate(); }} /> : <p>按已保存规则计算的业务日期：{data?.date ?? job.businessDate ?? "获取数据时确定"}。本次取数后日期固定，检查与填报沿用同一天。</p>}
       {<button className="secondary" disabled={!fields.length || (manual && !date) || fields.some(field => (!config.rules?.[field.id] || !field.notion))} onClick={() => action("获取 Notion 数据", async () => { invalidate(); setData(await invoke<DataResult>("tencentSheet.fetch", { id, businessDate: manual ? date : undefined }, 300000)); setNotice("取数完成，请核对来源、日期和数值后检查网页位置。"); })}>获取本次 Notion 数据</button>}
-      {data && <div className="tencent-sheet-table"><p>业务日期：{data.date}</p><table><thead><tr><th>业务字段</th><th>数值</th><th>来源与范围</th><th>记录数</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.value} {row.unit}</td><td>{row.source} · {row.period}</td><td>{row.recordCount}</td></tr>)}</tbody></table></div>}
+      {busy === "获取 Notion 数据" && !data && <SkeletonLines rows={4} label="正在加载业务数据" />}{data && <div className="tencent-sheet-table"><p>业务日期：{data.date}</p><table><thead><tr><th>业务字段</th><th>数值</th><th>来源与范围</th><th>记录数</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.value} {row.unit}</td><td>{row.source} · {row.period}</td><td>{row.recordCount}</td></tr>)}</tbody></table></div>}
       <button className="primary" disabled={!fields.length || (manual && !date) || !data} onClick={() => action("检查填报位置", async () => { setPreview(undefined); const result = await invoke<Preview>("tencentSheet.inspect", { id, dataToken: data?.dataToken, businessDate: data?.date ?? (manual ? date : undefined) }, 300000); setPreview(result); setNotice(result.message); changed(); })}>检查本次数据与位置</button>
     </fieldset>
     }
@@ -156,7 +157,7 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
       <p>{preview.conflict ? "目标格已有内容，本次不可写入。" : "将仅填写以上空白单元格。确认有效期为 2 分钟。"}</p>
       <button className="primary" disabled={blocked || !preview.token || preview.conflict} onClick={() => action("填报并确认保存", async () => { const current = preview; setPreview(undefined); const result = await invoke<{ message: string }>("tencentSheet.write", { id, dataToken: data?.dataToken, businessDate: current.date, token: current.token }, 310000); setNotice(result.message); changed(); })}>确认填报以上 {preview.rows.length} 项</button>
     </section>}
-    <details className="tencent-run-history"><summary onClick={() => { if (!runs) action("读取运行记录", async () => { const result = await invoke<{ runs: NonNullable<typeof runs> }>("tencentSheet.runs", { id }); setRuns(result.runs); }); }}>运行记录</summary>{runs?.map(run => <div key={run.id}><p>{run.time} · {run.businessDate} · {run.status}</p><p>{run.error || run.message}</p></div>)}{runs?.length === 0 && <p>暂无运行记录</p>}</details>
+    <details className="tencent-run-history"><summary onClick={() => { if (!runs) action("读取运行记录", async () => { const result = await invoke<{ runs: NonNullable<typeof runs> }>("tencentSheet.runs", { id }); setRuns(result.runs); }); }}>运行记录</summary>{busy === "读取运行记录" && !runs && <SkeletonLines label="正在加载运行记录" />}{runs?.map(run => <div key={run.id}><p>{run.time} · {run.businessDate} · {run.status}</p><p>{run.error || run.message}</p></div>)}{runs?.length === 0 && <p>暂无运行记录</p>}</details>
     </>}
     </div>
     {loginOpen && <TencentLoginDialog key={`login:${id}`} id={id} onClose={success => { setLoggedIn(success); setLoginOpen(false); setNotice(success ? "已登录腾讯文档，可以继续识别并检查。" : "已关闭扫码登录，原有登录状态已保留。"); }} />}

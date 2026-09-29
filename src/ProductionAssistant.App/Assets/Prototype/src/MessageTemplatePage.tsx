@@ -7,6 +7,9 @@ import html from './message-template.html?raw';
 import interFont from '../../Fonts/Inter.ttf?url';
 import chineseFont from '../../Fonts/NotoSansSC.ttf?url';
 import { invoke } from './bridge';
+import { TaskSkeleton } from './LoadingSkeleton';
+import skeletonStyles from './skeleton.css?raw';
+import { setRegionLoading } from './skeletonRegion';
 import { getDailyMetrics } from './dailyFieldCache';
 import type { DailyField, DailyJobDetail, DailyRun } from './types';
 import { mountTemplate, mountStoredDocument, snapshotEditor, timeScopes, type TokenChoice } from './messageTemplateAdapter';
@@ -15,9 +18,12 @@ type Job = DailyJobDetail & { metricSourceIds?:string[] };
 export function MessageTemplatePage({id,back,changed,openSettings}:{id:string;back:()=>void;changed:()=>unknown;openSettings?:()=>void}) {
   const frame=useRef<HTMLIFrameElement>(null);
   const [error,setError]=useState('');
+  const [loading,setLoading]=useState(true);
   useEffect(()=>{
     let disposed=false;
     const el=frame.current!;
+    setLoading(true);setError('');
+    el.onload=()=>{if(!disposed && el.contentDocument?.getElementById('editor'))void Promise.resolve(el.contentDocument.fonts?.ready).then(()=>{if(!disposed)setLoading(false)})};
     invoke<Job>('daily.get',{id}).then(job=>{
       if(disposed)return;
       const runtime=createMessageRuntime(job,{back,changed,openSettings});
@@ -25,9 +31,9 @@ export function MessageTemplatePage({id,back,changed,openSettings}:{id:string;ba
       // The approved Demo is the source of the live surface, including its script.
       el.srcdoc=html.replace("../../src/ProductionAssistant.App/Assets/Fonts/Inter.ttf",new URL(interFont,window.location.href).href).replace("../../src/ProductionAssistant.App/Assets/Fonts/NotoSansSC.ttf",new URL(chineseFont,window.location.href).href);
     }).catch(e=>{if(!disposed)setError(String(e.message||e))});
-    return()=>{disposed=true;(el as any).dailyRuntime?.dispose();};
+    return()=>{disposed=true;el.onload=null;(el as any).dailyRuntime?.dispose();};
   },[id]);
-  return <div className="message-template-host">{error&&<p role="alert">{error}</p>}<iframe ref={frame} title="日报消息模板" /></div>;
+  return <div className="message-template-host">{error&&<p role="alert">{error}</p>}<iframe ref={frame} title="日报消息模板" style={{visibility:loading?'hidden':undefined}} />{loading&&!error&&<TaskSkeleton />}</div>;
 }
 
 export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()=>unknown;openSettings?:()=>void}) {
@@ -99,6 +105,8 @@ export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()
       serial=task;return task;
     },
     preview(root:HTMLElement,date:string){
+      const preview=document?.querySelector<HTMLElement>('#preview');
+      setRegionLoading(preview, true);
       const snapshot=snapshotEditor(root),current=++revision;
       const task=serial.catch(()=>{}).then(async()=>{
         if(disposed||current!==revision)return {succeeded:false,text:'',message:'内容已修改，请重新生成预览',errors:[]};
@@ -107,7 +115,7 @@ export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()
         const answer={...result,errors:result.fieldErrors||[],message:result.succeeded?'已生成 · '+date:result.message};
         if(current===revision&&!disposed)lastResult=answer;
         return answer;
-      });serial=task;return task;
+      }).finally(()=>setRegionLoading(preview, false));serial=task;return task;
     },
     async send(root:HTMLElement,kind:'test'|'today',date:string){
       if(sending)return;
@@ -152,14 +160,14 @@ export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()
           catch(e){status(String(e))}finally{root.contentEditable='true'}
         };footer.append(button);
       }
-      const style=doc.createElement('style');style.textContent=sharedControls+'\n'+controlRefinements+'\nbody{font-family:var(--font-ui)}#date-picker{width:154px}';doc.head.append(style);
+      const style=doc.createElement('style');style.textContent=sharedControls+'\n'+controlRefinements+'\n'+skeletonStyles+'\nbody{font-family:var(--font-ui)}#date-picker{width:154px}';doc.head.append(style);
       // The marker enables the same shared tokens and picker CSS as the main application.
       const marker=doc.createElement('span');marker.className='production-message-demo';marker.hidden=true;doc.body.append(marker);
       dateRoot=createRoot(doc.querySelector('#date-picker')!);
       dateRoot.render(<MessageDatePicker input={doc.querySelector<HTMLInputElement>('#date')!} />);
       window.addEventListener('production-settings-updated',settingsUpdated);
       const runs=doc.querySelector<HTMLDetailsElement>('#runs')!;
-      runs.ontoggle=async()=>{if(!runs.open)return;const body=runs.querySelector('p')!;body.textContent='正在读取…';try{const result=await invoke<{runs:DailyRun[]}>('daily.runs',{id});body.textContent=result.runs.length?'':'暂无运行记录';for(const run of result.runs){const row=doc.createElement('div');row.textContent=`${run.time} · ${run.status} · ${run.businessDate}${run.error?' · '+run.error:''}`;body.append(row)}}catch(e){body.textContent=String(e)}};
+      runs.ontoggle=async()=>{if(!runs.open)return;const body=runs.querySelector('p')!;setRegionLoading(body,true);try{const result=await invoke<{runs:DailyRun[]}>('daily.runs',{id});body.textContent=result.runs.length?'':'暂无运行记录';for(const run of result.runs){const row=doc.createElement('div');row.textContent=`${run.time} · ${run.status} · ${run.businessDate}${run.error?' · '+run.error:''}`;body.append(row)}}catch(e){body.textContent=String(e)}finally{setRegionLoading(body,false)}};
       if(!job.notificationConfigured){const banner=doc.createElement('div');banner.className='notice';banner.dataset.notificationNotice='';banner.append(doc.createTextNode('通知渠道尚未配置。 '));const link=doc.createElement('button');link.textContent='通知设置';link.onclick=callbacks.openSettings||null;banner.append(link);doc.querySelector('#message')!.before(banner)}
       controls();loadMetrics().catch(e=>status(String(e)));
     },

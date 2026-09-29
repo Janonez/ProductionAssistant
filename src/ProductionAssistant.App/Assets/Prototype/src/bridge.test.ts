@@ -55,7 +55,7 @@ describe('desktop bridge', () => {
     const { notifyReady } = await import('./bridge')
     notifyReady('daily-report', 'navigation-2')
     notifyReady('daily-report', 'navigation-2')
-    expect(sent).toEqual({ type: 'app.ready', route: 'daily-report', navigation: 'navigation-2' })
+    expect(sent).toEqual({ type: 'app.ready', route: 'daily-report', navigation: 'navigation-2', moduleEntryMs: expect.any(Number), readyMs: expect.any(Number) })
     expect(postMessage).toHaveBeenCalledTimes(1)
   })
 })

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from './bridge'
 import { clearDailyFieldCache } from './dailyFieldCache'
 
+
 type SettingsPage = 'connection' | 'notification' | 'data' | 'about'
 type SettingsRule = { eventType: string; name: string; enabled: boolean; level: string }
 type SettingsState = {
@@ -25,6 +26,7 @@ type SettingsState = {
   version: string
 }
 type SettingsResult = { state: SettingsState; message: string }
+const pendingSettings: SettingsState = { notion: { configured: false, rootPageId: '', dataSourceCount: 0, lastSyncedAt: '', sources: [] }, notification: { enabled: false, channelName: '', webhookConfigured: false, secretConfigured: false, connected: null, status: '', checkedAt: '', rules: [] }, version: '' }
 const maskedCredential = '••••••••••••'
 
 const navItems: { key: SettingsPage; label: string; keywords: string; icon: React.ReactNode }[] = [
@@ -40,7 +42,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const [state, setState] = useState<SettingsState | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState('')
+  const [busy, setBusy] = useState('settings.open')
   const closeButton = useRef<HTMLButtonElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
 
@@ -107,7 +109,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         <div className="settings-sidebar-title">设置</div>
         <nav className="settings-nav" aria-label="设置分类">
           {filteredItems.map(item => <button
-            key={item.key}
+            key={item.key} disabled={!state && item.key !== 'connection'}
             type="button"
             className={page === item.key ? 'settings-nav-item active' : 'settings-nav-item'}
             aria-current={page === item.key ? 'page' : undefined}
@@ -125,12 +127,12 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           <CloseIcon />
         </button>
         <div className="settings-content">
-          {busy === 'settings.open' && !state ? <div className="settings-loading">正在读取本机设置…</div> : <>
-            {page === 'connection' && state && <ConnectionSettings state={state} busy={busy} run={run} />}
+          <fieldset className="settings-form-content" disabled={!state} aria-busy={!state}>
+            {page === 'connection' && <ConnectionSettings state={state ?? pendingSettings} pending={!state} busy={busy} run={run} />}
             {page === 'notification' && state && <NotificationSettings state={state} busy={busy} run={run} />}
             {page === 'data' && state && <DataSettings state={state} busy={busy} run={run} />}
             {page === 'about' && state && <AboutSettings state={state} />}
-          </>}
+          </fieldset>
           {(message || error) && <div className={`settings-message ${error ? 'error' : ''}`} role="status" aria-live="polite">
             {error || message}
           </div>}
@@ -140,7 +142,8 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   </div>
 }
 
-function ConnectionSettings({ state, busy, run }: {
+function ConnectionSettings({ state, busy, run, pending = false }: {
+  pending?: boolean
   state: SettingsState
   busy: string
   run: (operation: string, payload?: unknown) => Promise<boolean>
@@ -163,7 +166,7 @@ function ConnectionSettings({ state, busy, run }: {
   return <SettingsPageLayout title="连接" description="管理生产助手使用的外部数据源和服务连接。">
     <SettingsSection title="Notion">
       <SettingsRow title="连接状态" description="当前本机连接配置和数据源缓存状态">
-        <Status connected={state.notion.configured} label={state.notion.configured ? '已配置' : '未配置'} />
+        <Status connected={pending ? null : state.notion.configured} label={pending ? (busy ? '读取中…' : '读取失败') : state.notion.configured ? '已配置' : '未配置'} />
       </SettingsRow>
       <SettingsField title="API 令牌" description="使用 Windows 当前用户加密后保存在本机">
         <input className="settings-input" type="password" autoComplete="off"
@@ -181,8 +184,8 @@ function ConnectionSettings({ state, busy, run }: {
       </div>
     </SettingsSection>
     <SettingsSection title="数据源">
-      <SettingsRow title="已发现数据源" description="最近一次从 Notion 获取的数据源"><span className="settings-value">{state.notion.dataSourceCount} 个</span></SettingsRow>
-      <SettingsRow title="上次同步" description="数据源元信息最后更新时间"><span className="settings-value">{state.notion.lastSyncedAt || '尚未同步'}</span></SettingsRow>
+      <SettingsRow title="已发现数据源" description="最近一次从 Notion 获取的数据源"><span className="settings-value">{pending ? '—' : `${state.notion.dataSourceCount} 个`}</span></SettingsRow>
+      <SettingsRow title="上次同步" description="数据源元信息最后更新时间"><span className="settings-value">{pending ? '—' : state.notion.lastSyncedAt || '尚未同步'}</span></SettingsRow>
     </SettingsSection>
   </SettingsPageLayout>
 }

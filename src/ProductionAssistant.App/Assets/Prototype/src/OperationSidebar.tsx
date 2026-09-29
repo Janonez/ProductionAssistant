@@ -4,12 +4,12 @@ type Module = {
 }
 
 export const modules: Module[] = [
+  { category: '数据同步', name: '生产消息 Notion 入库' },
+  { category: '数据同步', name: '每日焊接数据模拟' },
+  { category: '数据同步', name: '数据库查看' },
   { category: '数据文件处理', name: '挂网计划 PDF 导出' },
   { category: '数据文件处理', name: '生产会资料拆分' },
   { category: '数据文件处理', name: '文件统计汇总' },
-  { category: '数据同步', name: '每日焊接数据模拟' },
-  { category: '数据同步', name: '生产消息 Notion 入库' },
-  { category: '数据同步', name: '数据库查看' },
   { category: '自动化', name: '自动化任务' },
 ]
 

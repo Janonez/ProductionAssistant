@@ -32,8 +32,8 @@ public sealed partial class MainWindow : Window
             presenter.PreferredMinimumHeight = 700;
         }
 
-        ShellFrame.Navigate(typeof(PrototypePage), "plan-pdf");
-        NavigateTo("plan-pdf");
+        ShellFrame.Navigate(typeof(PrototypePage), "production-message");
+        NavigateTo("production-message");
     }
 
     internal void NavigateTo(string tag)

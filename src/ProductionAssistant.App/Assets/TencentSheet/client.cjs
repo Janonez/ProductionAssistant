@@ -90,18 +90,44 @@ class TencentSheetClient {
   async locate(config, address, {readOnly=false} = {}) {
     a1(address);
     await this.page.bringToFront();
-    const name = await this.control(config,'nameBox',{requireAddress:false});
-    await name.click();
-    await name.press('Control+A');
-    await name.pressSequentially(address);
-    await name.press('Enter');
-    await site.assertNoLogin(this.page);
-    // Do not await requestAnimationFrame: an occluded/minimized sheet can suspend it indefinitely.
-    // The concrete page binding must be validated by reading anchors before any write.
-    await new Promise(resolve => setTimeout(resolve,100));
-    const selected = (await this.text(name)).replace(/\$/g,'').toUpperCase();
-    if (selected !== address) throw Error('选中地址不一致：期望 '+address+'，实际 '+selected);
-    return readOnly?this.one(config,'valueBox',{locationOnly:true}):this.control(config,'valueBox');
+    const started=Date.now(), observations=[];
+    let selected='';
+    for(let attempt=1;attempt<=2;attempt++) {
+      const name=await this.control(config,'nameBox',{requireAddress:false});
+      const before=await this.text(name);
+      observations.push('第'+attempt+'次定位前 '+before+'（'+(Date.now()-started)+'ms）');
+      await name.click();
+      await name.press('Control+A');
+      await name.pressSequentially(address);
+      await name.press('Enter');
+      // Read the committed selection after blur, not the address we just typed.
+      await name.evaluate(el=>el.blur());
+      const waitMs=Math.min(3000,config.timeout*1000),deadline=Date.now()+waitMs;
+      const stableMs=Math.min(200,waitMs/2),pollMs=Math.min(100,waitMs/4);
+      let stableSince=null,last;
+      do {
+        // Node timers also run when the sheet is occluded; do not use animation frames.
+        await new Promise(resolve=>setTimeout(resolve,Math.min(pollMs,Math.max(0,deadline-Date.now()))));
+        const remaining={...config,timeout:Math.max(0,deadline-Date.now())/1000};
+        const current=await this.one(remaining,'nameBox',{requireAddress:false,locationOnly:true});
+        selected=(await this.text(current)).replace(/\$/g,'').toUpperCase();
+        if(selected!==last)observations.push('第'+attempt+'次 '+(selected||'空地址')+'（'+(Date.now()-started)+'ms）');
+        last=selected;
+        if(selected!==address)stableSince=null;
+        else {
+          stableSince??=Date.now();
+          if(Date.now()-stableSince>=stableMs) {
+            const editor=readOnly?await this.one(config,'valueBox',{locationOnly:true}):await this.control(config,'valueBox');
+            // Resolving the editor may wait; check the selection again before returning it.
+            selected=(await this.text(await this.one(config,'nameBox',{locationOnly:true}))).replace(/\$/g,'').toUpperCase();
+            if(selected===address)return editor;
+            observations.push('编辑区就绪后 '+selected+'（'+(Date.now()-started)+'ms）');
+            stableSince=null;
+          }
+        }
+      } while(Date.now()<deadline);
+    }
+    throw Error('选中地址不一致：期望 '+address+'，实际 '+selected+'；'+observations.join('；')+'；总耗时 '+(Date.now()-started)+'ms');
   }
   async read(config, address, options={readOnly:true}) { return this.text(await this.locate(config,address,options),false); }
   async selectedAddress(config) {
