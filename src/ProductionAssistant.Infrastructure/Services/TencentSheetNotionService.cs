@@ -74,9 +74,12 @@ public sealed class TencentSheetNotionService(IDatabaseQueryProvider provider)
             double total = 0;
             foreach (var record in records.Records)
             {
-                var value = record.Fields.FirstOrDefault(value => value.Id == binding.ValueFieldId)?.Value;
+                var numericField = record.Fields.FirstOrDefault(value => value.Id == binding.ValueFieldId);
+                var value = numericField?.Value;
                 if (value is not (double or float or decimal or int or long or short or byte or uint or ulong or ushort or sbyte))
-                    throw new InvalidOperationException($"{name}：有记录的数值为空或不是数字，不会跳过或按 0 处理。");
+                    throw new InvalidOperationException($"{name}：有记录的数值为空或不是数字，不会跳过或按 0 处理。" +
+                        $"业务日期 {date:yyyy-MM-dd}；数据库 {source.Name}；记录 {record.Id}；字段 {binding.ValueFieldId}；" +
+                        $"字段类型 {numericField?.Type ?? "缺失"}；返回值类型 {value?.GetType().Name ?? "空值"}。");
                 total += Convert.ToDouble(value, CultureInfo.InvariantCulture);
                 if (!double.IsFinite(total)) throw new InvalidOperationException($"{name}：汇总结果不是有效数字。");
             }

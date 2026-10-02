@@ -62,6 +62,25 @@ public sealed class TencentSheetNotionTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchAsync("job", config, date));
     }
 
+    [Theory]
+    [InlineData("missing", "字段类型 缺失", "返回值类型 空值")]
+    [InlineData("null", "字段类型 number", "返回值类型 空值")]
+    [InlineData("text", "字段类型 formula", "返回值类型 String")]
+    public async Task Invalid_numeric_data_identifies_record_and_field_without_logging_its_content(
+        string kind, string fieldType, string valueType)
+    {
+        var provider = new Provider { Records = [new("bad-record", kind == "missing" ? [] :
+            [new("value", "数量", kind == "text" ? "formula" : "number", kind == "text" ? "private-content" : null)])] };
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new TencentSheetNotionService(provider).FetchAsync("job", Config(), new(2026, 9, 30)));
+        Assert.Contains("业务日期 2026-09-30", error.Message);
+        Assert.Contains("数据库 数量数据库", error.Message);
+        Assert.Contains("记录 bad-record；字段 value", error.Message);
+        Assert.Contains(fieldType, error.Message);
+        Assert.Contains(valueType, error.Message);
+        Assert.DoesNotContain("private-content", error.Message);
+    }
+
     private sealed class Provider : IDatabaseQueryProvider
     {
         public string Name => "fixture";
