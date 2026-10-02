@@ -5,6 +5,8 @@ using System.Text.Json.Nodes;
 
 namespace ProductionAssistant.Services;
 
+public sealed class TencentSheetPreflightException(string message) : InvalidOperationException(message);
+
 // Persistent stdio worker: no listening port and no credentials sent to the frontend.
 public sealed class TencentSheetService
 {
@@ -27,19 +29,27 @@ public sealed class TencentSheetService
             var line = await _worker.StandardOutput.ReadLineAsync(timeout.Token)
                 ?? throw new InvalidOperationException("填报会话已关闭，请重新打开文档；此前写入结果请先检查。");
             using var result = JsonDocument.Parse(line);
-            var root = result.RootElement;
-            if (!root.GetProperty("ok").GetBoolean())
-            {
-                var message = root.GetProperty("error").GetString();
-                if (root.TryGetProperty("completed", out var completed) && completed.GetArrayLength() > 0)
-                    message += " 已提交：" + string.Join("、", completed.EnumerateArray().Select(row => row.GetProperty("address").GetString()));
-                if (root.TryGetProperty("uncertainAddress", out var uncertain) && uncertain.ValueKind == JsonValueKind.String)
-                    message += "；结果待确认：" + uncertain.GetString();
-                throw new InvalidOperationException(message);
-            }
-            return root.GetProperty("data").Clone();
+            return ReadResponse(result.RootElement);
         }
         finally { _gate.Release(); }
+    }
+
+    public static JsonElement ReadResponse(JsonElement root)
+    {
+        if (!root.GetProperty("ok").GetBoolean())
+        {
+            var message = root.GetProperty("error").GetString();
+            if (root.TryGetProperty("completed", out var completed) && completed.GetArrayLength() > 0)
+                message += " 已提交：" + string.Join("、", completed.EnumerateArray().Select(row => row.GetProperty("address").GetString()));
+            if (root.TryGetProperty("uncertainAddress", out var uncertain) && uncertain.ValueKind == JsonValueKind.String)
+                message += "；结果待确认：" + uncertain.GetString();
+            if (root.TryGetProperty("phase", out var phase) && phase.GetString() == "check" &&
+                root.TryGetProperty("completed", out var submitted) && submitted.GetArrayLength() == 0 &&
+                root.TryGetProperty("uncertainAddress", out var pending) && pending.ValueKind == JsonValueKind.Null)
+                throw new TencentSheetPreflightException(message ?? "网页预检失败，未开始填写。");
+            throw new InvalidOperationException(message);
+        }
+        return root.GetProperty("data").Clone();
     }
 
     private static FileStream AcquireOperationLease()

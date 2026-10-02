@@ -47,7 +47,7 @@ public sealed class TencentSheetNotionTests
         var provider = new Provider(); var service = new TencentSheetNotionService(provider); var config = Config(); var date = new DateOnly(2026, 9, 9);
         var old = await service.FetchAsync("job", config, date);
         provider.Records = empty ? [] : [new("bad", [new("value", "数量", "number", null)])];
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchAsync("job", config, date));
+        await Assert.ThrowsAsync<TencentDataPendingException>(() => service.FetchAsync("job", config, date));
         Assert.Throws<InvalidOperationException>(() => service.RequireValues("job", config, date, old.DataToken));
     }
 
@@ -60,6 +60,65 @@ public sealed class TencentSheetNotionTests
         Assert.Equal(0d, (double)result.Values["custom"]!);
         config["rules"] = new JsonObject();
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchAsync("job", config, date));
+    }
+
+    [Theory]
+    [InlineData("missing", "字段类型 缺失", "返回值类型 空值")]
+    [InlineData("null", "字段类型 number", "返回值类型 空值")]
+    [InlineData("text", "字段类型 formula", "返回值类型 String")]
+    public async Task Invalid_numeric_data_identifies_record_and_field_without_logging_its_content(
+        string kind, string fieldType, string valueType)
+    {
+        var provider = new Provider { Records = [new("bad-record", kind == "missing" ? [] :
+            [new("value", "数量", kind == "text" ? "formula" : "number", kind == "text" ? "private-content" : null)])] };
+        var error = await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+            new TencentSheetNotionService(provider).FetchAsync("job", Config(), new(2026, 9, 30)));
+        Assert.Contains("业务日期 2026-09-30", error.Message);
+        Assert.Contains("数据库 数量数据库", error.Message);
+        Assert.Contains("记录 bad-record；字段 value", error.Message);
+        Assert.Contains(fieldType, error.Message);
+        Assert.Contains(valueType, error.Message);
+        Assert.DoesNotContain("private-content", error.Message);
+    }
+
+    [Fact]
+    public async Task Background_requeries_pending_data_with_frozen_date_and_stops_after_three_attempts()
+    {
+        var provider = new Provider { Records = [] };
+        var service = new TencentSheetNotionService(provider);
+        var date = new DateOnly(2026, 9, 30);
+        var waits = new List<int>();
+        var result = await service.FetchWithRetryAsync("job", Config(), date, (attempt, _) =>
+        {
+            waits.Add(attempt);
+            provider.Records = [new("record", [new("value", "数量", "number", attempt == 2 ? 30d : null)])];
+            return Task.CompletedTask;
+        });
+        Assert.Equal(new[] { 1, 2 }, waits);
+        Assert.Equal(3, provider.RangeCalls);
+        Assert.Equal(30d, (double)result.Values["custom"]!);
+        Assert.Equal(date, provider.Range.Item2);
+        provider.Records = []; provider.RangeCalls = 0; waits.Clear();
+        await Assert.ThrowsAsync<TencentDataPendingException>(() => service.FetchWithRetryAsync("job", Config(), date,
+            (attempt, _) => { waits.Add(attempt); return Task.CompletedTask; }));
+        Assert.Equal(3, provider.RangeCalls);
+        Assert.Equal(new[] { 1, 2 }, waits);
+        Assert.Throws<InvalidOperationException>(() => service.RequireValues("job", Config(), date, result.DataToken));
+    }
+
+    [Fact]
+    public async Task Invalid_data_is_not_retried_and_cancellation_stops_before_requery()
+    {
+        var provider = new Provider { Records = [new("record", [new("value", "数量", "number", "bad")])] };
+        var service = new TencentSheetNotionService(provider);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.FetchWithRetryAsync("job", Config(), new(2026, 9, 30),
+            (_, _) => throw new Exception("Must not retry invalid types")));
+        Assert.Equal(1, provider.RangeCalls);
+        provider.Records = []; provider.RangeCalls = 0;
+        using var cancellation = new CancellationTokenSource();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.FetchWithRetryAsync("job", Config(), new(2026, 9, 30),
+            (_, _) => { cancellation.Cancel(); return Task.CompletedTask; }, cancellation.Token));
+        Assert.Equal(1, provider.RangeCalls);
     }
 
     private sealed class Provider : IDatabaseQueryProvider

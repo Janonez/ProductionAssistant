@@ -200,9 +200,20 @@ class TencentSheetClient {
         {label:row.label+'项目标志',...rule.labelAnchor}
       ]) {
         let actual;
-        try {actual=await this.read(config,check.address);}
+        try {
+          const deadline=Date.now()+config.timeout*1000;
+          actual=await this.read(config,check.address);
+          // A cold sheet can expose its selection before loading the cell content.
+          // Retry only empty anchors; each read revalidates the committed address.
+          while(actual==='' && Date.now()<deadline) {
+            await new Promise(resolve=>setTimeout(resolve,Math.min(200,deadline-Date.now())));
+            const remaining=deadline-Date.now();
+            if(remaining<=0)break;
+            actual=await this.read({...config,timeout:remaining/1000},check.address);
+          }
+        }
         catch(error) {error.message='读取'+check.label+'（'+check.address+'）失败：'+error.message;throw error;}
-        if(actual!==check.expected)throw Error(check.label+'校验失败：'+check.address+' 期望「'+check.expected+'」，实际「'+actual+'」；未开始填报');
+        if(actual!==check.expected)throw Object.assign(Error(check.label+'校验失败：'+check.address+' 期望「'+check.expected+'」，实际「'+actual+'」；未开始填报'),{code:actual===''?'AnchorContentPending':'AnchorMismatch'});
         results.push({...check,actual});
       }
     }

@@ -6,6 +6,24 @@ namespace ProductionAssistant.Tests;
 
 public sealed class TencentSheetTests
 {
+    [Theory]
+    [InlineData("check", "[]", "null", true)]
+    [InlineData("check", "[{\"address\":\"F9\"}]", "null", false)]
+    [InlineData("check", "[]", "\"F9\"", false)]
+    [InlineData("write", "[]", "null", false)]
+    [InlineData(null, "[]", "null", false)]
+    public void Worker_must_prove_preflight_only_before_clearing_write_guard(string? phase, string completed, string uncertain, bool safe)
+    {
+        var response = new JsonObject { ["ok"] = false, ["error"] = "failure", ["phase"] = phase,
+            ["completed"] = JsonNode.Parse(completed), ["uncertainAddress"] = JsonNode.Parse(uncertain) };
+        using var json = System.Text.Json.JsonDocument.Parse(response.ToJsonString());
+        var error = Assert.ThrowsAny<InvalidOperationException>(() => TencentSheetService.ReadResponse(json.RootElement));
+        Assert.Equal(safe, error is TencentSheetPreflightException);
+        var run = new JsonObject { ["businessDate"] = "2026-09-30", ["status"] = "失败或待确认",
+            ["phase"] = error is TencentSheetPreflightException ? "check" : "write" };
+        Assert.Equal(!safe, TencentSheetTaskHandler.BlocksAutomaticRetry(run, new(2026, 9, 30)));
+    }
+
     [Fact]
     public void Task_storage_isolates_controls_rejects_stale_changes_and_preserves_history()
     {

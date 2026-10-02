@@ -8,7 +8,8 @@ const site=require('../../src/ProductionAssistant.App/Assets/TencentSheet/site-a
 const sheet='下料、装焊（26年9月）';
 async function main(){
  const server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end(`<!doctype html><meta charset="utf-8"><div id="root"><input class="bar-label" value="A1"><div class="formula-input" contenteditable="true"></div></div><script>(()=>{
-  const cells={R2:'2026/9/13',C9:'测试字段',R9:''};window.events=[];window.inputs=0;
+  const cells={};window.events=[];window.inputs=0;
+  setTimeout(()=>Object.assign(cells,{R2:'2026/9/13',C9:'测试字段',R9:''}),2300);
   const name=document.querySelector('.bar-label'),editor=document.querySelector('.formula-input');
   editor.oninput=()=>window.inputs++;
   name.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();editor.textContent=cells[name.value]??'';editor.blur();}};
@@ -24,7 +25,7 @@ async function main(){
  })();</script>`);});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const profile=await fs.mkdtemp(path.resolve(__dirname,'../../artifacts/tencent-startup-'));
- const browser=new TencentDocsBrowser(profile);let client;
+ const browser=new TencentDocsBrowser(profile,{args:['--no-proxy-server']});let client;
  try{
   const rule=core.inferRule([{date:'2026-09-01',address:'F9'},{date:'2026-09-02',address:'G9'}]);
   const config=core.validate({documentUrl:`http://127.0.0.1:${server.address().port}/`,timeout:5,sheetReferenceName:sheet,fields:[{id:'quantity',name:'测试字段'}],rules:{quantity:core.normalizeRule({...rule,confirmation:core.prediction(rule),dateAnchor:{address:'F2',format:'{yyyy}/{M}/{d}'},labelAnchor:{address:'C9',expected:'测试字段'}})},webControls:{
@@ -36,7 +37,7 @@ async function main(){
   assert.equal(inspection.prewriteVerified,true);assert.equal(inspection.rows[0].address,'R9');assert.equal(inspection.rows[0].current,'');
   assert.deepEqual(await browser.page.evaluate(()=>window.events),[sheet],'one click after the target appears, none while waiting');
   assert.equal(await browser.page.evaluate(()=>window.inputs),0);
-  console.log('PASS: cold open -> delayed container -> delayed target with no initial selection -> delayed nested selected marker -> delayed A1/editor -> real anchor and empty-cell inspection, no business input');
+  console.log('PASS: cold open -> delayed tabs/selection/controls -> separately delayed cell data -> real anchor and empty-cell inspection, no business input');
   for(const [markup,reason] of [
    ['<div></div>',/标签容器尚未出现/],
    ['<div class="docs-tab-bar-scrollable-scroller drag-and-drop-scroller" style="height:30px"></div>',/尚无可见标签/],

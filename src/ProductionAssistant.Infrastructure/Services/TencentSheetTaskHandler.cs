@@ -136,7 +136,13 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
                 record["status"] = "执行中，结果待确认";
                 SaveRun(context.TaskId, record, job["config"]!.AsObject(), background);
                 var data = await (notion ?? throw new InvalidOperationException("Notion 取数服务不可用。"))
-                    .FetchAsync(context.TaskId, job["config"]!.AsObject(), date, cancellationToken);
+                    .FetchWithRetryAsync(context.TaskId, job["config"]!.AsObject(), date, async (attempt, reason) =>
+                    {
+                        record["fetchRetries"] = attempt;
+                        record["message"] = $"取数第 {attempt} 次未就绪，{attempt * 60} 秒后重查：{reason}";
+                        SaveRun(context.TaskId, record, job["config"]!.AsObject(), background);
+                        await Task.Delay(TimeSpan.FromSeconds(attempt * 60), cancellationToken);
+                    }, cancellationToken);
                 job["values"] = data.Values.DeepClone();
                 record["data"] = JsonSerializer.SerializeToNode(data.Rows);
             }
@@ -147,6 +153,12 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
             record["configSignature"] = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(resolved.ToJsonString())));
             if (context.Trigger == "automatic" && (string?)job["backgroundValidatedConfig"] != (string?)record["configSignature"])
                 throw new InvalidOperationException("取数期间网页适配已变化，本次未填写，请重新后台测试。");
+            if (context.Trigger == "automatic")
+            {
+                var current = Find(context.TaskId);
+                if ((bool?)current["enabled"] != true || !JsonNode.DeepEquals(current["config"], resolved))
+                    throw new InvalidOperationException("等待取数期间任务已停用或配置已变化，本次未填写。");
+            }
             record["phase"] = "write";
             record["status"] = "执行中，结果待确认";
             SaveRun(context.TaskId, record, job["config"]!.AsObject(), background);
@@ -158,6 +170,9 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Only a worker response proving no write can downgrade the persisted guard.
+            // A killed worker or broken pipe leaves phase=write and blocks replay.
+            if (ex is TencentSheetPreflightException) record["phase"] = "check";
             record["status"] = "失败或待确认"; record["error"] = ex.Message;
             return new(false, 1, ex.Message);
         }
