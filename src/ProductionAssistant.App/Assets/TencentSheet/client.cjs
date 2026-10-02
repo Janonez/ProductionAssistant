@@ -213,7 +213,7 @@ class TencentSheetClient {
           }
         }
         catch(error) {error.message='读取'+check.label+'（'+check.address+'）失败：'+error.message;throw error;}
-        if(actual!==check.expected)throw Error(check.label+'校验失败：'+check.address+' 期望「'+check.expected+'」，实际「'+actual+'」；未开始填报');
+        if(actual!==check.expected)throw Object.assign(Error(check.label+'校验失败：'+check.address+' 期望「'+check.expected+'」，实际「'+actual+'」；未开始填报'),{code:actual===''?'AnchorContentPending':'AnchorMismatch'});
         results.push({...check,actual});
       }
     }

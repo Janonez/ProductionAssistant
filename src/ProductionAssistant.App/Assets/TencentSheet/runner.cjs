@@ -162,9 +162,22 @@ async function dispatch(request) {
   if(operation==='background') {
     confirmation=null;
     try {
-      await browser.open(config,true);
-      const inspection=await readRetry(()=>client.inspect(config,plan));
-      if(!inspection.prewriteVerified||inspection.conflict)throw Error('后台检查未通过或目标格已有内容，本次未填写。');
+      let inspection;
+      try {
+        for(let attempt=1;;attempt++) {
+          try {
+            await browser.open(config,true);
+            inspection=await client.inspect(config,plan);
+            if(!inspection.prewriteVerified||inspection.conflict)throw Error('后台检查未通过或目标格已有内容，本次未填写。');
+            break;
+          } catch(error) {
+            const transient=error.code==='AnchorContentPending' || (error.code==='ControlUnavailable'&&!error.ambiguous) || /net::ERR_(?:CONNECTION_RESET|CONNECTION_TIMED_OUT|NETWORK_CHANGED)/.test(error.message);
+            if(attempt>=3||!transient)throw error;
+            await new Promise(resolve=>setTimeout(resolve,attempt*1000));
+          }
+        }
+      } catch(error) {error.phase='check';throw error;}
+      // Never include write() in the retry scope, even when its first check fails.
       return await client.write(config,plan,inspection);
     } finally {await browser.close();}
   }
@@ -185,7 +198,7 @@ async function dispatch(request) {
 async function main() {
   for await(const line of readline.createInterface({input:process.stdin,crlfDelay:Infinity})) {
     try {process.stdout.write(JSON.stringify({ok:true,data:await dispatch(JSON.parse(line))})+'\n');}
-    catch(error){process.stdout.write(JSON.stringify({ok:false,...explainError(error),completed:error.completed||[],uncertainAddress:error.uncertainAddress||null})+'\n');}
+    catch(error){process.stdout.write(JSON.stringify({ok:false,...explainError(error),phase:error.phase||null,completed:error.completed||[],uncertainAddress:error.uncertainAddress||null})+'\n');}
   }
   await browser.close();
 }

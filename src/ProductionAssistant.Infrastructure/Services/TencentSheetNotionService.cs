@@ -9,12 +9,27 @@ public sealed record TencentNotionBinding(string SourceId, string ValueFieldId, 
     string DateFieldId = "", string DatasetId = "", string Period = "day");
 public sealed record TencentDataRow(string Id, string Name, double Value, string Unit, string Source, string Period, int RecordCount);
 public sealed record TencentDataResult(string DataToken, string Date, JsonObject Values, IReadOnlyList<TencentDataRow> Rows);
+public sealed class TencentDataPendingException(string message) : InvalidOperationException(message);
 
 public sealed class TencentSheetNotionService(IDatabaseQueryProvider provider)
 {
     private sealed record Snapshot(string Token, string Config, DateOnly Date, DateTimeOffset Expires, JsonObject Values);
     private readonly ConcurrentDictionary<string, Snapshot> _snapshots = new();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public async Task<TencentDataResult> FetchWithRetryAsync(string jobId, JsonObject config, DateOnly date,
+        Func<int, string, Task> waitBeforeRetry, CancellationToken cancellationToken = default)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try { return await FetchAsync(jobId, config, date, cancellationToken); }
+            catch (TencentDataPendingException ex) when (attempt < 3)
+            {
+                await waitBeforeRetry(attempt, ex.Message);
+            }
+        }
+    }
 
     public static TencentNotionBinding ReadBinding(JsonNode? node)
     {
@@ -70,16 +85,20 @@ public sealed class TencentSheetNotionService(IDatabaseQueryProvider provider)
                 if (!records.Succeeded) throw new InvalidOperationException($"{name}：{records.Message}");
                 queries[key] = records;
             }
-            if (records.Records.Count == 0) throw new InvalidOperationException($"{name}：没有匹配记录，不会自动填 0。请检查日期或 View。");
+            if (records.Records.Count == 0) throw new TencentDataPendingException($"{name}：没有匹配记录，不会自动填 0。请检查日期或 View。");
             double total = 0;
             foreach (var record in records.Records)
             {
                 var numericField = record.Fields.FirstOrDefault(value => value.Id == binding.ValueFieldId);
                 var value = numericField?.Value;
                 if (value is not (double or float or decimal or int or long or short or byte or uint or ulong or ushort or sbyte))
-                    throw new InvalidOperationException($"{name}：有记录的数值为空或不是数字，不会跳过或按 0 处理。" +
+                {
+                    var message = $"{name}：有记录的数值为空或不是数字，不会跳过或按 0 处理。" +
                         $"业务日期 {date:yyyy-MM-dd}；数据库 {source.Name}；记录 {record.Id}；字段 {binding.ValueFieldId}；" +
-                        $"字段类型 {numericField?.Type ?? "缺失"}；返回值类型 {value?.GetType().Name ?? "空值"}。");
+                        $"字段类型 {numericField?.Type ?? "缺失"}；返回值类型 {value?.GetType().Name ?? "空值"}。";
+                    if (numericField is not null && value is null) throw new TencentDataPendingException(message);
+                    throw new InvalidOperationException(message);
+                }
                 total += Convert.ToDouble(value, CultureInfo.InvariantCulture);
                 if (!double.IsFinite(total)) throw new InvalidOperationException($"{name}：汇总结果不是有效数字。");
             }
