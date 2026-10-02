@@ -42,6 +42,33 @@ async function main(){
    assert.equal(await page.evaluate(()=>window.inputs),0,'navigation never enters business values');
   }
   console.log('PASS: delayed selection, one relocation, transient rebound, bounded mismatch diagnostics and immediate login stop; zero business input');
+  const anchorConfig={...config,timeout:1.5,rules:{cutting:{samples:[{date:'2026-10-01',address:'F9'}],rowStep:0,columnStep:1,dateAnchor:{address:'F2',format:'{yyyy}/{M}/{d}'},labelAnchor:{address:'C9',expected:'滨海公司'}}}};
+  const plan={date:'2026-10-01',rows:[{key:'cutting',label:'下料'}]};
+  for(const mode of ['late-content','empty','wrong-date','moved']) {
+   await page.setContent('<input id="name" value="F9"><input id="editor" value="">');
+   await page.evaluate(mode=>{
+    const name=document.querySelector('#name'),editor=document.querySelector('#editor');
+    window.inputs=0;editor.oninput=()=>window.inputs++;
+    let selected='F9',loaded=false;
+    const render=()=>{name.value=selected;editor.value=selected==='C9'?'滨海公司':loaded?'2026/10/1':mode==='wrong-date'?'2026/9/1':'';};
+    name.onblur=render;
+    name.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();selected=mode==='moved'?'F9':name.value;render();}};
+    if(mode==='late-content')setTimeout(()=>{loaded=true;render();},800);
+   },mode);
+   const started=Date.now();
+   if(mode==='late-content') {
+    const checks=await client.anchors(anchorConfig,plan);
+    assert.equal(checks[0].actual,'2026/10/1');
+    assert.ok(Date.now()-started>=800);
+   } else {
+    await assert.rejects(client.anchors(anchorConfig,plan),mode==='moved'?/选中地址不一致/:/下料日期校验失败/);
+    if(mode==='empty')assert.ok(Date.now()-started>=1500,'empty anchors wait for the configured deadline');
+    if(mode==='wrong-date')assert.ok(Date.now()-started<1500,'nonempty mismatch stops immediately');
+   }
+   assert.ok(Date.now()-started<6000,'anchor failure is bounded');
+   assert.equal(await page.evaluate(()=>window.inputs),0,'anchor checks never enter business values');
+  }
+  console.log('PASS: cold-sheet empty date waits for content; permanent empty, wrong date and moved selection fail without business input');
  } finally {await browser.close();}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
