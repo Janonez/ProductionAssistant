@@ -37,6 +37,14 @@ dotnet run --project tools/TeableProbe -- write C:\Temp\teable-fields.json
 
 ## 验证边界
 
+### 2026-10-06 本机实测
+
+- 实例 `http://127.0.0.1:3000`，表 `tblewKYmzUB8ystJ4uc`；健康检查 HTTP 200，未鉴权记录 API HTTP 401。
+- 用户安全配置 Token 后，直连鉴权读取成功：首次 148 ms，写入前读取 74 ms（单次观测，不是性能基准）。字段元数据 API HTTP 200。
+- 使用现有 Work Order、Customer、Product 文本字段及 Quantity 数字字段创建一条测试记录，随后按记录 ID 回读，四个输入值全部相同。
+- 测试记录 `recfRMSxfgiEOdfRsMU` 保留供核对，Customer 标记为 `API联调测试（可删除）`。没有改动现有记录、表结构、关联或 Notion 业务路由。
+- DPAPI 配置必须由保存它的同一 Windows 用户解密；隔离执行账号无法读取时，应在原用户上下文运行工具，不要重新保存或复制明文 Token。
+
 离线测试覆盖 API 路径、Bearer 鉴权、分页、写入负载、不重试、错误脱敏及令牌不序列化。真实连通需提供实例、测试表与本机配置的 Token 后运行 check / write；未经真实请求不能标记“API 已跑通”。
 
 后续按业务优先级接字段映射、查询适配器和入库服务，再完善关联与汇总。当前没有切换业务数据库的开关，因为还没有接入任何业务执行路径。
