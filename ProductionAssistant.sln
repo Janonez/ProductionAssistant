@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -9,6 +9,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProductionAssistant.Infrastructure", "src\ProductionAssistant.Infrastructure\ProductionAssistant.Infrastructure.csproj", "{1414B9AC-8F7B-4D0A-A4C5-A84577266F6B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProductionAssistant.Tests", "tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj", "{B31AFA5A-ED52-4143-A775-980374134132}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{03C35FFF-B818-4824-8700-F5F5F19D7E2B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeableProbe", "tools\TeableProbe\TeableProbe.csproj", "{784E7C31-813B-4E2D-9885-3B448805F639}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,5 +36,12 @@ Global
 		{B31AFA5A-ED52-4143-A775-980374134132}.Debug|x64.Build.0 = Debug|x64
 		{B31AFA5A-ED52-4143-A775-980374134132}.Release|x64.ActiveCfg = Release|x64
 		{B31AFA5A-ED52-4143-A775-980374134132}.Release|x64.Build.0 = Release|x64
+		{784E7C31-813B-4E2D-9885-3B448805F639}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{784E7C31-813B-4E2D-9885-3B448805F639}.Debug|x64.Build.0 = Debug|Any CPU
+		{784E7C31-813B-4E2D-9885-3B448805F639}.Release|x64.ActiveCfg = Release|Any CPU
+		{784E7C31-813B-4E2D-9885-3B448805F639}.Release|x64.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{784E7C31-813B-4E2D-9885-3B448805F639} = {03C35FFF-B818-4824-8700-F5F5F19D7E2B}
 	EndGlobalSection
 EndGlobal
