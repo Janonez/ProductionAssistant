@@ -37,6 +37,10 @@ Production 继续使用现有 `%LOCALAPPDATA%\ProductionAssistant`，Development
 
 Scheduler 由 [appsettings.Development.json](src/ProductionAssistant.App/appsettings.Development.json) 和 [appsettings.Production.json](src/ProductionAssistant.App/appsettings.Production.json) 控制；Development 默认关闭，Production 保持开启。当前项目没有 PostgreSQL、连接字符串或 migration，数据库功能实际连接 Notion，因此没有需要创建的 Development PostgreSQL 数据库。
 
+## Teable API 基建（联调阶段）
+
+已提供独立命令行入口 `tools/TeableProbe`：安全配置 Token、直连读取测试表、指定测试记录写入与回读校验。现有业务仍使用 Notion，尚未完成数据库迁移。使用步骤和实际联调边界见 [Teable API 联调](docs/teable-api.md)。
+
 ## React 新版界面
 
 桌面外壳、左侧操作栏、“每日焊接数据模拟”、“生产消息 Notion 入库”、“日报推送”和“报表中心”直接使用同一个 React + TypeScript DOM，由单一 WebView2 承载。启动默认进入“生产消息 Notion 入库”，该入口排在导航首位；左侧分组依次为数据同步、数据文件处理和自动化。没有独立的概览首页。尚未迁移的原生模块只覆盖右侧内容区，不替换 React 操作栏；配置文件与 Windows 后台能力保持不变。
