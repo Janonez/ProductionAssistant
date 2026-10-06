@@ -3,7 +3,8 @@ using System.Text;
 using System.Text.Json.Nodes;
 using ProductionAssistant.Services;
 
-// This utility always uses Development credentials and never launches the desktop app.
+// 本分支的独立 API 验收入口：configure 保存凭据，check 只读，write 创建后按 ID 回读。
+// 使用 Development 配置，不启动桌面应用，也不切换现有 Notion 业务执行路径。
 Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", "Development");
 try
 {
@@ -40,6 +41,7 @@ try
     Console.WriteLine($"直连读取成功：{timer.ElapsedMilliseconds} ms，抽样 {records.Count} 条记录；未输出业务数据。");
     if (args[0] == "write")
     {
+        // 只写用户指定的测试字段；保留记录 ID 供核对，工具不自动重试或删除测试记录。
         var fields = JsonNode.Parse(await File.ReadAllTextAsync(args[1])) as JsonObject
             ?? throw new ArgumentException("fields.json 必须是以字段 ID 为键的 JSON 对象。");
         var created = await client.CreateRecordAsync(settings.TableId, fields);
