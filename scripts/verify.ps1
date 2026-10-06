@@ -19,6 +19,8 @@ function Assert-NativeSuccess([string]$operation) {
 
 Push-Location $root
 try {
+    pwsh -NoProfile -File scripts/test-teable-schema.ps1
+    Assert-NativeSuccess 'Teable schema plan checks'
     if (-not $SkipRestore) {
         Push-Location $editor
         try { npm.cmd ci; Assert-NativeSuccess 'ReportEditor npm ci' } finally { Pop-Location }
