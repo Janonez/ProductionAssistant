@@ -3,11 +3,48 @@ using System.Text;
 using System.Text.Json.Nodes;
 using ProductionAssistant.Services;
 
-// 本分支的独立 API 验收入口：configure 保存凭据，check 只读，write 创建后按 ID 回读。
-// 使用 Development 配置，不启动桌面应用，也不切换现有 Notion 业务执行路径。
+// Development API/业务读取验收入口，不启动桌面应用。
+// 只有 enable-query 会启用 Development 读取；write 创建后按 ID 回读，不切换生产消息写入。
 Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", "Development");
 try
 {
+    if (args.Length is 2 or 3 && args[0] == "import-query-map")
+    {
+        var mapping = TeableQuerySettingsStore.Import(args[1], args.Length == 3 ? args[2] : null);
+        var provider = new TeableDatabaseQueryProvider(mapping);
+        foreach (var source in provider.GetSources()) await provider.GetSchemaAsync(source.Id);
+        TeableQuerySettingsStore.Save(mapping);
+        Console.WriteLine($"已验证并导入 {mapping.Sources.Count} 张表映射；业务读取开关保持关闭。");
+        return 0;
+    }
+    if (args.Length == 1 && args[0] is "query-check" or "enable-query" or "disable-query")
+    {
+        var mapping = TeableQuerySettingsStore.Load();
+        if (args[0] != "disable-query")
+        {
+            if (mapping.Sources.Count == 0) throw new InvalidOperationException("请先导入业务查询映射。");
+            var provider = new TeableDatabaseQueryProvider(mapping);
+            foreach (var source in provider.GetSources())
+            {
+                var table = mapping.Sources.Single(item => item.Id == source.Id);
+                var result = await provider.QueryDatasetAsync(source.Id, table.TableId);
+                if (!result.Succeeded) throw new InvalidOperationException(result.Message);
+                Console.WriteLine($"{source.Name}：{result.Records.Count} 条，{result.RequestCount} 次请求。");
+                foreach (var view in table.Views ?? [])
+                {
+                    var viewResult = await provider.QueryDatasetAsync(source.Id, view.Id);
+                    if (!viewResult.Succeeded) throw new InvalidOperationException(viewResult.Message);
+                    Console.WriteLine($"  {view.Name}：{viewResult.Records.Count} 条。");
+                }
+            }
+        }
+        if (args[0] != "query-check")
+        {
+            TeableQuerySettingsStore.Save(mapping with { Enabled = args[0] == "enable-query" });
+            Console.WriteLine("已保存 Development 查询开关；重启应用后生效。Production 配置未修改。");
+        }
+        return 0;
+    }
     if (args.Length is 1 or 3 && args[0] == "configure")
     {
         if (args.Length == 1) Console.Write("Teable 实例地址: ");
@@ -30,7 +67,7 @@ try
     }
     if (!(args.Length == 1 && args[0] == "check") && !(args.Length == 2 && args[0] == "write"))
     {
-        Console.WriteLine("用法: configure [实例地址 表ID] | check | write <fields.json>。write 会创建一条真实记录，不自动重试或删除。");
+        Console.WriteLine("用法: configure [实例地址 表ID] | check | write <fields.json> | import-query-map <schema-state.json> | query-check | enable-query | disable-query。write 会创建真实记录。");
         return 2;
     }
     var settings = TeableSettingsStore.Load();

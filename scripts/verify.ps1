@@ -23,6 +23,8 @@ try {
     Assert-NativeSuccess 'Teable schema plan checks'
     pwsh -NoProfile -File scripts/test-teable-data.ps1
     Assert-NativeSuccess 'Teable data conversion checks'
+    pwsh -NoProfile -File scripts/test-teable-views.ps1
+    Assert-NativeSuccess 'Teable view conversion checks'
     if (-not $SkipRestore) {
         Push-Location $editor
         try { npm.cmd ci; Assert-NativeSuccess 'ReportEditor npm ci' } finally { Pop-Location }

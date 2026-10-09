@@ -20,7 +20,9 @@ public sealed partial class DailyReportService
         Func<NotionSettings>? notionSettings = null,
         IDatabaseQueryProvider? database = null)
     {
-        _database = database ?? new NotionDatabaseQueryProvider(notionClient, notionSettings);
+        _database = database ?? (notionClient is not null || notionSettings is not null
+            ? new NotionDatabaseQueryProvider(notionClient, notionSettings)
+            : DatabaseProviderFactory.Create());
         _dingTalkClient = dingTalkClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     }
 
