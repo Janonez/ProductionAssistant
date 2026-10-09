@@ -41,7 +41,9 @@ Scheduler 由 [appsettings.Development.json](src/ProductionAssistant.App/appsett
 
 已提供独立命令行入口 `tools/TeableProbe`：安全配置 Token、直连读取测试表、指定测试记录写入与回读校验。现有业务仍使用 Notion，尚未完成数据库迁移。使用步骤和实际联调边界见 [Teable API 联调](docs/teable-api.md)。
 
-生产业务库的第一阶段结构迁移已完成：9 张空表、45 个原字段及 8 个日期区间结束字段，包含关联、汇总与公式。数据和业务调用尚未迁移；可恢复脚本、字段映射及验证范围见 [Teable 结构迁移](docs/teable-schema-migration.md)。
+生产业务库第一阶段创建了 9 张空表、45 个原字段及 8 个日期区间结束字段，包含关联、汇总与公式。该阶段的可恢复脚本、字段映射及验证记录见 [Teable 结构迁移](docs/teable-schema-migration.md)。
+
+2026-10-09 已继续完成上述九个生产库的字段数据与关联迁移，共 2,624 条记录；修复用户先行导入的精度/日期差异并核对计算结果。软件业务调用仍使用 Notion；数据迁移范围、平台文本规范化及恢复方法见 [Teable 数据迁移](docs/teable-data-migration.md)。
 
 ## React 新版界面
 

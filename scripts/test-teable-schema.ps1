@@ -22,6 +22,7 @@ $formula = @($plan.tables[7].fields | Where-Object notionType -eq 'formula')[0]
 Assert ($date.endField.id -ne $date.field.id) '日期起止字段必须独立。'
 Assert ($formula.field.options.expression.Contains($date.endField.id)) '天数公式必须引用结束日期。'
 Assert ($formula.field.options.expression.Contains('BLANK()')) '单日与空日期必须有明确处理。'
+Assert (!$formula.field.options.expression.Contains('DATETIME_DIFF(IF(')) '日期差不能包入日期 IF 分支，避免实例时区重复转换。'
 $yearFormula = @($plan.tables[4].fields | Where-Object notionType -eq 'formula')[0]
 Assert ($yearFormula.field.options.expression.Contains('DATE_ADD(')) '必须使用 Teable 实际支持的 DATE_ADD。'
 $ids = @($plan.tables.fields.field.id)

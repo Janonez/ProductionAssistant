@@ -89,7 +89,8 @@ function Set-TeableDerivedFields($Plan) {
                     $expression = "AND($start != BLANK(), YEAR($start) = YEAR(DATE_ADD(TODAY(), -1, 'year')), $start <= DATE_ADD(TODAY(), -1, 'year'))"
                 } else {
                     $end = '{' + $date[0].endField.id + '}'
-                    $expression = "IF($start = BLANK(), BLANK(), DATETIME_DIFF(IF($end = BLANK(), $start, $end), $start, 'days') + 1)"
+                    # 将 IF 放在数值结果外层：本机引擎对日期 IF 返回值再次换算时区，会多出 8 小时。
+                    $expression = "IF($start = BLANK(), BLANK(), IF($end = BLANK(), 1, DATETIME_DIFF($end, $start, 'days') + 1))"
                 }
                 $field.options = @{ expression=$expression; timeZone='Asia/Shanghai' }
             } elseif ($mapping.notionType -eq 'rollup') {
