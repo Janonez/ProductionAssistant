@@ -53,7 +53,7 @@ public sealed partial class PlanPdfService
     public static PlanWorkspace FindWorkspace(string rootPath)
     {
         if (!Directory.Exists(rootPath))
-            throw new DirectoryNotFoundException("选择的月份目录不存在。");
+            throw new DirectoryNotFoundException($"选择的月份目录不存在：{rootPath}。请检查路径或重新选择目录。");
 
         var workbooks = Directory.EnumerateFiles(rootPath, "*.*", SearchOption.TopDirectoryOnly)
             .Where(path => !Path.GetFileName(path).StartsWith("~$", StringComparison.Ordinal))
@@ -64,13 +64,12 @@ public sealed partial class PlanPdfService
             .ToArray();
         if (workbooks.Length != 1)
             throw new InvalidOperationException(
-                $"应当且只能找到一个“一二三级计划”Excel，当前找到 {workbooks.Length} 个。");
+                $"目录“{rootPath}”中应当且只能找到一个“一二三级计划”Excel，当前找到 {workbooks.Length} 个。" +
+                (workbooks.Length == 0 ? "请将源 Excel 放在月份目录下。" : $"请只保留一个源文件：{string.Join("、", workbooks.Select(Path.GetFileName))}。"));
 
         var formalFolder = Path.Combine(rootPath, "正式版");
-        if (!Directory.Exists(formalFolder))
-            throw new DirectoryNotFoundException("月份目录中缺少“正式版”文件夹。");
-
         var (year, month) = ParsePlanMonth(rootPath);
+        Directory.CreateDirectory(formalFolder);
 
         return new PlanWorkspace(rootPath, workbooks[0], formalFolder, year, month);
     }
@@ -103,7 +102,8 @@ public sealed partial class PlanPdfService
 
     private static (int Year, int Month) ValidateMonth(int year, int month)
     {
-        _ = new DateTime(year, month, 1);
+        if (year is < 1 or > 9999 || month is < 1 or > 12)
+            throw new InvalidOperationException($"目录中的计划年月无效：{year}年{month}月。月份必须为 1 至 12。");
         return (year, month);
     }
 
@@ -134,14 +134,18 @@ public sealed partial class PlanPdfService
         dynamic? worksheets = null;
         var sheets = new List<string>();
         var issues = new List<PlanAuditIssue>();
+        var stage = "启动 Microsoft Excel";
         try
         {
             excel = CreateExcel();
+            stage = $"只读打开工作簿“{workspace.WorkbookPath}”";
             workbook = excel.Workbooks.Open(workspace.WorkbookPath, ReadOnly: true);
+            stage = "读取工作表列表";
             worksheets = workbook.Worksheets;
             var sheetCount = (int)worksheets.Count;
             for (var index = 1; index <= sheetCount; index++)
             {
+                stage = $"读取第 {index} 个工作表";
                 dynamic? sheet = null;
                 try
                 {
@@ -150,6 +154,7 @@ public sealed partial class PlanPdfService
                     var name = (string)sheet.Name;
                     if (!RequiredSheetNames.Contains(name)) continue;
                     sheets.Add(name);
+                    stage = $"检查工作表“{name}”";
                     AuditSheet(sheet, workspace, issues);
                 }
                 finally
@@ -167,12 +172,17 @@ public sealed partial class PlanPdfService
                         Location = "工作簿",
                         Message = "缺少导出所需的Sheet"
                     });
+            stage = $"读取源文件状态“{workspace.WorkbookPath}”";
             return new PlanAuditResult(
                 workspace,
                 sheets,
                 issues,
                 source.LastWriteTimeUtc,
                 source.Length);
+        }
+        catch (Exception ex)
+        {
+            throw new IOException($"挂网计划检查失败，阶段：{stage}。{PrototypeBridgeProtocol.SafeError(ex)}", ex);
         }
         finally
         {
@@ -194,9 +204,11 @@ public sealed partial class PlanPdfService
         var changedCells = 0;
         var changedRows = 0;
         var succeeded = false;
+        var stage = "启动 Microsoft Excel";
         try
         {
             excel = CreateExcel();
+            stage = $"打开待修复工作簿“{workspace.WorkbookPath}”";
             workbook = excel.Workbooks.Open(workspace.WorkbookPath, ReadOnly: false);
             if (Convert.ToBoolean(workbook.ReadOnly, CultureInfo.InvariantCulture))
                 throw new IOException("源Excel当前处于只读或被其他程序占用，无法保存修复结果。");
@@ -208,6 +220,7 @@ public sealed partial class PlanPdfService
                 dynamic? sheet = null;
                 try
                 {
+                    stage = $"修复工作表“{sheetName}”";
                     sheet = worksheets.Item[sheetName];
                     if ((int)sheet.Visible != XlSheetVisible)
                         throw new InvalidOperationException($"导出所需的Sheet“{sheetName}”不可见，无法修复。");
@@ -220,9 +233,14 @@ public sealed partial class PlanPdfService
                 }
             }
 
+            stage = "保存修复结果";
             workbook.Save();
             succeeded = true;
             return new PlanRepairResult(workspace.WorkbookPath, backupPath, changedCells, changedRows);
+        }
+        catch (Exception ex)
+        {
+            throw new IOException($"挂网计划修复失败，阶段：{stage}；备份：{backupPath}。{PrototypeBridgeProtocol.SafeError(ex)}", ex);
         }
         finally
         {
@@ -831,14 +849,14 @@ public sealed partial class PlanPdfService
                 });
             }
         }
-        catch
+        catch (Exception ex)
         {
             issues.Add(new PlanAuditIssue
             {
                 Severity = "错误",
                 Sheet = sheetName,
                 Location = "打印设置",
-                Message = "无法读取打印设置",
+                Message = $"无法读取打印设置：{PrototypeBridgeProtocol.SafeError(ex)}",
                 CanAutoFix = true
             });
         }
@@ -883,9 +901,9 @@ public sealed partial class PlanPdfService
                     isProject ? "项目计划打印区域必须到实际内容" : "打印区域未覆盖有效内容或业务末列");
             }
         }
-        catch
+        catch (Exception ex)
         {
-            AddPrintAreaIssue(sheetName, issues, "无法读取打印区域");
+            AddPrintAreaIssue(sheetName, issues, $"无法读取打印区域：{PrototypeBridgeProtocol.SafeError(ex)}");
         }
         finally
         {
@@ -935,14 +953,14 @@ public sealed partial class PlanPdfService
                 });
             }
         }
-        catch
+        catch (Exception ex)
         {
             issues.Add(new PlanAuditIssue
             {
                 Severity = "错误",
                 Sheet = sheetName,
                 Location = "打印区域边框",
-                Message = "无法读取打印区域边框",
+                Message = $"无法读取打印区域边框：{PrototypeBridgeProtocol.SafeError(ex)}",
                 CanAutoFix = true
             });
         }
@@ -987,9 +1005,11 @@ public sealed partial class PlanPdfService
         dynamic? workbook = null;
         dynamic? worksheets = null;
         var files = new List<string>();
+        var stage = "启动 Microsoft Excel";
         try
         {
             excel = CreateExcel();
+            stage = $"只读打开工作簿“{workspace.WorkbookPath}”";
             workbook = excel.Workbooks.Open(workspace.WorkbookPath, ReadOnly: true);
             worksheets = workbook.Worksheets;
             for (var index = 0; index < Exports.Length; index++)
@@ -998,6 +1018,7 @@ public sealed partial class PlanPdfService
                 progress?.Report(new PlanExportProgress(index + 1, Exports.Length, item.FileTitle));
                 var filename = $"{index + 1}.太重滨海{workspace.Year}年{workspace.Month}月{item.FileTitle}.pdf";
                 var output = Path.Combine(outputFolder, filename);
+                stage = $"导出工作表“{string.Join("、", item.Sheets)}”到“{output}”";
                 ExportSheets(workbook, item.Sheets, output);
                 if (!File.Exists(output) || new FileInfo(output).Length == 0)
                     throw new IOException($"{filename} 导出失败或文件为空。");
@@ -1005,11 +1026,11 @@ public sealed partial class PlanPdfService
             }
             return new PlanExportResult(outputFolder, files);
         }
-        catch
+        catch (Exception ex)
         {
             foreach (var file in files)
                 try { File.Delete(file); } catch { }
-            throw;
+            throw new IOException($"挂网计划导出失败，阶段：{stage}。{PrototypeBridgeProtocol.SafeError(ex)}", ex);
         }
         finally
         {

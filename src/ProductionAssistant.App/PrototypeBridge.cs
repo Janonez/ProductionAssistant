@@ -32,6 +32,7 @@ internal sealed partial class PrototypeBridge
     {
         if (!PrototypeBridgeProtocol.IsTrustedPrototypeSource(args.Source)) return;
         string id = string.Empty;
+        string operation = string.Empty;
         try
         {
             using var document = JsonDocument.Parse(args.WebMessageAsJson);
@@ -45,7 +46,7 @@ internal sealed partial class PrototypeBridge
                 return;
             }
             id = ReadString(root, "id");
-            var operation = ReadString(root, "operation");
+            operation = ReadString(root, "operation");
             if (string.IsNullOrWhiteSpace(id) || !PrototypeBridgeProtocol.IsAllowed(operation))
                 throw new InvalidOperationException("无效或不允许的界面请求。");
             var payload = root.TryGetProperty("payload", out var value) ? value.Clone() : default;
@@ -72,7 +73,7 @@ internal sealed partial class PrototypeBridge
         }
         catch (Exception ex)
         {
-            RespondError(id, PrototypeBridgeProtocol.SafeError(ex));
+            RespondError(id, BridgeErrorLog.Record(operation, ex));
         }
     }
 

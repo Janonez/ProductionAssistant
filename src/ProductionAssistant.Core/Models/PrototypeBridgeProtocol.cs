@@ -95,8 +95,15 @@ public static class PrototypeBridgeProtocol
         string.Equals(route, expectedRoute, StringComparison.Ordinal) &&
         string.Equals(navigation, expectedNavigation, StringComparison.Ordinal);
 
-    public static string SafeError(Exception exception) =>
-        exception is InvalidOperationException
-            ? exception.Message[..Math.Min(exception.Message.Length, 500)]
-            : "操作未完成，请重试或检查当前模块配置。";
+    public static string SafeError(Exception exception)
+    {
+        var message = exception switch
+        {
+            InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException => exception.Message,
+            System.Runtime.InteropServices.COMException =>
+                $"系统组件调用失败：{exception.Message}（错误码 0x{exception.HResult:X8}）。",
+            _ => $"操作失败：{exception.GetType().Name}（错误码 0x{exception.HResult:X8}）。"
+        };
+        return message[..Math.Min(message.Length, 1000)];
+    }
 }

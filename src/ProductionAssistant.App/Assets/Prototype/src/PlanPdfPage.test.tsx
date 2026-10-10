@@ -81,3 +81,16 @@ it('keeps remaining errors actionable and blocks export after a failed source ch
   expect(container.textContent).toContain('日期超出计划月份')
   expect(button('导出 PDF').disabled).toBe(true)
 })
+
+it('shows the actual folder access failure with its diagnostic reference and allows checking again', async () => {
+  await choose()
+  const error = '没有权限创建文件夹：D:/plans/正式版。\n诊断编号：diag-1；日志：D:/logs/bridge-errors.log'
+  invoke.mockRejectedValueOnce(new Error(error))
+  await click('检查计划')
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(error)
+  expect(button('导出 PDF').disabled).toBe(true)
+  expect(button('检查计划').disabled).toBe(false)
+  await click('检查计划')
+  expect(container.querySelector('[role="alert"]')).toBeNull()
+  expect(container.textContent).toContain('12 个工作表')
+})
