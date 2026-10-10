@@ -10,9 +10,10 @@ public sealed record TeableQueryField(string Id, string Name, string Type, strin
 public sealed record TeableQueryView(string Id, string Name, string TeableId, string? TeableName = null);
 public sealed record TeableQuerySource(string Id, string Name, string Path, string TableId, IReadOnlyList<TeableQueryField> Fields,
     IReadOnlyList<TeableQueryView>? Views = null);
+// Enabled/WritesEnabled 保留以读取旧配置；v1.7 起不再决定运行时数据库提供方。
 public sealed record TeableQuerySettings(bool Enabled, IReadOnlyList<TeableQuerySource> Sources, bool WritesEnabled = false);
 
-/// <summary>仅存开关和迁移映射，不保存凭据。Notion ID 保持稳定，使现有日期、数值绑定无需重配。</summary>
+/// <summary>保存迁移映射和兼容字段，不保存凭据。原 ID 保持稳定，使现有日期、数值绑定无需重配。</summary>
 public static class TeableQuerySettingsStore
 {
     public static string FilePath => Path.Combine(RuntimeEnvironment.DataDirectory, "teable-query-settings.json");

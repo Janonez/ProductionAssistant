@@ -7,7 +7,8 @@ public sealed class NotionSettings
 {
     // 共用业务绑定模型；Teable 配置不包含 Notion Token，不依赖 Notion 可用性。
     [JsonIgnore] public bool UsesTeable { get; set; }
-    [JsonIgnore] public bool ConnectionConfigured => UsesTeable || !string.IsNullOrWhiteSpace(Token);
+    [JsonIgnore] public bool TeableConfigured { get; set; } = true;
+    [JsonIgnore] public bool ConnectionConfigured => UsesTeable ? TeableConfigured : !string.IsNullOrWhiteSpace(Token);
     public int ConfigVersion { get; set; } = 2;
 
     [JsonIgnore]

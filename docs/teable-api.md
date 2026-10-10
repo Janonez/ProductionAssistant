@@ -61,3 +61,7 @@ dotnet run --project tools/TeableProbe -- write C:\Temp\teable-fields.json
 后续按业务优先级接字段映射、查询适配器和入库服务，再完善关联与汇总。当前没有切换业务数据库的开关，因为还没有接入任何业务执行路径。
 
 官方契约：[读取记录](https://help.teable.io/en/api-reference/record/list-records)、[创建记录](https://help.teable.io/en/api-reference/record/create-records)、[回读记录](https://help.teable.io/en/api-reference/record/get-record)。
+
+## v1.7.0 正式业务入口
+
+应用默认读写统一使用 Teable。工具仍默认隔离于 Development；正式检查显式使用 --environment Production。映射、生产配置和回退边界见 [Teable 业务接入](teable-business.md)。本次只打包本机 Production，不创建 ZIP 或 GitHub Release。

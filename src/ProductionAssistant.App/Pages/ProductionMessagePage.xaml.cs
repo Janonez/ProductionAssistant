@@ -149,8 +149,8 @@ public sealed partial class ProductionMessagePage : Page
             if (!_settings.ConnectionConfigured)
             {
                 await ShowResultDialogAsync(
-                    "需要配置 Notion",
-                    "请先到“设置 → Notion 连接”填写令牌并刷新数据源。");
+                    "需要配置 Teable",
+                    "请先到“设置 → Teable 连接”填写令牌并刷新数据源。");
                 return;
             }
 
@@ -168,7 +168,7 @@ public sealed partial class ProductionMessagePage : Page
             {
                 await ShowResultDialogAsync(
                     "尚未获取数据源",
-                    "请先到“设置 → Notion 连接”保存连接并刷新数据源。");
+                    "请先到“设置 → Teable 连接”保存连接并刷新数据源。");
                 return;
             }
 
@@ -233,7 +233,7 @@ public sealed partial class ProductionMessagePage : Page
             var picker = new ContentDialog
             {
                 XamlRoot = XamlRoot,
-                Title = "绑定 Notion 数据源",
+                Title = "绑定 Teable 数据源",
                 Content = content,
                 PrimaryButtonText = "检测并保存",
                 CloseButtonText = "取消"
@@ -624,7 +624,7 @@ public sealed partial class ProductionMessagePage : Page
             .ToArray();
         if (missingTargets.Length > 0)
         {
-            await ShowResultDialogAsync("尚未绑定数据源", "请先检测并保存对应的 Notion 数据源字段映射。");
+            await ShowResultDialogAsync("尚未绑定数据源", "请先检测并保存对应的 Teable 数据源字段映射。");
             return;
         }
 
@@ -706,7 +706,7 @@ public sealed partial class ProductionMessagePage : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "正在写入 Notion",
+            Title = "正在写入 Teable",
             Content = content
         };
         _ = dialog.ShowAsync();

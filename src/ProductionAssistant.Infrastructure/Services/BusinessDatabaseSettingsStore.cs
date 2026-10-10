@@ -2,26 +2,27 @@ using System.Text.Json;
 
 namespace ProductionAssistant.Services;
 
-/// <summary>Teable 与 Notion 的业务绑定分开存储；切换不会覆盖原 Token、目标或缓存。</summary>
+/// <summary>正式业务绑定单独保存；原 Notion 配置仅供迁移和旧版本恢复使用。</summary>
 public static class BusinessDatabaseSettingsStore
 {
-    public static bool UsesTeable => TeableQuerySettingsStore.Load().WritesEnabled;
+    public static bool UsesTeable => true;
     public static string FilePath => Path.Combine(RuntimeEnvironment.DataDirectory, "teable-business-bindings.json");
 
     public static NotionSettings Load()
     {
-        if (!UsesTeable) return NotionSettingsStore.Load();
-        if (!File.Exists(FilePath)) throw new InvalidOperationException("请先初始化 Teable 业务绑定。");
+        // 首次安装允许打开设置；缺少绑定时由业务入口提示初始化，不读取旧数据库。
+        if (!File.Exists(FilePath)) return new() { UsesTeable = true, TeableConfigured = false };
         var settings = JsonSerializer.Deserialize<NotionSettings>(File.ReadAllText(FilePath))
             ?? throw new InvalidOperationException("Teable 业务绑定无效。");
         settings.UsesTeable = true;
+        settings.TeableConfigured = !string.IsNullOrWhiteSpace(TeableSettingsStore.Load().Token);
         settings.Token = settings.EncryptedToken = "";
         return settings;
     }
 
     public static void Save(NotionSettings settings)
     {
-        if (!settings.UsesTeable) { NotionSettingsStore.Save(settings); return; }
+        settings.UsesTeable = true;
         if (!string.IsNullOrEmpty(settings.Token) || !string.IsNullOrEmpty(settings.EncryptedToken))
             throw new InvalidOperationException("Teable 业务绑定不可包含 Notion 凭据。");
         Directory.CreateDirectory(RuntimeEnvironment.DataDirectory);
@@ -50,8 +51,6 @@ public static class BusinessImportFactory
     public static INotionImportService Create()
     {
         var mapping = TeableQuerySettingsStore.Load();
-        return mapping.WritesEnabled
-            ? new NotionImportService(settings: BusinessDatabaseSettingsStore.Load, teable: new TeableBusinessStore(mapping))
-            : new NotionImportService();
+        return new NotionImportService(settings: BusinessDatabaseSettingsStore.Load, teable: new TeableBusinessStore(mapping));
     }
 }

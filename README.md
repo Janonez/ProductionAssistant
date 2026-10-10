@@ -33,39 +33,39 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj -c Release -p:Platform=x64 -p:RuntimeEnvironment=Development --self-contained true --no-restore -o deployments\development
 ```
 
-Production 继续使用现有 `%LOCALAPPDATA%\ProductionAssistant`，Development 使用 `%LOCALAPPDATA%\ProductionAssistant\Development`。任务、执行记录、Notion 配置、Webhook、FineReport 凭据、日志、缓存和默认导出目录均随该根目录隔离。Development 不会复制 Production Secret，需要在 Development 界面中单独填写测试 Notion/消息配置。
+Production 继续使用现有 `%LOCALAPPDATA%\ProductionAssistant`，Development 使用 `%LOCALAPPDATA%\ProductionAssistant\Development`。任务、执行记录、Notion 配置、Webhook、FineReport 凭据、日志、缓存和默认导出目录均随该根目录隔离。Development 不会复制 Production Secret，需要在 Development 界面中单独填写测试 Teable/消息配置。
 
-Scheduler 由 [appsettings.Development.json](src/ProductionAssistant.App/appsettings.Development.json) 和 [appsettings.Production.json](src/ProductionAssistant.App/appsettings.Production.json) 控制；Development 默认关闭，Production 保持开启。当前项目没有 PostgreSQL、连接字符串或 migration，数据库功能实际连接 Notion，因此没有需要创建的 Development PostgreSQL 数据库。
+Scheduler 由 [appsettings.Development.json](src/ProductionAssistant.App/appsettings.Development.json) 和 [appsettings.Production.json](src/ProductionAssistant.App/appsettings.Production.json) 控制；Development 默认关闭，Production 保持开启。当前项目没有 PostgreSQL、连接字符串或 migration，当前业务通过 API 直连 Teable，本软件不直接连接 Teable 底层 PostgreSQL。
 
 ## Teable API 与迁移
 
-独立命令行入口 `tools/TeableProbe` 支持安全配置 Token、直连读取、映射和业务绑定导入、Development 开关及读写验收。API 基建历史与凭据配置见 [Teable API 联调](docs/teable-api.md)，当前业务状态见 [Teable 业务接入](docs/teable-business.md)。
+独立命令行入口 `tools/TeableProbe` 支持安全配置 Token、直连读取、映射和业务绑定导入、独立环境检查及读写验收。API 基建历史与凭据配置见 [Teable API 联调](docs/teable-api.md)，当前业务状态见 [Teable 业务接入](docs/teable-business.md)。
 
 生产业务库第一阶段创建了 9 张空表、45 个原字段及 8 个日期区间结束字段，包含关联、汇总与公式。该阶段的可恢复脚本、字段映射及验证记录见 [Teable 结构迁移](docs/teable-schema-migration.md)。
 
-2026-10-09 已完成上述九个生产库的字段数据与关联迁移，共 2,624 条记录；修复用户先行导入的精度/日期差异并核对计算结果。数据迁移范围、平台文本规范化及恢复方法见 [Teable 数据迁移](docs/teable-data-migration.md)。Development 查询、视图及当前业务模块进一步接入 Teable；Production 未切换。
+2026-10-09 已完成上述九个生产库的字段数据与关联迁移，共 2,624 条记录；修复用户先行导入的精度/日期差异并核对计算结果。数据迁移范围、平台文本规范化及恢复方法见 [Teable 数据迁移](docs/teable-data-migration.md)。v1.7.0 的 Development 和 Production 当前业务入口统一使用 Teable。
 
 ## React 新版界面
 
-桌面外壳、左侧操作栏、“每日焊接数据模拟”、“生产消息 Notion 入库”、“日报推送”和“报表中心”直接使用同一个 React + TypeScript DOM，由单一 WebView2 承载。启动默认进入“生产消息 Notion 入库”，该入口排在导航首位；左侧分组依次为数据同步、数据文件处理和自动化。没有独立的概览首页。尚未迁移的原生模块只覆盖右侧内容区，不替换 React 操作栏；配置文件与 Windows 后台能力保持不变。
+桌面外壳、左侧操作栏、“每日焊接数据模拟”、“生产消息 Teable 入库”、“日报推送”和“报表中心”直接使用同一个 React + TypeScript DOM，由单一 WebView2 承载。启动默认进入“生产消息 Teable 入库”，该入口排在导航首位；左侧分组依次为数据同步、数据文件处理和自动化。没有独立的概览首页。尚未迁移的原生模块只覆盖右侧内容区，不替换 React 操作栏；配置文件与 Windows 后台能力保持不变。
 
-每日焊接使用“录入计划 → 拆分预览 → 完成”的正式 React 页面，并与生产消息复用同一个三步进度组件。计划量和逐日量统一以吨为单位；前端通过 `weld.*` 桥接调用 Core 焊接模拟和既有 Notion 月/周/日层级写入服务，写入前校验整月日期、非负整数与总量配平，已有产量必须明确确认覆盖。旧原生焊接页面已删除。
+每日焊接使用“录入计划 → 拆分预览 → 完成”的正式 React 页面，并与生产消息复用同一个三步进度组件。计划量和逐日量统一以吨为单位；前端通过 `weld.*` 桥接调用 Core 焊接模拟和Teable 月/日层级写入服务，写入前校验整月日期、非负整数与总量配平，已有产量必须明确确认覆盖。旧原生焊接页面已删除。
 
-生产消息使用“录入消息 → 解析确认 → 完成”三步页面：目标 Notion Schema 与消息解析并行准备，字段列表始终以目标库映射为准，解析值只填入对应字段；编辑值只更新本地状态，写入前由服务端复查。冲突按字段选择保留原值或使用新值，全部字段一致时返回“无需写入”，不执行 Notion 更新。数据库更换后可从页面右上角重新绑定下料和塔筒主库。塔筒消息只把“当日”值写入主库，当月和全年累计由查询层计算；下料月计划库通过主库 Relation 动态识别，与每日数据保持独立。
+生产消息使用“录入消息 → 解析确认 → 完成”三步页面：目标 Teable Schema 与消息解析并行准备，字段列表始终以目标库映射为准，解析值只填入对应字段；编辑值只更新本地状态，写入前由服务端复查。冲突按字段选择保留原值或使用新值，全部字段一致时返回“无需写入”，不执行数据库更新。数据库更换后可从页面右上角重新绑定下料和塔筒主库。塔筒消息只把“当日”值写入主库，当月和全年累计由查询层计算；下料月计划库通过主库 Relation 动态识别，与每日数据保持独立。
 
 当前唯一视觉规范是暖中性 React 外壳、白色工作面、棕橙色主操作和 squircle 控件。前端统一使用 Inter Variable + Noto Sans SC Variable，字号按页面标题 26px、正文/区域标题 16px、控件/说明 15px、标签/状态/辅助信息 14px 分级，字重只允许 400、500、600、700。每日焊接、报表中心和生产消息已使用同一套 token；后续模块不得复制旧原生页面、过时主题或历史 CSS 规则。
 
-左侧原“设置”入口打开由 `App.tsx` 控制的全局 React 弹窗，不再切换到独立页面；关闭后仍停留在原业务页面。弹窗集中管理 Notion 连接、数据源缓存、系统通知渠道和关于信息。已保存的令牌、Webhook 与 Secret 只显示密码掩码，明文不返回前端。
+左侧原“设置”入口打开由 `App.tsx` 控制的全局 React 弹窗，不再切换到独立页面；关闭后仍停留在原业务页面。弹窗集中管理 Teable 连接、数据源缓存、系统通知渠道和关于信息。已保存的令牌、Webhook 与 Secret 只显示密码掩码，明文不返回前端。
 
 日报详情采用正文 `/` 插入、并列预览、设置弹窗与折叠记录；文件统计汇总继续独立管理 FineReport 采集与汇总。`scripts\verify.ps1` 会执行字体字重检查、前端测试、类型检查、离线生产构建、Release 编译、xUnit 测试和 Debug 发布。
 
-“数据库查看”是只读调试入口。数据库目录由当前适配器统一提供：Notion 以数据库总页面为根，先列业务页面形成的“业务板块”，再列页面内的具体数据库；不提供业务分组的本地数据库适配器会自动退化为单层数据库选择。View 下拉框只显示所选数据库自身真实存在的 View。普通 View（包括独立月计划数据库的 View）读取完整结果；仅精确名称“本年截止今日”显示日期字段、数值字段和日期查询口径。
+“数据库查看”是只读调试入口。数据库目录由当前适配器统一提供：Teable 按迁移映射保留原业务板块与数据库目录；不提供业务分组的本地数据库适配器会自动退化为单层数据库选择。View 下拉框只显示所选数据库自身真实存在的 View。普通 View（包括独立月计划数据库的 View）读取完整结果；仅精确名称“本年截止今日”显示日期字段、数值字段和日期查询口径。
 
 ## 项目结构
 
 - `ProductionAssistant.App`：WinUI 壳与页面、React/WebView2 前端资源、导航、程序入口和依赖组装。
 - `ProductionAssistant.Core`：模型、解析与纯业务计算，不依赖 UI 或外部系统。
-- `ProductionAssistant.Infrastructure`：Notion、钉钉、Excel、PDF、DPAPI、本地文件和任务计划程序。
+- `ProductionAssistant.Infrastructure`：Teable、Notion 迁移兼容、钉钉、Excel、PDF、DPAPI、本地文件和任务计划程序。
 - `ProductionAssistant.Tests`：引用真实生产程序集的自动化测试。
 
 各版本已经发布的用户可见变化见 [变更记录](CHANGELOG.md)。
@@ -86,7 +86,7 @@ Scheduler 由 [appsettings.Development.json](src/ProductionAssistant.App/appsett
 
 配置自动保存，预览、测试发送与启用相互独立。系统通知渠道已启用且 Webhook、Secret 已配置后，可从列表启用日报任务；启用不会立即补发。修改模板或字段不会自动停用任务。任务详情可手动发送今日消息；同任务、日期和模板版本已有成功记录时不重复发送。
 
-Notion 自动填报首个业务为原材料入库：每天按任务设置的时间读取 93 系统前一天记录（默认 00:00），钢板汇总为板材，其他类型为型材，按日期查重后仅新增 Notion 记录。任务详情沿用日报布局：无 Tab，右上角任务设置，左侧入库汇总与右侧 Notion 写入预览，下方折叠运行记录。预览需手动触发；改日期、名称或连接配置后旧预览失效；仅修改执行时间不影响已有验证与启用状态。只读测试不写 Notion；手动写入需在该业务页面明确确认。配置和历史分别存入 `notion-fill-jobs.json` 与 `notion-fill-runs.json`，密码以 DPAPI 加密。
+Teable 自动填报首个业务为原材料入库：每天按任务设置的时间读取 93 系统前一天记录（默认 00:00），钢板汇总为板材，其他类型为型材，按日期查重后仅新增 Teable 记录。任务详情沿用日报布局：无 Tab，右上角任务设置，左侧入库汇总与右侧 Teable 写入预览，下方折叠运行记录。预览需手动触发；改日期、名称或连接配置后旧预览失效；仅修改执行时间不影响已有验证与启用状态。只读测试不写 Teable；手动写入需在该业务页面明确确认。配置和历史分别存入 `notion-fill-jobs.json` 与 `notion-fill-runs.json`，密码以 DPAPI 加密。
 
 调度能力取决于运行环境配置中的 `Scheduler.Enabled`，与 Debug/Release 编译配置独立。Development 默认关闭调度，但仍可使用测试连接编辑、预览和测试发送。旧日报任务集合、字段与 `--send-daily-report --job-id <id>` 计划继续兼容；旧单一配置首次迁移出的任务默认停用，不等于已有多任务配置必须重新启用。
 
@@ -105,7 +105,7 @@ Notion 自动填报首个业务为原材料入库：每天按任务设置的时�
 
 腾讯文档配置现按五个 Tab 展示，顶部保留状态与停用提示，前台／后台测试通过分段控件切换；字体与其他模块统一，背景为 `#FAFAF9`。
 
-自动化任务现已开放腾讯文档填报：点选录制通用网页控件，独立检验并按年月匹配 Sheet，通过日期示范推断填写位置，再绑定 Notion 数据和执行规则。示范与表头读取支持受保护单元格；实际写入仍核对目标地址、原值和编辑权限，并刷新回读确认保存。详见[腾讯文档填报使用说明](docs/tencent-sheet-development.md)及[变更记录](CHANGELOG.md)。
+自动化任务现已开放腾讯文档填报：点选录制通用网页控件，独立检验并按年月匹配 Sheet，通过日期示范推断填写位置，再绑定 Teable 数据和执行规则。示范与表头读取支持受保护单元格；实际写入仍核对目标地址、原值和编辑权限，并刷新回读确认保存。详见[腾讯文档填报使用说明](docs/tencent-sheet-development.md)及[变更记录](CHANGELOG.md)。
 
 腾讯文档填报需要 Node.js 20 或更新版本（可从 PATH 调用）及 Microsoft Edge；Playwright 已随包提供。Development 与 Production 的任务、登录状态和凭据保持隔离，升级不会自动复制测试配置到正式环境。
 
@@ -123,7 +123,7 @@ Notion 自动填报首个业务为原材料入库：每天按任务设置的时�
 
 ## 已知限制与后续优化
 
-当前 React 桌面外壳由 WinUI 3 内的单一 WebView2 承载。冷启动显示中性灰色结构骨架，优先加载生产消息页面与操作栏，其他业务页面按需加载；设置窗口代码直接加载，打开时显示正式表单，配置读取期间禁用操作，不使用整页骨架或入场动画；首屏读取本地数据库绑定，不自动查询 Notion。普通切页保留操作栏，按目标页面的实际布局显示骨架；任务列表、数据库选择、任务详情 iframe、运行记录与数据预览均在内容所在区域占位。已有查询结果刷新时保留原布局，写入和导出保留真实执行进度。目标页面挂载后发送带导航令牌的界面就绪消息，不等同于业务数据已读取完成。应用保留共享环境预热和导航后的 15 秒就绪超时；重试重新加载前端资源。startup.log 分别记录应用构造、窗口创建/激活、Environment 创建、WebView 控件创建、导航及 React 就绪；前端入口与就绪毫秒数相对网页导航开始，不与宿主累计计时直接相减；另记录各路由等待和生产消息绑定/自动化列表读取耗时。实际冷启动耗时、内存与目标设备体验仍需人工测量，构建体积缩小不等于性能已经验收。
+当前 React 桌面外壳由 WinUI 3 内的单一 WebView2 承载。冷启动显示中性灰色结构骨架，优先加载生产消息页面与操作栏，其他业务页面按需加载；设置窗口代码直接加载，打开时显示正式表单，配置读取期间禁用操作，不使用整页骨架或入场动画；首屏读取本地数据库绑定，不自动查询数据库。普通切页保留操作栏，按目标页面的实际布局显示骨架；任务列表、数据库选择、任务详情 iframe、运行记录与数据预览均在内容所在区域占位。已有查询结果刷新时保留原布局，写入和导出保留真实执行进度。目标页面挂载后发送带导航令牌的界面就绪消息，不等同于业务数据已读取完成。应用保留共享环境预热和导航后的 15 秒就绪超时；重试重新加载前端资源。startup.log 分别记录应用构造、窗口创建/激活、Environment 创建、WebView 控件创建、导航及 React 就绪；前端入口与就绪毫秒数相对网页导航开始，不与宿主累计计时直接相减；另记录各路由等待和生产消息绑定/自动化列表读取耗时。实际冷启动耗时、内存与目标设备体验仍需人工测量，构建体积缩小不等于性能已经验收。
 ## Teable 业务读写
 
-迁移后的生产库、21 个视图、生产消息、焊接层级和原材料入库接入，Development 开关、回退及桌面验收方法见 [Teable 业务接入](docs/teable-business.md)。塔筒月报/年报不迁移，机加工后续完善暂缓；不宣称整个 Notion 工作区已全面迁移。
+迁移后的生产库、21 个视图、生产消息、焊接层级和原材料入库接入，环境配置、旧版本回退及桌面验收方法见 [Teable 业务接入](docs/teable-business.md)。塔筒月报/年报不迁移，机加工后续完善暂缓；不宣称整个 Notion 工作区已全面迁移。

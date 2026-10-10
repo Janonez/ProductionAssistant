@@ -34,7 +34,7 @@ beforeEach(() => {
     if (operation === 'weld.getState') return Promise.resolve(state)
     if (operation === 'weld.generate') return Promise.resolve(generatedRows(payload!.month!, Number(payload!.total)))
     if (operation === 'weld.check') return Promise.resolve({ succeeded: true, message: '检查完成。', hasExistingData: false, items: [] })
-    if (operation === 'weld.write') return Promise.resolve({ succeeded: true, message: '已写入 Notion。' })
+    if (operation === 'weld.write') return Promise.resolve({ succeeded: true, message: '已写入 Teable。' })
     return Promise.resolve({})
   })
 })
@@ -123,7 +123,7 @@ describe('daily weld workflow', () => {
     expect(invoke.mock.calls.map(call => call[0])).toContain('weld.check')
     expect(invoke.mock.calls.map(call => call[0])).toContain('weld.write')
     expect(container.textContent).toContain('入库完成')
-    expect(container.textContent).toContain('已写入 Notion。')
+    expect(container.textContent).toContain('已写入 Teable。')
   })
 
   it('requires explicit confirmation before overwriting an existing month', async () => {

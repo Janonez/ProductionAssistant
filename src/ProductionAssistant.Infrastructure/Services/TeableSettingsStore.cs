@@ -19,7 +19,7 @@ public static class TeableSettingsStore
 
     public static TeableSettings Load()
     {
-        if (!File.Exists(FilePath)) throw new InvalidOperationException("请先运行 configure 配置 Teable。");
+        if (!File.Exists(FilePath)) return new();
         var settings = JsonSerializer.Deserialize<TeableSettings>(File.ReadAllText(FilePath))
             ?? throw new InvalidOperationException("Teable 配置无效。");
         settings.Token = WindowsTokenProtector.Unprotect(settings.EncryptedToken);
@@ -29,8 +29,8 @@ public static class TeableSettingsStore
     public static void Save(TeableSettings settings)
     {
         using var validation = new TeableClient(settings.ServerUrl, settings.Token);
-        if (string.IsNullOrWhiteSpace(settings.TableId) ||
-            !settings.TableId.StartsWith("tbl", StringComparison.Ordinal) || !settings.TableId.All(char.IsAsciiLetterOrDigit))
+        if (!string.IsNullOrWhiteSpace(settings.TableId) &&
+            (!settings.TableId.StartsWith("tbl", StringComparison.Ordinal) || !settings.TableId.All(char.IsAsciiLetterOrDigit)))
             throw new ArgumentException("测试表 ID 必须是 tbl 开头的字母数字 ID。");
         settings.EncryptedToken = WindowsTokenProtector.Protect(settings.Token);
         Directory.CreateDirectory(RuntimeEnvironment.DataDirectory);

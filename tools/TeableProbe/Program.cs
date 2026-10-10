@@ -3,10 +3,19 @@ using System.Text;
 using System.Text.Json.Nodes;
 using ProductionAssistant.Services;
 
-// Development API/业务验收入口，不启动桌面应用；Production 配置不受影响。
-Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", "Development");
+// 默认隔离于 Development；正式环境检查必须显式指定，避免误改生产配置。
+var environment = "Development";
+if (args.Length >= 2 && args[0] == "--environment")
+{
+    environment = args[1];
+    if (environment is not ("Development" or "Production")) return 2;
+    args = args[2..];
+}
+Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", environment);
 try
 {
+    if (args.Length == 1 && args[0] is "disable-query" or "disable-business")
+        throw new InvalidOperationException("v1.7 起固定使用 Teable；回退须恢复旧软件和配置备份。");
     if (args.Length == 3 && args[0] == "business-smoke")
         return await BusinessSmoke.RunAsync(args[1], args[2]);
     if (args.Length == 2 && args[0] == "import-business-bindings")
@@ -23,7 +32,7 @@ try
         }
         if (bindings.Targets.Count == 0) throw new InvalidOperationException("没有可迁移的业务绑定。");
         BusinessDatabaseSettingsStore.Save(bindings);
-        Console.WriteLine($"已验证并导入 {bindings.Targets.Count} 个业务绑定；未复制 Notion 凭据，未启用写入。");
+        Console.WriteLine($"已验证并导入 {bindings.Targets.Count} 个业务绑定；未复制 Notion 凭据。");
         return 0;
     }
     if (args.Length == 1 && args[0] is "business-check" or "enable-business" or "disable-business")
@@ -42,7 +51,7 @@ try
         if (args[0] != "business-check")
         {
             TeableQuerySettingsStore.Save(mapping with { WritesEnabled = args[0] == "enable-business", Enabled = args[0] == "enable-business" || mapping.Enabled });
-            Console.WriteLine("已保存 Development 业务开关；重启应用生效。Production 未修改。");
+            Console.WriteLine("兼容字段已保存；应用固定使用 Teable。");
         }
         return 0;
     }
@@ -54,7 +63,7 @@ try
         var provider = new TeableDatabaseQueryProvider(mapping);
         foreach (var source in provider.GetSources()) await provider.GetSchemaAsync(source.Id);
         TeableQuerySettingsStore.Save(mapping);
-        Console.WriteLine($"已验证并导入 {mapping.Sources.Count} 张表映射；保留现有开关，初次默认关闭。");
+        Console.WriteLine($"已验证并导入 {mapping.Sources.Count} 张表映射；保留兼容字段，应用固定使用 Teable。");
         return 0;
     }
     if (args.Length == 1 && args[0] is "query-check" or "enable-query" or "disable-query")
@@ -81,7 +90,7 @@ try
         if (args[0] != "query-check")
         {
             TeableQuerySettingsStore.Save(mapping with { Enabled = args[0] == "enable-query", WritesEnabled = args[0] == "enable-query" && mapping.WritesEnabled });
-            Console.WriteLine("已保存 Development 查询开关；重启应用后生效。Production 配置未修改。");
+            Console.WriteLine("兼容字段已保存；应用固定使用 Teable。");
         }
         return 0;
     }
@@ -107,7 +116,7 @@ try
     }
     if (!(args.Length == 1 && args[0] == "check") && !(args.Length == 2 && args[0] == "write"))
     {
-        Console.WriteLine("用法: configure [实例地址 表ID] | check | write <fields.json> | import-query-map <schema-state.json> [views-state.json] | query-check | enable-query | disable-query | import-business-bindings <notion-settings.json> | business-check | enable-business | disable-business | business-smoke <scratch-mapping.json> <notion-settings.json>。write 和 business-smoke 会创建真实记录。");
+        Console.WriteLine("用法: [--environment Development|Production] configure [实例地址 表ID] | check | write <fields.json> | import-query-map <schema-state.json> [views-state.json] | query-check | enable-query | import-business-bindings <notion-settings.json> | business-check | enable-business | business-smoke <scratch-mapping.json> <notion-settings.json>。write 和 business-smoke 会创建真实记录。");
         return 2;
     }
     var settings = TeableSettingsStore.Load();

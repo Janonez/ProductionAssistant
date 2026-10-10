@@ -178,8 +178,8 @@ it('leaves configuration and preview intact on save failure; execution failure b
   invoke.mockRejectedValueOnce(new Error('保存失败'));
   await save(); expect(node('settings-note').textContent).toBe('保存失败'); expect(node('name').textContent).toBe('原材料入库自动填报');
   await act(async () => doc.querySelector<HTMLButtonElement>('#settings [data-close]')!.click());
-  await click('run'); invoke.mockRejectedValueOnce(new Error('Notion 写入失败')); await click('confirm-run');
-  expect(node('feedback').textContent).toBe('Notion 写入失败'); expect(button('run').disabled).toBe(true);
+  await click('run'); invoke.mockRejectedValueOnce(new Error('Teable 写入失败')); await click('confirm-run');
+  expect(node('feedback').textContent).toBe('Teable 写入失败'); expect(button('run').disabled).toBe(true);
 });
 
 it('loads real history on disclosure and keeps failure details visible', async () => {

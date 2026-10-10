@@ -32,9 +32,9 @@ const pendingSettings: SettingsState = { notion: { configured: false, rootPageId
 const maskedCredential = '••••••••••••'
 
 const navItems: { key: SettingsPage; label: string; keywords: string; icon: React.ReactNode }[] = [
-  { key: 'connection', label: '连接', keywords: 'Teable Notion API 令牌 实例 根页面 数据源', icon: <LinkIcon /> },
+  { key: 'connection', label: '连接', keywords: 'Teable API 令牌 实例 数据源', icon: <LinkIcon /> },
   { key: 'notification', label: '通知', keywords: '钉钉 Webhook Secret 规则', icon: <BellIcon /> },
-  { key: 'data', label: '数据与缓存', keywords: 'Notion 数据源 缓存 绑定', icon: <DatabaseIcon /> },
+  { key: 'data', label: '数据与缓存', keywords: 'Teable 数据源 缓存 绑定', icon: <DatabaseIcon /> },
   { key: 'about', label: '关于', keywords: '版本 WebView2 React TypeScript', icon: <InfoIcon /> },
 ]
 
@@ -154,7 +154,7 @@ function ConnectionSettings({ state, busy, run, pending = false }: {
   const [tokenChanged, setTokenChanged] = useState(false)
   const [rootPageId, setRootPageId] = useState(state.notion.rootPageId)
   const [serverUrl, setServerUrl] = useState(state.notion.serverUrl ?? '')
-  const provider = state.notion.provider ?? 'Notion'
+  const provider = state.notion.provider ?? 'Teable'
   useEffect(() => setRootPageId(state.notion.rootPageId), [state.notion.rootPageId])
   useEffect(() => setServerUrl(state.notion.serverUrl ?? ''), [state.notion.serverUrl])
 
@@ -287,7 +287,7 @@ function DataSettings({ state, busy, run }: {
 }) {
   return <SettingsPageLayout title="数据与缓存" description="查看和维护生产助手保存在本机的数据源缓存。">
     <SettingsSection title="本地数据">
-      <SettingsRow title={`${state.notion.provider ?? 'Notion'} 数据源缓存`} description="用于减少重复的网络请求">
+      <SettingsRow title={`${state.notion.provider ?? 'Teable'} 数据源缓存`} description="用于减少重复的网络请求">
         <div className="settings-inline-actions"><span className="settings-value">{state.notion.dataSourceCount} 个</span><button type="button" className="settings-text-button" disabled={!!busy} onClick={() => run('settings.refreshDataSources')}>{busy === 'settings.refreshDataSources' && <Spinner />} {busy === 'settings.refreshDataSources' ? '刷新中…' : '刷新'}</button></div>
       </SettingsRow>
       <SettingsRow title="上次同步" description="数据源元信息最后更新时间"><span className="settings-value">{state.notion.lastSyncedAt || '尚未同步'}</span></SettingsRow>

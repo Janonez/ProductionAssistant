@@ -56,7 +56,7 @@ describe('connected production message workflow', () => {
   it('keeps field edits local and only rechecks after the target date changes', async () => {
     expect(container.querySelector('.content-header h1')?.textContent).toBe('生产消息入库')
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Notion 入库')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
     expect(container.querySelector('.workspace-panel')).toBeTruthy()
     const textarea = container.querySelector('textarea')!
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '8.13下料2吨'); textarea.dispatchEvent(new Event('input', { bubbles: true })) })
@@ -354,13 +354,13 @@ describe('connected production message workflow', () => {
     expect(container.textContent).toContain('生产会资料拆分')
     expect(container.textContent).toContain('数据同步')
     expect(container.textContent).toContain('每日焊接数据模拟')
-    expect(container.textContent).toContain('生产消息 Notion 入库')
+    expect(container.textContent).toContain('生产消息 Teable 入库')
     expect(container.textContent).toContain('自动化任务')
     expect(container.textContent).toContain('文件统计汇总')
     expect(container.textContent).toContain('自动化任务')
     expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Notion 入库')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
     const dailyReport = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('自动化任务')) as HTMLButtonElement
     await act(async () => { dailyReport.click(); await Promise.resolve() })
     expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'daily-report' })
@@ -469,7 +469,7 @@ describe('shared operation sidebar', () => {
     expect(container.textContent).toContain('生产会资料拆分')
     expect(container.textContent).toContain('数据同步')
     expect(container.textContent).toContain('每日焊接数据模拟')
-    expect(container.textContent).toContain('生产消息 Notion 入库')
+    expect(container.textContent).toContain('生产消息 Teable 入库')
     expect(container.textContent).toContain('自动化任务')
     expect(container.textContent).toContain('文件统计汇总')
     expect(container.textContent).toContain('自动化任务')
@@ -477,7 +477,7 @@ describe('shared operation sidebar', () => {
     expect(container.textContent).not.toContain('概览')
     expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Notion 入库')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
 
     const dailyReport = [...container.querySelectorAll('button')]
       .find(button => button.textContent?.includes('自动化任务')) as HTMLButtonElement
@@ -511,7 +511,7 @@ describe('shared operation sidebar', () => {
     expect(container.querySelector('[role="dialog"]')).toBeTruthy()
     expect(container.querySelector('.settings-page-header h1')?.textContent).toBe('连接')
     expect((container.querySelector('.settings-input[type="password"]') as HTMLInputElement).value).not.toBe('')
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Notion 入库')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
     expect(invoke).toHaveBeenCalledWith('settings.open')
     expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', { tag: 'settings' })
 
@@ -558,7 +558,7 @@ describe('host lifecycle', () => {
     await act(async () => { await vi.dynamicImportSettled() })
     expect(notifyReady).toHaveBeenLastCalledWith('navigation:plan-pdf', 'first')
     const openProduction = [...container.querySelectorAll('button')]
-      .find(button => button.textContent?.includes('生产消息 Notion 入库')) as HTMLButtonElement
+      .find(button => button.textContent?.includes('生产消息 Teable 入库')) as HTMLButtonElement
     await act(async () => { openProduction.click() })
     expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'production-message' })
 
@@ -596,7 +596,7 @@ describe('automation task creation', () => {
     await act(async () => { newTask.click() })
     expect(document.body.textContent).toContain('先选择任务类型')
     expect(document.body.textContent).toContain('日报推送')
-    expect(document.body.textContent).toContain('Notion 自动填报')
+    expect(document.body.textContent).toContain('Teable 自动填报')
 
     const daily = [...document.querySelectorAll<HTMLButtonElement>('.automation-create-types button')].find(button => button.textContent?.includes('日报推送'))!
     await act(async () => { daily.click() })
@@ -621,7 +621,7 @@ describe('automation task creation', () => {
     document.body.append(container)
     let created = false
     invoke.mockReset().mockImplementation((operation: string) => {
-      if (operation === 'automation.list') return Promise.resolve({ tasks: created ? [{ taskType: 'notion_fill', taskTypeName: 'Notion 自动填报', id: 'new-fill', name: '原材料入库自动填报', schedule: '每天 00:00 · 前一天', isEnabled: false, schedulingAvailable: true, status: 'pending-test', schedulerMessage: '', connectionStatus: '93系统 + Notion', lastRun: '暂无运行记录' }] : [] })
+      if (operation === 'automation.list') return Promise.resolve({ tasks: created ? [{ taskType: 'notion_fill', taskTypeName: 'Teable 自动填报', id: 'new-fill', name: '原材料入库自动填报', schedule: '每天 00:00 · 前一天', isEnabled: false, schedulingAvailable: true, status: 'pending-test', schedulerMessage: '', connectionStatus: '93系统 + Teable', lastRun: '暂无运行记录' }] : [] })
       if (operation === 'notionFill.create') { created = true; return Promise.resolve({ id: 'new-fill' }) }
       if (operation === 'notionFill.get') return Promise.resolve({ id: 'new-fill', name: '原材料入库自动填报', baseUrl: 'https://internal.example.test', sourcePageUrl: 'https://internal.example.test/inbound/summary.php', username: 'tester', passwordConfigured: true, notionConfigured: true, targetDataSourceName: '原材料入库数据库', validated: false, isEnabled: false, schedulingAvailable: true, schedule: '每天 00:00 · 填报前一天', schedulerInstalled: false, schedulerMessage: '', runs: [] })
       return Promise.resolve({})
@@ -632,9 +632,9 @@ describe('automation task creation', () => {
     await act(async () => { await vi.dynamicImportSettled() })
 
     await act(async () => { ([...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('新建任务'))!).click() })
-    await act(async () => { ([...document.querySelectorAll<HTMLButtonElement>('.automation-create-types button')].find(button => button.textContent?.includes('Notion 自动填报'))!).click() })
+    await act(async () => { ([...document.querySelectorAll<HTMLButtonElement>('.automation-create-types button')].find(button => button.textContent?.includes('Teable 自动填报'))!).click() })
     await act(async () => { ([...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '下一步')!).click() })
-    expect(document.body.textContent).toContain('凭据只归 NotionFill 任务所有')
+    expect(document.body.textContent).toContain('凭据只归当前自动填报任务所有')
     expect(document.body.textContent).toContain('按日期查重，仅新增')
 
     const inputs = document.querySelectorAll<HTMLInputElement>('.automation-create-step input')
@@ -681,7 +681,7 @@ describe('Notion fill workflow', () => {
     const container = document.createElement('div')
     document.body.append(container)
     invoke.mockReset().mockImplementation((operation: string) => {
-      if (operation === 'automation.list') return Promise.resolve({ tasks: [{ taskType: 'notion_fill', taskTypeName: 'Notion 自动填报', id: 'fill-1', name: '原材料入库自动填报', schedule: '每天 00:00 · 前一天', isEnabled: false, schedulingAvailable: true, status: 'pending-test', schedulerMessage: '', connectionStatus: '93系统 + Notion', lastRun: '暂无运行记录' }] })
+      if (operation === 'automation.list') return Promise.resolve({ tasks: [{ taskType: 'notion_fill', taskTypeName: 'Teable 自动填报', id: 'fill-1', name: '原材料入库自动填报', schedule: '每天 00:00 · 前一天', isEnabled: false, schedulingAvailable: true, status: 'pending-test', schedulerMessage: '', connectionStatus: '93系统 + Teable', lastRun: '暂无运行记录' }] })
       if (operation === 'notionFill.get') return Promise.resolve({ id: 'fill-1', name: '原材料入库自动填报', sourcePageUrl: 'https://internal.example.test/inbound/summary.php', username: 'tester', passwordConfigured: true, notionConfigured: true, targetDataSourceName: '原材料入库数据库', validated: false, isEnabled: false, schedulingAvailable: true, schedule: '每天 00:00 · 填报前一天', schedulerInstalled: false, schedulerMessage: '', runs: [] })
       return Promise.resolve({})
     })

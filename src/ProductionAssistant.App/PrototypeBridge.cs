@@ -319,7 +319,7 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> SaveBindingsAsync(JsonElement payload, CancellationToken cancellationToken)
     {
         var settings = BusinessDatabaseSettingsStore.Load();
-        if (!settings.ConnectionConfigured) throw new InvalidOperationException("请先在原版设置页配置 Notion 连接。");
+        if (!settings.ConnectionConfigured) throw new InvalidOperationException("请先在原版设置页配置 Teable 连接。");
         var selections = new Dictionary<string, string>
         {
             ["cutting"] = ReadString(payload, "cutting"),
@@ -330,7 +330,7 @@ internal sealed partial class PrototypeBridge
         var sources = selections.ToDictionary(pair => pair.Key,
             pair => string.IsNullOrWhiteSpace(pair.Value) ? null : settings.CachedDataSources.FirstOrDefault(source => source.Id == pair.Value));
         if (sources.Where(pair => !string.IsNullOrWhiteSpace(selections[pair.Key])).Any(pair => pair.Value is null))
-            throw new InvalidOperationException("选择的数据源已不在缓存中，请先刷新 Notion 数据源。");
+            throw new InvalidOperationException("选择的数据源已不在缓存中，请先刷新 Teable 数据源。");
 
         var bindings = new List<NotionTargetSettings>();
         if (sources["cutting"] is not null)

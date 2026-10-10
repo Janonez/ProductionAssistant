@@ -252,7 +252,7 @@ internal sealed partial class PrototypeBridge
     {
         var id = ReadString(payload, "id");
         return NotionFillSettingsStore.LoadCatalog().Jobs.FirstOrDefault(job => job.Id == id)
-            ?? throw new InvalidOperationException("找不到指定的 Notion 自动填报任务。");
+            ?? throw new InvalidOperationException("找不到指定的 Teable 自动填报任务。");
     }
 
     private static string NormalizeNotionFillSourcePageUrl(string value)

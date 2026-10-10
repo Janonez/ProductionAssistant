@@ -46,7 +46,7 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
             return new(false, (int)NotionFillExitCode.InvalidConfiguration, ex.Message);
         }
         if (job is null || job.Id != context.TaskId)
-            return new(false, (int)NotionFillExitCode.InvalidConfiguration, "Notion 自动填报任务配置无效。");
+            return new(false, (int)NotionFillExitCode.InvalidConfiguration, "Teable 自动填报任务配置无效。");
 
         return await ExecuteForDateAsync(
             job,
@@ -141,7 +141,7 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
         if (!BusinessDatabaseSettingsStore.Load().ConnectionConfigured)
             return ("target", "请先在系统设置中配置并测试数据库连接。");
         if (string.IsNullOrWhiteSpace(job.TargetDataSourceId))
-            return ("target", "没有找到原材料入库数据库，请先刷新 Notion 数据库目录。");
+            return ("target", "没有找到原材料入库数据库，请先刷新 Teable 数据库目录。");
         if (!job.ConfigurationValidated) return ("test", "请先使用历史日期完成只读测试。");
         return null;
     }
@@ -151,7 +151,7 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
 
     private static NotionFillJob FindJob(string taskId) =>
         NotionFillSettingsStore.LoadCatalog().Jobs.FirstOrDefault(job => job.Id == taskId)
-        ?? throw new InvalidOperationException("找不到指定的 Notion 自动填报任务。");
+        ?? throw new InvalidOperationException("找不到指定的 Teable 自动填报任务。");
 
     private static AutomationTaskSummary ToSummary(
         NotionFillJob job,

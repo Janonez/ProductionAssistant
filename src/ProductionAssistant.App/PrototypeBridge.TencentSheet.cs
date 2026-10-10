@@ -48,7 +48,7 @@ internal sealed partial class PrototypeBridge
         if (operation is "schema" or "views")
         {
             var sourceId = ReadString(payload, "sourceId");
-            if (!AppServices.DatabaseProvider.GetSources().Any(source => source.Id == sourceId)) throw new InvalidOperationException("请选择现有 Notion 数据库。");
+            if (!AppServices.DatabaseProvider.GetSources().Any(source => source.Id == sourceId)) throw new InvalidOperationException("请选择现有 Teable 数据库。");
             if (operation == "views") return new { views = await AppServices.DatabaseProvider.GetDatasetsAsync(sourceId, cancellationToken) };
             var schema = await AppServices.DatabaseProvider.GetSchemaAsync(sourceId, cancellationToken);
             if (!schema.Succeeded) throw new InvalidOperationException(schema.Message);

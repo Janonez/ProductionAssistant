@@ -4,7 +4,7 @@ type Module = {
 }
 
 export const modules: Module[] = [
-  { category: '数据同步', name: '生产消息 Notion 入库' },
+  { category: '数据同步', name: '生产消息 Teable 入库' },
   { category: '数据同步', name: '每日焊接数据模拟' },
   { category: '数据同步', name: '数据库查看' },
   { category: '数据文件处理', name: '挂网计划 PDF 导出' },
@@ -20,7 +20,7 @@ function routeFor(name: string) {
     case '挂网计划 PDF 导出': return 'plan-pdf'
     case '生产会资料拆分': return 'production-meeting'
     case '每日焊接数据模拟': return 'daily-weld'
-    case '生产消息 Notion 入库': return 'production-message'
+    case '生产消息 Teable 入库': return 'production-message'
     case '数据库查看': return 'database-viewer'
     case '文件统计汇总': return 'report-center'
     case '自动化任务': return 'daily-report'
@@ -80,7 +80,7 @@ function NavIcon({ name }: { name: string }) {
       <path className="daily-check" d="m8.5 14 2 2 4.5-4.5" />
     </svg>
   }
-  if (name === '生产消息 Notion 入库') {
+  if (name === '生产消息 Teable 入库') {
     return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 14.5 6.2 6h11.6l2.2 8.5V19H4v-4.5Z" />
       <path className="inbox-tray" d="M4.3 14h4.1l1.2 2h4.8l1.2-2h4.1" />

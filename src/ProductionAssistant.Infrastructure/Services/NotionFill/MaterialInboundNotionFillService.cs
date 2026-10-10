@@ -35,7 +35,7 @@ public sealed class MaterialInboundNotionFillService
         ValidateJob(job);
         var notionSettings = _settings();
         if (!notionSettings.ConnectionConfigured)
-            throw new InvalidOperationException("请先在系统设置中配置 Notion 连接。");
+            throw new InvalidOperationException("请先在系统设置中配置数据库连接。");
 
         TargetSchema schema;
         try
@@ -44,7 +44,7 @@ public sealed class MaterialInboundNotionFillService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw new InvalidOperationException($"检查 Notion 目标数据库结构失败：{ex.Message}", ex);
+            throw new InvalidOperationException($"检查目标数据库结构失败：{ex.Message}", ex);
         }
         var summary = await ReadSourceAsync(job, businessDate, cancellationToken);
         int existing;
@@ -55,10 +55,10 @@ public sealed class MaterialInboundNotionFillService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw new InvalidOperationException($"检查 Notion 目标日期是否已存在失败：{ex.Message}", ex);
+            throw new InvalidOperationException($"检查目标日期是否已存在失败：{ex.Message}", ex);
         }
         if (existing > 1)
-            throw new InvalidOperationException($"Notion 中 {businessDate:yyyy-MM-dd} 已存在 {existing} 条记录，请先人工处理重复数据。");
+            throw new InvalidOperationException($"数据库中 {businessDate:yyyy-MM-dd} 已存在 {existing} 条记录，请先人工处理重复数据。");
         return new(summary, existing == 1, existing == 1
             ? "目标日期已有记录，正式执行时不会重复新增。"
             : "93系统读取成功，目标日期可以新增。");
@@ -106,7 +106,7 @@ public sealed class MaterialInboundNotionFillService
         if (preview.TargetRecordExists) return;
         var notionSettings = _settings();
         if (!notionSettings.ConnectionConfigured)
-            throw new InvalidOperationException("请先在系统设置中配置 Notion 连接。");
+            throw new InvalidOperationException("请先在系统设置中配置数据库连接。");
         var schema = await ResolveSchemaAsync(job, notionSettings.Token, cancellationToken);
         var date = preview.Summary.Date;
         var properties = new Dictionary<string, object>
@@ -185,7 +185,7 @@ public sealed class MaterialInboundNotionFillService
     {
         ValidateSource(job);
         if (string.IsNullOrWhiteSpace(job.TargetDataSourceId))
-            throw new InvalidOperationException("没有找到原材料入库数据库，请先刷新 Notion 数据库目录。");
+            throw new InvalidOperationException("没有找到原材料入库数据库，请先刷新数据库目录。");
     }
 
     private static void ValidateSource(NotionFillJob job)
