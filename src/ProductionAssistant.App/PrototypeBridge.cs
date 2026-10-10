@@ -51,6 +51,10 @@ internal sealed partial class PrototypeBridge
                 throw new InvalidOperationException("无效或不允许的界面请求。");
             var payload = root.TryGetProperty("payload", out var value) ? value.Clone() : default;
 
+            // Native dialogs must open after WebMessageReceived returns, outside WebView2's callback.
+            if (operation is "plan.pickFolder" or "meeting.pickFile")
+                await Task.Yield();
+
             if (operation == "production.cancel")
             {
                 _activeOperation?.Cancel();

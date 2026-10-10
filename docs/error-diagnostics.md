@@ -15,3 +15,11 @@
 进入 Excel 后，失败信息包含检查、修复或导出阶段及相关工作簿、工作表或输出文件。打印设置、打印区域和边框读取失败的检查结果保留底层异常原因。修复仍先备份并复查，候选 PDF 仍输出到预览目录，不覆盖正式版。
 
 命令行回归测试验证目录前置检查和错误诊断；它们不证明真实 Excel COM、打印驱动或 PDF 内容已通过桌面验收。
+
+## 文件或目录选择器故障
+
+若日志中的操作是 `plan.pickFolder` 或 `meeting.pickFile`，失败发生在选择器阶段，尚未开始 Excel 业务处理。2026-10-10 的 `0x800706BE` 同时对应 Windows 事件日志中的 `PickerHost.exe` 和生产助手 `AppHangB1`。
+
+挂网和生产会的 React 桥接及保留原生页面均使用现有 Windows App SDK 1.8 的 `Microsoft.Windows.Storage.Pickers`，通过主窗口 `AppWindow.Id` 关联。桥接打开选择器前先让出 WebView2 消息回调，避免在回调中启动模态对话框；取消仍返回空路径。参考 [桌面选择器](https://learn.microsoft.com/en-us/windows/apps/develop/files/using-file-folder-pickers)和 [WebView2 重入限制](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/threading-model)。
+
+桌面验收需确认选择目录、选择 Excel、取消、重复打开后页面仍响应，并能继续检查或拆分。编译和模拟桥接测试不能证明系统对话框已在用户电脑上恢复。

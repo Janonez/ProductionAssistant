@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using ProductionAssistant.Models;
 using ProductionAssistant.Services;
-using Windows.Storage.Pickers;
+using Microsoft.Windows.Storage.Pickers;
 
 namespace ProductionAssistant.Pages;
 
@@ -34,12 +34,10 @@ public sealed partial class ProductionMeetingExportPage : Page
 
     private async void BrowseRequested(object sender, RoutedEventArgs e)
     {
-        var picker = new FileOpenPicker();
+        var picker = new FileOpenPicker(App.MainWindow.AppWindow.Id);
         picker.FileTypeFilter.Add(".xlsx");
         picker.FileTypeFilter.Add(".xlsm");
         picker.FileTypeFilter.Add(".xls");
-        var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
         var file = await picker.PickSingleFileAsync();
         if (file is null) return;
 
