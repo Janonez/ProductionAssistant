@@ -145,12 +145,12 @@ public sealed partial class ProductionMessagePage : Page
         SetBusy(true);
         try
         {
-            _settings = NotionSettingsStore.Load();
-            if (string.IsNullOrWhiteSpace(_settings.Token))
+            _settings = BusinessDatabaseSettingsStore.Load();
+            if (!_settings.ConnectionConfigured)
             {
                 await ShowResultDialogAsync(
-                    "需要配置 Notion",
-                    "请先到“设置 → Notion 连接”填写令牌并刷新数据源。");
+                    "需要配置 Teable",
+                    "请先到“设置 → Teable 连接”填写令牌并刷新数据源。");
                 return;
             }
 
@@ -168,7 +168,7 @@ public sealed partial class ProductionMessagePage : Page
             {
                 await ShowResultDialogAsync(
                     "尚未获取数据源",
-                    "请先到“设置 → Notion 连接”保存连接并刷新数据源。");
+                    "请先到“设置 → Teable 连接”保存连接并刷新数据源。");
                 return;
             }
 
@@ -233,7 +233,7 @@ public sealed partial class ProductionMessagePage : Page
             var picker = new ContentDialog
             {
                 XamlRoot = XamlRoot,
-                Title = "绑定 Notion 数据源",
+                Title = "绑定 Teable 数据源",
                 Content = content,
                 PrimaryButtonText = "检测并保存",
                 CloseButtonText = "取消"
@@ -302,7 +302,7 @@ public sealed partial class ProductionMessagePage : Page
                     previous.PropertyMappings = binding.PropertyMappings;
                 }
             }
-            NotionSettingsStore.Save(_settings);
+            BusinessDatabaseSettingsStore.Save(_settings);
             RefreshBindingStatus();
             SetResultStatus("绑定已保存", "已检测并保存已选择的数据源字段；后续写入会复用这些映射。", InfoBarSeverity.Success);
         }
@@ -359,7 +359,7 @@ public sealed partial class ProductionMessagePage : Page
 
     private async Task VerifyProductionBindingsAsync()
     {
-        _settings = NotionSettingsStore.Load();
+        _settings = BusinessDatabaseSettingsStore.Load();
         var targets = TowerBindingKeys
             .Select(key => FindTarget(_settings, key))
             .ToArray();
@@ -511,9 +511,9 @@ public sealed partial class ProductionMessagePage : Page
 
     private void RefreshBindingStatus()
     {
-        _settings = NotionSettingsStore.Load();
+        _settings = BusinessDatabaseSettingsStore.Load();
         BindSourcesButton.Visibility = Visibility.Visible;
-        if (string.IsNullOrWhiteSpace(_settings.Token))
+        if (!_settings.ConnectionConfigured)
         {
             CuttingBindingInfoBar.Title = "下料数据库";
             CuttingBindingInfoBar.Message = "未绑定";
@@ -612,7 +612,7 @@ public sealed partial class ProductionMessagePage : Page
             return;
         }
 
-        var settings = NotionSettingsStore.Load();
+        var settings = BusinessDatabaseSettingsStore.Load();
         var missingTargets = values.Select(value => value.Kind switch
             {
                 ProductionMessageKind.MaterialCutting => ProductionMessageKinds.CuttingModuleKey,
@@ -624,7 +624,7 @@ public sealed partial class ProductionMessagePage : Page
             .ToArray();
         if (missingTargets.Length > 0)
         {
-            await ShowResultDialogAsync("尚未绑定数据源", "请先检测并保存对应的 Notion 数据源字段映射。");
+            await ShowResultDialogAsync("尚未绑定数据源", "请先检测并保存对应的 Teable 数据源字段映射。");
             return;
         }
 
@@ -706,7 +706,7 @@ public sealed partial class ProductionMessagePage : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "正在写入 Notion",
+            Title = "正在写入 Teable",
             Content = content
         };
         _ = dialog.ShowAsync();

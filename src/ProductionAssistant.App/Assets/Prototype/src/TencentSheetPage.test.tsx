@@ -45,7 +45,7 @@ it('starts without preset business and binds a custom data snapshot to inspectio
   const input = container.querySelector<HTMLInputElement>('input[placeholder="例如：合格数量"]')!;
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '合格数量'); input.dispatchEvent(new Event('input', { bubbles: true })); });
   await act(async () => button('下一步 · 选择数据库').click());
-  expect(container.textContent).toContain('绑定 Notion：合格数量');
+  expect(container.textContent).toContain('绑定 Teable：合格数量');
   expect(button('测试与上线').disabled).toBe(true);
   expect(container.textContent).not.toContain('示范填报位置');
   // Reload the saved teaching and binding state, then test the actual page's data/confirmation chain.
@@ -53,7 +53,7 @@ it('starts without preset business and binds a custom data snapshot to inspectio
   job.config.fields[0].notion = { sourceId: 'source', valueFieldId: 'value', queryMode: 'date', dateFieldId: 'date', period: 'day' };
   await act(async () => root!.render(<TencentSheetPage key="reloaded" id="job" changed={() => {}} />));
   await act(async () => button('测试与上线').click());
-  await act(async () => button('获取本次 Notion 数据').click());
+  await act(async () => button('获取本次 Teable 数据').click());
   expect(container.textContent).toContain('质量数据库');
   await act(async () => button('检查本次数据与位置').click());
   await act(async () => button('确认填报以上 1 项').click());
@@ -68,7 +68,7 @@ it('starts without preset business and binds a custom data snapshot to inspectio
   expect(button('确认填报以上 1 项')).toBeUndefined();
   expect(button('检查本次数据与位置').disabled).toBe(true);
   await act(async () => button('测试与上线').click());
-  await act(async () => button('获取本次 Notion 数据').click());
+  await act(async () => button('获取本次 Teable 数据').click());
   await act(async () => button('检查本次数据与位置').click());
   await act(async () => root!.render(<TencentSheetPage key="another-job" id="another-job" changed={() => {}} />));
   await act(async () => button('测试与上线').click());

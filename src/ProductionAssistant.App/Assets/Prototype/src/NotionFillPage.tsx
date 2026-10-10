@@ -150,7 +150,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       if (!result.succeeded) throw new Error(result.message || '读取失败');
       if (sourceOnly) {
         renderSummary(result);
-        node('target-empty').querySelector('strong')!.textContent = '尚未检查 Notion';
+        node('target-empty').querySelector('strong')!.textContent = '尚未检查数据库';
         node('target-empty').querySelector('span')!.textContent = '点击“生成预览”完成读取与查重';
       } else { job.validated = true; preview = result; renderPreview(result); }
       changed();
@@ -171,7 +171,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       preview = { ...preview!, targetRecordExists: true };
       node('target-status').textContent = result.message;
       button('run').textContent = '验证查重';
-      message(result.created ? 'Notion 写入成功。' : '该日期已有记录，本次已跳过。'); changed();
+      message(result.created ? '数据库写入成功。' : '该日期已有记录，本次已跳过。'); changed();
     } catch (error) {
       if (!disposed) { clearPreview('执行未完成，请重新预览'); message(errorText(error), true); }
     } finally { if (!disposed) { busy = false; controls(); void loadRuns(); } }
@@ -229,7 +229,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       const fresh = await invoke<NotionFillJobDetail>('notionFill.get', { id: job.id });
       if (disposed || busy || version !== revision) return;
       job = fresh; clearPreview('系统设置已更新，请重新预览'); controls();
-      message(job.notionConfigured ? '系统设置已更新，点击“生成预览”读取数据。' : 'Notion 连接尚未配置，仍可仅测试 93 读取。');
+      message(job.notionConfigured ? '系统设置已更新，点击“生成预览”读取数据。' : '数据库连接尚未配置，仍可仅测试 93 读取。');
     } catch (error) { if (!disposed) message(errorText(error), true); }
   }
 
@@ -276,7 +276,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       window.addEventListener('production-settings-updated', settingsUpdated);
       clearPreview(); controls();
       if (!sourceReady()) message('请先在任务设置中补全 93 系统连接配置。');
-      else if (!job.notionConfigured) message('Notion 连接尚未配置，请从任务设置打开系统设置；仍可仅测试 93 读取。');
+      else if (!job.notionConfigured) message('数据库连接尚未配置，请从任务设置打开系统设置；仍可仅测试 93 读取。');
     },
     dispose() { disposed = true; revision++; runsRevision++; dateRoot?.unmount(); window.removeEventListener('production-settings-updated', settingsUpdated); }
   };

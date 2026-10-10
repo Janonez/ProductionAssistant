@@ -101,7 +101,7 @@ public sealed class MaterialInboundNotionFillServiceTests
             },
             new DateOnly(2026, 9, 3)));
 
-        Assert.Contains("检查 Notion 目标数据库结构失败", error.Message);
+        Assert.Contains("检查目标数据库结构失败", error.Message);
         Assert.Contains("测试结构错误", error.Message);
     }
 

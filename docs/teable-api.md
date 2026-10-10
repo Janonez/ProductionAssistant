@@ -1,6 +1,6 @@
 # Teable API 联调
 
-当前阶段只提供 Infrastructure API 客户端和命令行联调入口。生产消息、焊接、日报和腾讯文档取数仍连接 Notion；API 验证通过不代表业务已完成迁移。不创建数据库结构，不改变线上配置。
+本文记录 `codex/teable-api` 的历史 API 基建验收。当前 Development 已接通查询、视图、生产消息、焊接层级和原材料入库，见 [业务接入与开关](teable-business.md)；Production 仍使用原配置。API 验证不能替代业务及桌面验收。
 
 ## 本分支做了什么
 
@@ -11,7 +11,7 @@
 - `tools/TeableProbe`：交互安全配置、只读检查、显式测试写入与逐字段回读校验；已加入解决方案，随 CI 编译。
 - 回归测试和本机真实联调记录：后端 133 项测试通过，本机鉴权、创建与四字段回读通过。
 
-后续工作是业务字段映射、Teable 查询适配器及入库业务接线。此分支没有数据库迁移、业务自动切换、桌面设置界面或正式部署；合并后既有 Notion 调用保持原样。
+API 基建分支本身没有数据库迁移、业务切换、桌面设置界面或正式部署。后续结构、数据、视图及业务接线的实际状态分别由迁移记录和业务接入文档说明。
 
 ## 配置和读取
 
@@ -61,3 +61,7 @@ dotnet run --project tools/TeableProbe -- write C:\Temp\teable-fields.json
 后续按业务优先级接字段映射、查询适配器和入库服务，再完善关联与汇总。当前没有切换业务数据库的开关，因为还没有接入任何业务执行路径。
 
 官方契约：[读取记录](https://help.teable.io/en/api-reference/record/list-records)、[创建记录](https://help.teable.io/en/api-reference/record/create-records)、[回读记录](https://help.teable.io/en/api-reference/record/get-record)。
+
+## v1.7.0 正式业务入口
+
+应用默认读写统一使用 Teable。工具仍默认隔离于 Development；正式检查显式使用 --environment Production。映射、生产配置和回退边界见 [Teable 业务接入](teable-business.md)。本次只打包本机 Production，不创建 ZIP 或 GitHub Release。

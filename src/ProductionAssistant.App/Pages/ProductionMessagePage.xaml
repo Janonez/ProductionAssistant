@@ -11,7 +11,7 @@
             <TextBlock x:Name="PageTitleText" Style="{StaticResource TitleTextBlockStyle}"
                        FontSize="32"
                        FontWeight="Bold"
-                       Text="生产消息 Notion 入库" />
+                       Text="生产消息 Teable 入库" />
 
             <Grid x:Name="UseContent" MinHeight="560" ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
@@ -209,7 +209,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Notion 数据源" />
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Teable 数据源" />
                         <Button Grid.Column="1"
                                 x:Name="BindSourcesButton"
                                 Click="BindSourcesButton_Click"

@@ -11,12 +11,12 @@ internal sealed partial class PrototypeBridge
 
     private static object GetWeldState()
     {
-        var settings = NotionSettingsStore.Load();
+        var settings = BusinessDatabaseSettingsStore.Load();
         var binding = settings.Targets.FirstOrDefault(target => target.ModuleKey == WeldModuleKey);
         var catalog = DatabaseSourceCatalog.Create(AppServices.DatabaseProvider.GetSources());
         return new
         {
-            configured = !string.IsNullOrWhiteSpace(settings.Token),
+            configured = settings.ConnectionConfigured,
             binding = new
             {
                 bound = binding is not null &&
@@ -50,11 +50,11 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> SaveWeldBindingAsync(JsonElement payload, CancellationToken cancellationToken)
     {
         var sourceId = ReadString(payload, "sourceId");
-        var settings = NotionSettingsStore.Load();
-        if (string.IsNullOrWhiteSpace(settings.Token))
-            throw new InvalidOperationException("请先到“设置 → Notion 连接”填写 API 令牌并获取数据源。");
+        var settings = BusinessDatabaseSettingsStore.Load();
+        if (!settings.ConnectionConfigured)
+            throw new InvalidOperationException("请先到“设置 → Teable 连接”填写 API 令牌并获取数据源。");
         var source = settings.CachedDataSources.FirstOrDefault(item => item.Id == sourceId)
-            ?? throw new InvalidOperationException("请选择已缓存的 Notion 数据源。");
+            ?? throw new InvalidOperationException("请选择已缓存的 Teable 数据源。");
         var schema = await AppServices.Notion.GetSchemaAsync(settings.Token, source.Id, cancellationToken);
         if (!schema.Succeeded) throw new InvalidOperationException(schema.Message);
 
@@ -87,7 +87,7 @@ internal sealed partial class PrototypeBridge
         binding.DateProperty = date.Name;
         binding.QuantityProperty = quantity.Name;
         settings.ActiveTargetId = binding.Id;
-        NotionSettingsStore.Save(settings);
+        BusinessDatabaseSettingsStore.Save(settings);
         return GetWeldState();
     }
 
@@ -99,7 +99,7 @@ internal sealed partial class PrototypeBridge
         var plan = await AppServices.Notion.PrepareImportAsync(request, cancellationToken);
         if (!plan.Succeeded) throw new InvalidOperationException(plan.Message);
         if (plan.Items.Any(item => item.Status == "duplicated"))
-            throw new InvalidOperationException("目标月份存在重复日期记录，请先在 Notion 中合并重复记录。");
+            throw new InvalidOperationException("目标月份存在重复日期记录，请先在 Teable 中合并重复记录。");
         return new { plan.Succeeded, plan.Message, existing.HasExistingData, plan.Items };
     }
 
@@ -114,7 +114,7 @@ internal sealed partial class PrototypeBridge
         var plan = await AppServices.Notion.PrepareImportAsync(request, cancellationToken);
         if (!plan.Succeeded) throw new InvalidOperationException(plan.Message);
         if (plan.Items.Any(item => item.Status == "duplicated"))
-            throw new InvalidOperationException("目标月份存在重复日期记录，请先在 Notion 中合并重复记录。");
+            throw new InvalidOperationException("目标月份存在重复日期记录，请先在 Teable 中合并重复记录。");
         var progress = new Progress<NotionImportProgress>(item => Post(new { id, type = "progress", data = item }));
         var result = await AppServices.Notion.ImportWeldHierarchyAsync(request, progress, cancellationToken);
         if (!result.Succeeded) throw new InvalidOperationException(result.Message);

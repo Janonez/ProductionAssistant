@@ -34,7 +34,7 @@ beforeEach(() => {
     if (operation === 'weld.getState') return Promise.resolve(state)
     if (operation === 'weld.generate') return Promise.resolve(generatedRows(payload!.month!, Number(payload!.total)))
     if (operation === 'weld.check') return Promise.resolve({ succeeded: true, message: '检查完成。', hasExistingData: false, items: [] })
-    if (operation === 'weld.write') return Promise.resolve({ succeeded: true, message: '已写入 Notion。' })
+    if (operation === 'weld.write') return Promise.resolve({ succeeded: true, message: '已写入 Teable。' })
     return Promise.resolve({})
   })
 })
@@ -118,12 +118,12 @@ describe('daily weld workflow', () => {
   it('checks and writes the complete month to Notion', async () => {
     await renderPage()
     await enterTotalAndGenerate('16')
-    const writeButton = [...container.querySelectorAll('button')].find(button => button.textContent === '确认并写入 Notion') as HTMLButtonElement
+    const writeButton = [...container.querySelectorAll('button')].find(button => button.textContent === '确认并写入数据库') as HTMLButtonElement
     await act(async () => writeButton.click())
     expect(invoke.mock.calls.map(call => call[0])).toContain('weld.check')
     expect(invoke.mock.calls.map(call => call[0])).toContain('weld.write')
     expect(container.textContent).toContain('入库完成')
-    expect(container.textContent).toContain('已写入 Notion。')
+    expect(container.textContent).toContain('已写入 Teable。')
   })
 
   it('requires explicit confirmation before overwriting an existing month', async () => {
@@ -136,7 +136,7 @@ describe('daily weld workflow', () => {
     })
     await renderPage()
     await enterTotalAndGenerate('16')
-    const writeButton = [...container.querySelectorAll('button')].find(button => button.textContent === '确认并写入 Notion') as HTMLButtonElement
+    const writeButton = [...container.querySelectorAll('button')].find(button => button.textContent === '确认并写入数据库') as HTMLButtonElement
     await act(async () => writeButton.click())
     expect(container.textContent).toContain('确认覆盖已有产量')
     expect(invoke.mock.calls.map(call => call[0])).not.toContain('weld.write')
@@ -157,7 +157,7 @@ describe('daily weld workflow', () => {
     })
     await renderPage()
     await enterTotalAndGenerate('16')
-    const writeButton = [...container.querySelectorAll('button')].find(button => button.textContent === '确认并写入 Notion') as HTMLButtonElement
+    const writeButton = [...container.querySelectorAll('button')].find(button => button.textContent === '确认并写入数据库') as HTMLButtonElement
     await act(async () => writeButton.click())
     const confirm = [...container.querySelectorAll('button')].find(button => button.textContent === '确认覆盖并写入') as HTMLButtonElement
     await act(async () => confirm.click())

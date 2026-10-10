@@ -4,8 +4,8 @@ namespace ProductionAssistant;
 
 internal static class AppServices
 {
-    internal static INotionImportService Notion { get; } = new NotionImportService();
-    internal static IDatabaseQueryProvider DatabaseProvider { get; } = new NotionDatabaseQueryProvider(notion: Notion);
+    internal static INotionImportService Notion { get; } = BusinessImportFactory.Create();
+    internal static IDatabaseQueryProvider DatabaseProvider { get; } = DatabaseProviderFactory.Create();
     internal static TencentSheetNotionService TencentNotion { get; } = new(DatabaseProvider);
     internal static DatabaseQueryService DatabaseQueries { get; } = new(DatabaseProvider);
     internal static DailyReportService DailyReports { get; } = new(database: DatabaseProvider);

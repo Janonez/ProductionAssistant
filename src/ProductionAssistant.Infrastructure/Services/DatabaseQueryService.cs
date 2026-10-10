@@ -20,7 +20,7 @@ public sealed class DatabaseQueryService(IDatabaseQueryProvider provider)
         if (!data.Succeeded)
             return new(false, data.Message, Provider.Name, data.SourceName, data.DatasetName,
                 range.Start, range.End, 0, null, []);
-        if (!IsCurrentYearView(data.DatasetName) && request.RangeKind != "all")
+        if (!IsCurrentYearView(data.DatasetName) && !(Provider is TeableDatabaseQueryProvider && data.DatasetName == "全部记录") && request.RangeKind != "all")
             return new(false, "只有“本年截止今日”View 可以按日期口径查询；其他 View 只读取其完整结果。",
                 Provider.Name, data.SourceName, data.DatasetName, range.Start, range.End, 0, null, []);
 

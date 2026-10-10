@@ -210,7 +210,7 @@ internal sealed partial class PrototypeBridge
             return (Draft: draft, segment.Text);
         }).ToArray();
         var settings = await RefreshProductionBindingsAsync(
-            NotionSettingsStore.Load(),
+            BusinessDatabaseSettingsStore.Load(),
             parsedDrafts.Select(item => item.Draft.Kind).ToHashSet(),
             cancellationToken);
         return parsedDrafts.Select(item =>
@@ -232,7 +232,7 @@ internal sealed partial class PrototypeBridge
         var overwrite = !checkOnly && payload.TryGetProperty("overwriteExisting", out var overwriteElement) && overwriteElement.GetBoolean();
         var drafts = draftsElement.EnumerateArray().Select(ToDraft).ToArray();
         var batch = drafts.Length > 1;
-        var settings = NotionSettingsStore.Load();
+        var settings = BusinessDatabaseSettingsStore.Load();
         foreach (var draft in drafts)
         {
             ProductionMessageParser.ApplyEdits(draft, defaultDate, !batch, out _);
@@ -283,11 +283,11 @@ internal sealed partial class PrototypeBridge
 
     private static object GetBindings()
     {
-        var settings = NotionSettingsStore.Load();
+        var settings = BusinessDatabaseSettingsStore.Load();
         var catalog = DatabaseSourceCatalog.Create(AppServices.DatabaseProvider.GetSources());
         return new
         {
-            configured = !string.IsNullOrWhiteSpace(settings.Token),
+            configured = settings.ConnectionConfigured,
             cutting = ToBindingTarget(FindTarget(settings, ProductionMessageKinds.CuttingModuleKey), settings.CachedDataSources),
             towerDaily = ToBindingTarget(FindTarget(settings, ProductionMessageKinds.TowerDailyModuleKey), settings.CachedDataSources),
             usesBusinessSections = catalog.UsesBusinessSections,
@@ -318,8 +318,8 @@ internal sealed partial class PrototypeBridge
 
     private static async Task<object> SaveBindingsAsync(JsonElement payload, CancellationToken cancellationToken)
     {
-        var settings = NotionSettingsStore.Load();
-        if (string.IsNullOrWhiteSpace(settings.Token)) throw new InvalidOperationException("请先在原版设置页配置 Notion 连接。");
+        var settings = BusinessDatabaseSettingsStore.Load();
+        if (!settings.ConnectionConfigured) throw new InvalidOperationException("请先在原版设置页配置 Teable 连接。");
         var selections = new Dictionary<string, string>
         {
             ["cutting"] = ReadString(payload, "cutting"),
@@ -330,7 +330,7 @@ internal sealed partial class PrototypeBridge
         var sources = selections.ToDictionary(pair => pair.Key,
             pair => string.IsNullOrWhiteSpace(pair.Value) ? null : settings.CachedDataSources.FirstOrDefault(source => source.Id == pair.Value));
         if (sources.Where(pair => !string.IsNullOrWhiteSpace(selections[pair.Key])).Any(pair => pair.Value is null))
-            throw new InvalidOperationException("选择的数据源已不在缓存中，请先刷新 Notion 数据源。");
+            throw new InvalidOperationException("选择的数据源已不在缓存中，请先刷新 Teable 数据源。");
 
         var bindings = new List<NotionTargetSettings>();
         if (sources["cutting"] is not null)
@@ -343,7 +343,7 @@ internal sealed partial class PrototypeBridge
             var index = settings.Targets.FindIndex(target => target.ModuleKey == binding.ModuleKey);
             if (index < 0) settings.Targets.Add(binding); else settings.Targets[index] = binding;
         }
-        NotionSettingsStore.Save(settings);
+        BusinessDatabaseSettingsStore.Save(settings);
         return new { saved = true };
     }
 
@@ -374,7 +374,7 @@ internal sealed partial class PrototypeBridge
         IReadOnlySet<ProductionMessageKind> kinds,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(settings.Token)) return settings;
+        if (!settings.ConnectionConfigured) return settings;
         var refreshed = new List<NotionTargetSettings>();
         if (kinds.Contains(ProductionMessageKind.MaterialCutting) &&
             FindCurrentSource(settings, ProductionMessageKinds.CuttingModuleKey) is { } cutting)
@@ -393,7 +393,7 @@ internal sealed partial class PrototypeBridge
             var index = settings.Targets.FindIndex(item => item.ModuleKey == target.ModuleKey);
             if (index >= 0) settings.Targets[index] = target;
         }
-        if (refreshed.Count > 0) NotionSettingsStore.Save(settings);
+        if (refreshed.Count > 0) BusinessDatabaseSettingsStore.Save(settings);
         return settings;
     }
 

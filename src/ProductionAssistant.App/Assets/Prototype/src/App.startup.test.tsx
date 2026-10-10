@@ -26,7 +26,7 @@ it('opens production messages first and keeps navigation usable while another ro
     await act(async () => root.render(<App />))
     expect(container.querySelector('h1')?.textContent).toBe('生产消息入库')
     expect(container.querySelector('.sidebar-nav button')?.getAttribute('aria-current')).toBe('page')
-    expect(container.querySelector('.sidebar-nav button')?.textContent).toContain('生产消息 Notion 入库')
+    expect(container.querySelector('.sidebar-nav button')?.textContent).toContain('生产消息 Teable 入库')
     expect(notifyReady).toHaveBeenLastCalledWith('production-message', 'start')
     expect(delayed.resolve).toBeUndefined()
 

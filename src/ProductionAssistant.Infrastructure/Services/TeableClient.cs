@@ -6,7 +6,7 @@ namespace ProductionAssistant.Services;
 
 /// <summary>
 /// Teable 最小 API 基建：按字段 ID 读取、创建及回读记录。
-/// 当前由 TeableProbe 联调工具调用，尚未替换任何 Notion 业务服务或实现业务字段映射。
+/// 供联调工具及业务查询适配器调用；默认直连，不依赖系统代理。
 /// </summary>
 public sealed class TeableClient : IDisposable
 {
@@ -56,7 +56,44 @@ public sealed class TeableClient : IDisposable
         SendAsync(HttpMethod.Get, $"table/{Id(tableId, "tbl")}/record/{Id(recordId, "rec")}?fieldKeyType=id",
             null, cancellationToken);
 
+    public Task<JsonObject> UpdateRecordAsync(string tableId, string recordId, JsonObject fields,
+        CancellationToken cancellationToken = default) => SendAsync(HttpMethod.Patch,
+        $"table/{Id(tableId, "tbl")}/record/{Id(recordId, "rec")}", new JsonObject
+        { ["fieldKeyType"] = "id", ["typecast"] = false, ["record"] = new JsonObject { ["fields"] = fields.DeepClone() } }, cancellationToken);
+
+    public Task<JsonObject> ReadRecordFieldsAsync(string tableId, string recordId, IEnumerable<string> fieldIds,
+        CancellationToken cancellationToken = default) => SendAsync(HttpMethod.Get,
+        $"table/{Id(tableId, "tbl")}/record/{Id(recordId, "rec")}?fieldKeyType=id" +
+        string.Concat(fieldIds.Distinct().Select(field => $"&projection={Id(field, "fld")}")), null, cancellationToken);
+
+    public async Task<JsonArray> ReadFieldsAsync(string tableId, CancellationToken cancellationToken = default) =>
+        await SendNodeAsync(HttpMethod.Get, $"table/{Id(tableId, "tbl")}/field", null, cancellationToken) as JsonArray
+        ?? throw new InvalidOperationException("Teable 字段响应不是数组。");
+
+    public async Task<JsonArray> ReadTablesAsync(string baseId, CancellationToken cancellationToken = default) =>
+        await SendNodeAsync(HttpMethod.Get, $"base/{Id(baseId, "bse")}/table", null, cancellationToken) as JsonArray
+        ?? throw new InvalidOperationException("Teable 表响应不是数组。");
+
+    public Task<JsonObject> ReadViewAsync(string tableId, string viewId, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Get, $"table/{Id(tableId, "tbl")}/view/{Id(viewId, "viw")}", null, cancellationToken);
+
+    /// <summary>业务读取显式投影全部绑定字段；隐藏日期仍可参与统计。无视图时忽略默认视图筛选。</summary>
+    public Task<JsonObject> ReadQueryRecordsAsync(string tableId, IReadOnlyList<string> fieldIds, int skip,
+        string? viewId = null, CancellationToken cancellationToken = default)
+    {
+        if (skip < 0 || fieldIds.Count == 0) throw new ArgumentException("业务读取需要字段投影和有效分页。");
+        var path = $"table/{Id(tableId, "tbl")}/record?fieldKeyType=id&take=1000&skip={skip}";
+        path += viewId is null ? "&ignoreViewQuery=true" : $"&viewId={Id(viewId, "viw")}";
+        path += string.Concat(fieldIds.Distinct().Select(field => $"&projection={Id(field, "fld")}"));
+        return SendAsync(HttpMethod.Get, path, null, cancellationToken);
+    }
+
     private async Task<JsonObject> SendAsync(HttpMethod method, string path, JsonObject? body,
+        CancellationToken cancellationToken) =>
+        await SendNodeAsync(method, path, body, cancellationToken) as JsonObject
+        ?? throw new InvalidOperationException("Teable 返回无效记录响应。");
+
+    private async Task<JsonNode> SendNodeAsync(HttpMethod method, string path, JsonObject? body,
         CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, new Uri(_api, path));
@@ -68,7 +105,7 @@ public sealed class TeableClient : IDisposable
             throw new HttpRequestException($"Teable HTTP {(int)response.StatusCode}。请检查实例地址、Token 权限和表 ID。",
                 null, response.StatusCode);
         // 不自动重试写入：响应中断时服务端可能已提交，调用方应先核对表内记录。
-        return await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<JsonNode>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Teable 返回空响应。");
     }
 

@@ -35,7 +35,7 @@ export function NotionFillCreateWizard({ onCreated, onBack, onCancel }: Automati
       <label>任务名称<input value={name} autoFocus onChange={event => setName(event.target.value)} /></label>
       <div className="dialog-actions"><button className="ghost" onClick={onBack}><ArrowLeft />返回选择类型</button><button className="primary" disabled={!name.trim()} onClick={() => setStep(3)}>下一步</button></div>
     </div> : <div className="automation-create-step">
-      <div><h3>93 系统连接</h3><p>凭据只归 NotionFill 任务所有，并使用现有 Windows 加密存储。</p></div>
+      <div><h3>93 系统连接</h3><p>凭据只归当前自动填报任务所有，并使用现有 Windows 加密存储。</p></div>
       <label>材料入库业务页面<input type="url" value={sourcePageUrl} placeholder="http://服务器/业务页面" autoFocus onChange={event => setSourcePageUrl(event.target.value)} /></label>
       <label>93 系统用户名<input value={username} autoComplete="username" onChange={event => setUsername(event.target.value)} /></label>
       <label>93 系统密码<input type="password" value={password} autoComplete="new-password" onChange={event => setPassword(event.target.value)} /></label>

@@ -26,39 +26,23 @@ internal sealed partial class PrototypeBridge
         bool refresh,
         CancellationToken cancellationToken)
     {
-        var settings = NotionSettingsStore.Load();
-        var token = ReadString(payload, "token").Trim();
-        var rootPageId = payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("rootPageId", out _)
-            ? ReadString(payload, "rootPageId").Trim()
-            : settings.RootPageId;
-        var connectionChanged =
-            !string.Equals(settings.RootPageId, rootPageId, StringComparison.OrdinalIgnoreCase) ||
-            (!string.IsNullOrWhiteSpace(token) && !string.Equals(settings.Token, token, StringComparison.Ordinal));
-
-        if (!string.IsNullOrWhiteSpace(token)) settings.Token = token;
-        if (string.IsNullOrWhiteSpace(settings.Token))
-            throw new InvalidOperationException("请输入 Notion API 令牌。");
-
-        if (connectionChanged)
-        {
-            settings.CachedDataSources.Clear();
-            settings.DataSourcesCachedAtUtc = null;
-        }
-
-        settings.RootPageId = rootPageId;
-        NotionSettingsStore.Save(settings);
-
-        if (refresh || connectionChanged || settings.CachedDataSources.Count == 0)
-        {
-            var result = await AppServices.Notion.DiscoverAsync(settings.Token, settings.RootPageId, cancellationToken);
-            if (!result.Succeeded) throw new InvalidOperationException(result.Message);
-            settings.CachedDataSources = result.DataSources.ToList();
-            settings.DataSourcesCachedAtUtc = DateTime.UtcNow;
-            NotionSettingsStore.Save(settings);
-            return SettingsResult("数据源已刷新。", settings);
-        }
-
-        return SettingsResult("连接配置已保存。", settings);
+        var settings = BusinessDatabaseSettingsStore.Load();
+        var connection = TeableSettingsStore.Load();
+        var serverUrl = ReadString(payload, "serverUrl").Trim();
+        var newToken = ReadString(payload, "token").Trim();
+        if (!string.IsNullOrWhiteSpace(serverUrl)) connection.ServerUrl = serverUrl;
+        if (!string.IsNullOrWhiteSpace(newToken)) connection.Token = newToken;
+        // 新连接先验证全部已绑定字段，失败不覆盖当前可用凭据。
+        var store = new TeableBusinessStore(TeableQuerySettingsStore.Load(),
+            () => new TeableClient(connection.ServerUrl, connection.Token));
+        if (store.Sources.Count == 0) throw new InvalidOperationException("请先导入 Teable 生产数据库映射。");
+        foreach (var source in store.Sources) await store.GetSchemaAsync(source.Id, cancellationToken);
+        TeableSettingsStore.Save(connection);
+        settings.CachedDataSources = store.Sources.ToList();
+        settings.DataSourcesCachedAtUtc = DateTime.UtcNow;
+        BusinessDatabaseSettingsStore.Save(settings);
+        settings.TeableConfigured = true;
+        return SettingsResult("Teable 连接及生产数据源已验证。", settings);
     }
 
     private static object SaveSettingsNotification(JsonElement payload)
@@ -137,7 +121,7 @@ internal sealed partial class PrototypeBridge
         NotionSettings? notion = null,
         NotificationSettings? notification = null)
     {
-        notion ??= NotionSettingsStore.Load();
+        notion ??= BusinessDatabaseSettingsStore.Load();
         notification ??= NotificationSettingsStore.Load();
         var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
@@ -146,7 +130,9 @@ internal sealed partial class PrototypeBridge
         {
             notion = new
             {
-                configured = !string.IsNullOrWhiteSpace(notion.Token),
+                configured = notion.ConnectionConfigured,
+                provider = "Teable",
+                serverUrl = TeableSettingsStore.Load().ServerUrl,
                 notion.RootPageId,
                 dataSourceCount = notion.CachedDataSources.Count,
                 lastSyncedAt = notion.DataSourcesCachedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? string.Empty,

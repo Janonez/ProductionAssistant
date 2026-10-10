@@ -50,7 +50,7 @@ internal sealed partial class PrototypeBridge
             }
         }
         var scheduler = await NotionFillTaskScheduler.GetStatusAsync(job.Id, job.RunTime);
-        var notion = NotionSettingsStore.Load();
+        var notion = BusinessDatabaseSettingsStore.Load();
         return new
         {
             job.Id,
@@ -59,7 +59,7 @@ internal sealed partial class PrototypeBridge
             job.SourcePageUrl,
             job.Username,
             passwordConfigured = !string.IsNullOrWhiteSpace(job.EncryptedPassword),
-            notionConfigured = !string.IsNullOrWhiteSpace(notion.Token),
+            notionConfigured = notion.ConnectionConfigured,
             job.TargetDataSourceName,
             validated = job.ConfigurationValidated,
             isEnabled = NotionFillTaskScheduler.IsSchedulingAvailable && job.IsEnabled,
@@ -252,7 +252,7 @@ internal sealed partial class PrototypeBridge
     {
         var id = ReadString(payload, "id");
         return NotionFillSettingsStore.LoadCatalog().Jobs.FirstOrDefault(job => job.Id == id)
-            ?? throw new InvalidOperationException("找不到指定的 Notion 自动填报任务。");
+            ?? throw new InvalidOperationException("找不到指定的 Teable 自动填报任务。");
     }
 
     private static string NormalizeNotionFillSourcePageUrl(string value)
