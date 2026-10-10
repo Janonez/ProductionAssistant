@@ -5,11 +5,12 @@ using System.Text.Json.Nodes;
 
 namespace ProductionAssistant.Services;
 
-public sealed record TeableQueryField(string Id, string Name, string Type, string TeableId, string TeableType);
+public sealed record TeableQueryField(string Id, string Name, string Type, string TeableId, string TeableType,
+    string RelationSourceId = "", string? EndFieldId = null);
 public sealed record TeableQueryView(string Id, string Name, string TeableId, string? TeableName = null);
 public sealed record TeableQuerySource(string Id, string Name, string Path, string TableId, IReadOnlyList<TeableQueryField> Fields,
     IReadOnlyList<TeableQueryView>? Views = null);
-public sealed record TeableQuerySettings(bool Enabled, IReadOnlyList<TeableQuerySource> Sources);
+public sealed record TeableQuerySettings(bool Enabled, IReadOnlyList<TeableQuerySource> Sources, bool WritesEnabled = false);
 
 /// <summary>仅存开关和迁移映射，不保存凭据。Notion ID 保持稳定，使现有日期、数值绑定无需重配。</summary>
 public static class TeableQuerySettingsStore
@@ -22,6 +23,8 @@ public static class TeableQuerySettingsStore
 
     public static void Save(TeableQuerySettings settings)
     {
+        if (settings.WritesEnabled && !settings.Enabled)
+            throw new InvalidOperationException("Teable 业务写入必须同时启用 Teable 查询，不能混用两份数据库。");
         Directory.CreateDirectory(RuntimeEnvironment.DataDirectory);
         File.WriteAllText(FilePath + ".tmp", JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
         File.Move(FilePath + ".tmp", FilePath, true);
@@ -36,7 +39,9 @@ public static class TeableQuerySettingsStore
             table["teableId"]!.GetValue<string>(), table["fields"]!.AsArray().Select(field => new TeableQueryField(
                 field!["notionId"]!.GetValue<string>(), field["field"]!["name"]!.GetValue<string>(),
                 field["notionType"]!.GetValue<string>(), field["field"]!["id"]!.GetValue<string>(),
-                field["field"]!["type"]!.GetValue<string>())).ToArray())).ToArray();
+                field["field"]!["type"]!.GetValue<string>(),
+                field["source"]?["relation"]?["data_source_id"]?.GetValue<string>() ?? "",
+                field["endField"]?["id"]?.GetValue<string>())).ToArray())).ToArray();
         if (sources.Length == 0 || sources.Select(source => source.Id).Distinct().Count() != sources.Length ||
             sources.Any(source => source.Fields.Count == 0 || source.Fields.Select(field => field.Id).Distinct().Count() != source.Fields.Count))
             throw new InvalidOperationException("迁移映射为空或存在重复 ID。");

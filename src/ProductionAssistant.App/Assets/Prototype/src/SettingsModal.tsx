@@ -7,6 +7,8 @@ type SettingsPage = 'connection' | 'notification' | 'data' | 'about'
 type SettingsRule = { eventType: string; name: string; enabled: boolean; level: string }
 type SettingsState = {
   notion: {
+    provider?: 'Notion' | 'Teable'
+    serverUrl?: string
     configured: boolean
     rootPageId: string
     dataSourceCount: number
@@ -30,7 +32,7 @@ const pendingSettings: SettingsState = { notion: { configured: false, rootPageId
 const maskedCredential = '••••••••••••'
 
 const navItems: { key: SettingsPage; label: string; keywords: string; icon: React.ReactNode }[] = [
-  { key: 'connection', label: '连接', keywords: 'Notion API 令牌 根页面 数据源', icon: <LinkIcon /> },
+  { key: 'connection', label: '连接', keywords: 'Teable Notion API 令牌 实例 根页面 数据源', icon: <LinkIcon /> },
   { key: 'notification', label: '通知', keywords: '钉钉 Webhook Secret 规则', icon: <BellIcon /> },
   { key: 'data', label: '数据与缓存', keywords: 'Notion 数据源 缓存 绑定', icon: <DatabaseIcon /> },
   { key: 'about', label: '关于', keywords: '版本 WebView2 React TypeScript', icon: <InfoIcon /> },
@@ -151,10 +153,13 @@ function ConnectionSettings({ state, busy, run, pending = false }: {
   const [token, setToken] = useState('')
   const [tokenChanged, setTokenChanged] = useState(false)
   const [rootPageId, setRootPageId] = useState(state.notion.rootPageId)
+  const [serverUrl, setServerUrl] = useState(state.notion.serverUrl ?? '')
+  const provider = state.notion.provider ?? 'Notion'
   useEffect(() => setRootPageId(state.notion.rootPageId), [state.notion.rootPageId])
+  useEffect(() => setServerUrl(state.notion.serverUrl ?? ''), [state.notion.serverUrl])
 
   const submit = async (operation: string) => {
-    if (await run(operation, { token: tokenChanged ? token : '', rootPageId })) {
+    if (await run(operation, { token: tokenChanged ? token : '', rootPageId, serverUrl })) {
       setToken('')
       setTokenChanged(false)
     }
@@ -164,27 +169,29 @@ function ConnectionSettings({ state, busy, run, pending = false }: {
   const connecting = busy === 'settings.saveConnection'
 
   return <SettingsPageLayout title="连接" description="管理生产助手使用的外部数据源和服务连接。">
-    <SettingsSection title="Notion">
+    <SettingsSection title={provider}>
       <SettingsRow title="连接状态" description="当前本机连接配置和数据源缓存状态">
         <Status connected={pending ? null : state.notion.configured} label={pending ? (busy ? '读取中…' : '读取失败') : state.notion.configured ? '已配置' : '未配置'} />
       </SettingsRow>
       <SettingsField title="API 令牌" description="使用 Windows 当前用户加密后保存在本机">
         <input className="settings-input" type="password" autoComplete="off"
-          placeholder="输入 Notion API Token"
+          placeholder={`输入 ${provider} API Token`}
           value={tokenChanged ? token : state.notion.configured ? maskedCredential : ''}
           onFocus={event => { if (!tokenChanged && state.notion.configured) event.currentTarget.select() }}
           onChange={event => { setTokenChanged(true); setToken(event.target.value) }} />
       </SettingsField>
-      <SettingsField title="根页面 ID" description="可选。留空时自动发现当前令牌有权限访问的数据源">
+      {provider === 'Teable' ? <SettingsField title="实例地址" description="本机实例允许 HTTP，远程实例使用 HTTPS">
+        <input className="settings-input" value={serverUrl} onChange={event => setServerUrl(event.target.value)} />
+      </SettingsField> : <SettingsField title="根页面 ID" description="可选。留空时自动发现当前令牌有权限访问的数据源">
         <input className="settings-input" value={rootPageId} onChange={event => setRootPageId(event.target.value)} />
-      </SettingsField>
+      </SettingsField>}
       <div className="settings-buttons">
         <button type="button" className="settings-button-primary" disabled={!!busy} onClick={() => submit('settings.saveConnection')}>{connecting && <Spinner />} {connecting ? '正在连接…' : '保存并连接'}</button>
         <button type="button" className="settings-button-secondary" disabled={!!busy} onClick={() => submit('settings.refreshDataSources')}>{refreshing && <Spinner />} {refreshing ? '正在刷新…' : '刷新数据源'}</button>
       </div>
     </SettingsSection>
     <SettingsSection title="数据源">
-      <SettingsRow title="已发现数据源" description="最近一次从 Notion 获取的数据源"><span className="settings-value">{pending ? '—' : `${state.notion.dataSourceCount} 个`}</span></SettingsRow>
+      <SettingsRow title="已发现数据源" description={`最近一次从 ${provider} 获取的数据源`}><span className="settings-value">{pending ? '—' : `${state.notion.dataSourceCount} 个`}</span></SettingsRow>
       <SettingsRow title="上次同步" description="数据源元信息最后更新时间"><span className="settings-value">{pending ? '—' : state.notion.lastSyncedAt || '尚未同步'}</span></SettingsRow>
     </SettingsSection>
   </SettingsPageLayout>
@@ -278,9 +285,9 @@ function DataSettings({ state, busy, run }: {
   busy: string
   run: (operation: string, payload?: unknown) => Promise<boolean>
 }) {
-  return <SettingsPageLayout title="数据与缓存" description="查看和维护生产助手保存在本机的 Notion 数据源缓存。">
+  return <SettingsPageLayout title="数据与缓存" description="查看和维护生产助手保存在本机的数据源缓存。">
     <SettingsSection title="本地数据">
-      <SettingsRow title="Notion 数据源缓存" description="用于减少重复的网络请求">
+      <SettingsRow title={`${state.notion.provider ?? 'Notion'} 数据源缓存`} description="用于减少重复的网络请求">
         <div className="settings-inline-actions"><span className="settings-value">{state.notion.dataSourceCount} 个</span><button type="button" className="settings-text-button" disabled={!!busy} onClick={() => run('settings.refreshDataSources')}>{busy === 'settings.refreshDataSources' && <Spinner />} {busy === 'settings.refreshDataSources' ? '刷新中…' : '刷新'}</button></div>
       </SettingsRow>
       <SettingsRow title="上次同步" description="数据源元信息最后更新时间"><span className="settings-value">{state.notion.lastSyncedAt || '尚未同步'}</span></SettingsRow>

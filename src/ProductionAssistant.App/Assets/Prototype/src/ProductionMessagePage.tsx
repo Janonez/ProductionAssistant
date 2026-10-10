@@ -144,7 +144,7 @@ export default function ProductionMessagePage() {
       const result = await invoke<ImportResult>("production.write", { drafts, defaultDate: localDate(), overwriteExisting: false, fieldChoices: conflictChoices, monthlyPlans: plans }, 120000);
       setWriteResult(result);
       if (result.requiredMonths.length) { setRequiredMonths(result.requiredMonths); setMonthlyPlans({}); return; }
-      if (result.succeeded) setCompleted(true); else setError(result.message || "Notion 写入未完成。");
+      if (result.succeeded) setCompleted(true); else setError(result.message || "数据库写入未完成。");
     } catch (cause) { setError(errorText(cause)); }
     finally { setBusy(undefined); }
   }
@@ -177,7 +177,7 @@ export default function ProductionMessagePage() {
 
   if (completed) return <div className="app-shell"><main className="main-content">
     <PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><div className="production-message-scroll"><StepIndicator current={3} />
-    <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入 Notion`}</p><button className="primary-button" onClick={handleNext}>录入下一条</button></section></div>
+    <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入数据库`}</p><button className="primary-button" onClick={handleNext}>录入下一条</button></section></div>
   </main>{bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} close={() => setBindingOpen(false)} save={saveBindings} />}</div>;
 
   return <div className="app-shell"><main className="main-content">
@@ -190,8 +190,8 @@ export default function ProductionMessagePage() {
       </section>
 
       <section className="review-pane">
-        {!parsed ? <div className="review-empty"><h2>解析结果</h2>{busy === 'parse' ? <SkeletonLines rows={5} label="正在加载解析结果" /> : <p>解析消息后，Notion 数据检查结果将在这里显示。</p>}
-          {(bindingError || bindings?.configured === false || bindings && (!bindings.cutting.bound || !bindings.towerDaily.bound)) && <div className="pm-notice" role="alert">{bindingError || (bindings?.configured === false ? "Notion 连接尚未配置。" : "数据库已变更，请点击右上角“数据库绑定”重新选择下料和塔筒主数据库。")}</div>}
+        {!parsed ? <div className="review-empty"><h2>解析结果</h2>{busy === 'parse' ? <SkeletonLines rows={5} label="正在加载解析结果" /> : <p>解析消息后，数据库检查结果将在这里显示。</p>}
+          {(bindingError || bindings?.configured === false || bindings && (!bindings.cutting.bound || !bindings.towerDaily.bound)) && <div className="pm-notice" role="alert">{bindingError || (bindings?.configured === false ? "数据库连接尚未配置。" : "数据库已变更，请点击右上角“数据库绑定”重新选择下料和塔筒主数据库。")}</div>}
         </div> : <>
           <div className="review-header"><h2>解析结果</h2><div className="review-summary"><span>新增<strong>{summary.newFields}</strong></span><i>·</i><span>一致<strong>{summary.same}</strong></span><i>·</i><span>待确认<strong>{summary.confirm}</strong></span><i>·</i><span>异常<strong>{summary.exception}</strong></span></div></div>
           <div className="date-groups">
@@ -236,7 +236,7 @@ export default function ProductionMessagePage() {
               </section>;
             })}
           </div>
-          <div className="review-footer"><span className="review-footer-text">{drafts.length > 1 ? `本次共 ${drafts.length} 条消息，将整批写入 Notion。` : "确认后将把本次解析结果写入 Notion。"}</span><button className="primary-button confirm-button" disabled={!canSubmit} onClick={() => write()}>{busy === "write" ? "正在入库…" : "确认入库"}</button></div>
+          <div className="review-footer"><span className="review-footer-text">{drafts.length > 1 ? `本次共 ${drafts.length} 条消息，将整批写入数据库。` : "确认后将把本次解析结果写入数据库。"}</span><button className="primary-button confirm-button" disabled={!canSubmit} onClick={() => write()}>{busy === "write" ? "正在入库…" : "确认入库"}</button></div>
         </>}
       </section>
     </div>
@@ -248,7 +248,7 @@ export default function ProductionMessagePage() {
 }
 
 function MatchStatus({ busy, result, error, needsReparse, invalidCount, fieldStatuses }: { busy: boolean; result?: ImportResult; error: string; needsReparse: boolean; invalidCount: number; fieldStatuses: string[] }) {
-  if (busy) return <div className="match-status" role="status" aria-live="polite"><span className="status-loader" /><span className="match-status-copy">正在检查 Notion 数据…</span></div>;
+  if (busy) return <div className="match-status" role="status" aria-live="polite"><span className="status-loader" /><span className="match-status-copy">正在检查已有数据…</span></div>;
   if (needsReparse) return <div className="match-status match-status-error" role="alert"><span className="new-record-icon">!</span><span className="match-status-copy">原始消息已修改，请重新解析</span></div>;
   if (invalidCount) return <div className="match-status match-status-error" role="alert"><span className="new-record-icon">!</span><span className="match-status-copy">本批有 {invalidCount} 条异常，已停止检查和入库</span></div>;
   if (error) return <div className="match-status match-status-error" role="alert"><span className="new-record-icon">!</span><span className="match-status-copy">检查失败：{error}</span></div>;
@@ -264,8 +264,8 @@ function MatchStatus({ busy, result, error, needsReparse, invalidCount, fieldSta
     : has("confirm") ? "已找到对应记录，有字段待确认"
     : has("new") ? (existing || has("same") ? "已找到对应记录，将补充空字段" : "未找到对应记录，将新建")
     : allSame ? "已找到对应记录，数据一致"
-    : result && !result.succeeded ? "Notion 检查未通过"
-    : "等待检查 Notion 数据";
+    : result && !result.succeeded ? "数据库检查未通过"
+    : "等待检查数据库数据";
   const checked = Boolean(result) && !has("exception") && !has("confirm") && !has("unchecked");
   return <div className={`match-status ${tone}`} role={tone === "match-status-error" ? "alert" : "status"} aria-live="polite">
     {checked ? <span className="match-check"><Check /></span> : <span className="new-record-icon">{tone ? "!" : "+"}</span>}

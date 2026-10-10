@@ -37,13 +37,13 @@ Production 继续使用现有 `%LOCALAPPDATA%\ProductionAssistant`，Development
 
 Scheduler 由 [appsettings.Development.json](src/ProductionAssistant.App/appsettings.Development.json) 和 [appsettings.Production.json](src/ProductionAssistant.App/appsettings.Production.json) 控制；Development 默认关闭，Production 保持开启。当前项目没有 PostgreSQL、连接字符串或 migration，数据库功能实际连接 Notion，因此没有需要创建的 Development PostgreSQL 数据库。
 
-## Teable API 基建（联调阶段）
+## Teable API 与迁移
 
-已提供独立命令行入口 `tools/TeableProbe`：安全配置 Token、直连读取测试表、指定测试记录写入与回读校验。现有业务仍使用 Notion，尚未完成数据库迁移。使用步骤和实际联调边界见 [Teable API 联调](docs/teable-api.md)。
+独立命令行入口 `tools/TeableProbe` 支持安全配置 Token、直连读取、映射和业务绑定导入、Development 开关及读写验收。API 基建历史与凭据配置见 [Teable API 联调](docs/teable-api.md)，当前业务状态见 [Teable 业务接入](docs/teable-business.md)。
 
 生产业务库第一阶段创建了 9 张空表、45 个原字段及 8 个日期区间结束字段，包含关联、汇总与公式。该阶段的可恢复脚本、字段映射及验证记录见 [Teable 结构迁移](docs/teable-schema-migration.md)。
 
-2026-10-09 已继续完成上述九个生产库的字段数据与关联迁移，共 2,624 条记录；修复用户先行导入的精度/日期差异并核对计算结果。软件业务调用仍使用 Notion；数据迁移范围、平台文本规范化及恢复方法见 [Teable 数据迁移](docs/teable-data-migration.md)。
+2026-10-09 已完成上述九个生产库的字段数据与关联迁移，共 2,624 条记录；修复用户先行导入的精度/日期差异并核对计算结果。数据迁移范围、平台文本规范化及恢复方法见 [Teable 数据迁移](docs/teable-data-migration.md)。Development 查询、视图及当前业务模块进一步接入 Teable；Production 未切换。
 
 ## React 新版界面
 
@@ -124,6 +124,6 @@ Notion 自动填报首个业务为原材料入库：每天按任务设置的时�
 ## 已知限制与后续优化
 
 当前 React 桌面外壳由 WinUI 3 内的单一 WebView2 承载。冷启动显示中性灰色结构骨架，优先加载生产消息页面与操作栏，其他业务页面按需加载；设置窗口代码直接加载，打开时显示正式表单，配置读取期间禁用操作，不使用整页骨架或入场动画；首屏读取本地数据库绑定，不自动查询 Notion。普通切页保留操作栏，按目标页面的实际布局显示骨架；任务列表、数据库选择、任务详情 iframe、运行记录与数据预览均在内容所在区域占位。已有查询结果刷新时保留原布局，写入和导出保留真实执行进度。目标页面挂载后发送带导航令牌的界面就绪消息，不等同于业务数据已读取完成。应用保留共享环境预热和导航后的 15 秒就绪超时；重试重新加载前端资源。startup.log 分别记录应用构造、窗口创建/激活、Environment 创建、WebView 控件创建、导航及 React 就绪；前端入口与就绪毫秒数相对网页导航开始，不与宿主累计计时直接相减；另记录各路由等待和生产消息绑定/自动化列表读取耗时。实际冷启动耗时、内存与目标设备体验仍需人工测量，构建体积缩小不等于性能已经验收。
-## Teable 业务读取
+## Teable 业务读写
 
-迁移后的生产库与视图接入、Development 查询开关及回退方法见 [Teable 业务接入](docs/teable-business.md)。
+迁移后的生产库、21 个视图、生产消息、焊接层级和原材料入库接入，Development 开关、回退及桌面验收方法见 [Teable 业务接入](docs/teable-business.md)。塔筒月报/年报不迁移，机加工后续完善暂缓；不宣称整个 Notion 工作区已全面迁移。

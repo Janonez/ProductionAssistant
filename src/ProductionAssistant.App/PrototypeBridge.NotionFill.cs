@@ -50,7 +50,7 @@ internal sealed partial class PrototypeBridge
             }
         }
         var scheduler = await NotionFillTaskScheduler.GetStatusAsync(job.Id, job.RunTime);
-        var notion = NotionSettingsStore.Load();
+        var notion = BusinessDatabaseSettingsStore.Load();
         return new
         {
             job.Id,
@@ -59,7 +59,7 @@ internal sealed partial class PrototypeBridge
             job.SourcePageUrl,
             job.Username,
             passwordConfigured = !string.IsNullOrWhiteSpace(job.EncryptedPassword),
-            notionConfigured = !string.IsNullOrWhiteSpace(notion.Token),
+            notionConfigured = notion.ConnectionConfigured,
             job.TargetDataSourceName,
             validated = job.ConfigurationValidated,
             isEnabled = NotionFillTaskScheduler.IsSchedulingAvailable && job.IsEnabled,

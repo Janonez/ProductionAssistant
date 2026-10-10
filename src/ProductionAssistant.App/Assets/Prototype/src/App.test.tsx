@@ -262,7 +262,7 @@ describe('connected production message workflow', () => {
     const button = (label: string) => [...container.querySelectorAll('button')].find(item => item.textContent?.includes(label)) as HTMLButtonElement
     await act(async () => { button('解析消息').click(); await Promise.resolve() })
     expect(container.textContent).toContain('解析结果')
-    expect(container.querySelector('.match-status')?.textContent).toContain('正在检查 Notion 数据')
+    expect(container.querySelector('.match-status')?.textContent).toContain('正在检查已有数据')
     expect(container.querySelector('.step-done .step-circle svg')).toBeTruthy()
     expect(container.querySelector('.step-done')?.firstElementChild?.nextElementSibling?.textContent).toBe('录入消息')
     expect(button('重新解析').disabled).toBe(true)

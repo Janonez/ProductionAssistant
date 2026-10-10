@@ -11,16 +11,20 @@ public sealed class MaterialInboundNotionFillService
     private readonly HttpClient _client;
     private readonly INotionImportService _notion;
     private readonly Func<NotionSettings> _settings;
+    private readonly TeableBusinessStore? _teable;
 
     public MaterialInboundNotionFillService(
         HttpClient? client = null,
         INotionImportService? notion = null,
-        Func<NotionSettings>? settings = null)
+        Func<NotionSettings>? settings = null,
+        TeableBusinessStore? teable = null)
     {
         _client = client ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         _client.BaseAddress ??= new Uri("https://api.notion.com/v1/");
-        _notion = notion ?? new NotionImportService();
-        _settings = settings ?? NotionSettingsStore.Load;
+        _notion = notion ?? BusinessImportFactory.Create();
+        _settings = settings ?? BusinessDatabaseSettingsStore.Load;
+        _teable = teable ?? (client is null && notion is null && settings is null && BusinessDatabaseSettingsStore.UsesTeable
+            ? new TeableBusinessStore(TeableQuerySettingsStore.Load()) : null);
     }
 
     public async Task<NotionFillPreview> PreviewAsync(
@@ -30,7 +34,7 @@ public sealed class MaterialInboundNotionFillService
     {
         ValidateJob(job);
         var notionSettings = _settings();
-        if (string.IsNullOrWhiteSpace(notionSettings.Token))
+        if (!notionSettings.ConnectionConfigured)
             throw new InvalidOperationException("请先在系统设置中配置 Notion 连接。");
 
         TargetSchema schema;
@@ -101,7 +105,7 @@ public sealed class MaterialInboundNotionFillService
     {
         if (preview.TargetRecordExists) return;
         var notionSettings = _settings();
-        if (string.IsNullOrWhiteSpace(notionSettings.Token))
+        if (!notionSettings.ConnectionConfigured)
             throw new InvalidOperationException("请先在系统设置中配置 Notion 连接。");
         var schema = await ResolveSchemaAsync(job, notionSettings.Token, cancellationToken);
         var date = preview.Summary.Date;
@@ -115,6 +119,11 @@ public sealed class MaterialInboundNotionFillService
             [schema.Plate.Name] = new { number = preview.Summary.PlateWeight },
             [schema.Section.Name] = new { number = preview.Summary.SectionWeight }
         };
+        if (_teable is not null)
+        {
+            await _teable.CreateAsync(job.TargetDataSourceId, properties, cancellationToken);
+            return;
+        }
         using var request = CreateRequest(HttpMethod.Post, "pages", notionSettings.Token,
             JsonSerializer.Serialize(new
             {
@@ -148,6 +157,9 @@ public sealed class MaterialInboundNotionFillService
         DateOnly date,
         CancellationToken cancellationToken)
     {
+        if (_teable is not null)
+            return (await _teable.QueryAsync(dataSourceId, new { property = datePropertyId,
+                date = new { equals = date.ToString("yyyy-MM-dd") } }, cancellationToken)).Count;
         using var request = CreateRequest(HttpMethod.Post, $"data_sources/{dataSourceId}/query", token,
             JsonSerializer.Serialize(new
             {

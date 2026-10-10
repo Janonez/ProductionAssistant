@@ -28,3 +28,23 @@ it('opens the real settings form immediately and retains it when local settings 
     expect(invoke).toHaveBeenCalledTimes(1)
   } finally { await act(async () => root.unmount()); container.remove() }
 })
+
+it('shows the Teable server and preserves a saved token when refreshing', async () => {
+  invoke.mockReset()
+  const state = { notion: { provider: 'Teable', serverUrl: 'http://127.0.0.1:3000', configured: true, rootPageId: '', dataSourceCount: 9, lastSyncedAt: 'today', sources: [] }, notification: {}, version: 'test' }
+  invoke.mockResolvedValueOnce(state).mockResolvedValue({ state, message: 'verified' })
+  const container = document.createElement('div'), root = createRoot(container)
+  document.body.append(container)
+  try {
+    await act(async () => root.render(<SettingsModal open onClose={() => {}} />))
+    expect(container.textContent).toContain('Teable')
+    expect(container.textContent).toContain('实例地址')
+    expect(container.textContent).not.toContain('根页面 ID')
+    const token = container.querySelector<HTMLInputElement>('input[type="password"]')!
+    expect(token.value).toBe('••••••••••••')
+    const refresh = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === '刷新数据源')!
+    await act(async () => refresh.click())
+    expect(invoke).toHaveBeenLastCalledWith('settings.refreshDataSources', { token: '', rootPageId: '', serverUrl: 'http://127.0.0.1:3000' }, 60000)
+    expect(token.value).toBe('••••••••••••')
+  } finally { await act(async () => root.unmount()); container.remove() }
+})

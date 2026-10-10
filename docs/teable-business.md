@@ -1,6 +1,8 @@
-# Teable 业务接入：读取与视图
+# Teable 业务接入：查询、视图与当前模块读写
 
-`codex/teable-business` 从迁移合并提交 `9db3d5d` 开始。第一阶段接通 `IDatabaseQueryProvider`：数据库查询、日报取数、腾讯表格取数以及日报自动任务共用同一适配器。生产消息、焊接导入和其他写入仍使用 Notion，后续需接入字段冲突检查及重复写入保护。此分支不发布 Production 软件。
+`codex/teable-business` 从迁移合并提交 `9db3d5d` 开始。数据库查询、日报取数、腾讯表格取数以及日报自动任务共用 `IDatabaseQueryProvider`。当前进一步接通生产消息、焊接月/日层级导入、原材料入库和原材料自动任务的原生 Teable 读写，复用既有业务校验与字段冲突交互。此分支只发布 Development 软件。
+
+用户已确认读取可用，随后要求先跑通当前模块。塔筒月报、年报不使用，不迁移其旧绑定；机加工的后续正文、附件及业务完善暂缓。已迁移的九表字段数据与 21 个视图保留。正文/附件、权限、评论和其他 Notion 工作区功能不属于本轮交付，不能表述为整个工作区已全面迁移。
 
 ## 视图迁移
 
@@ -31,11 +33,39 @@ dotnet run --project tools/TeableProbe -- enable-query
 dotnet run --project tools/TeableProbe -- disable-query
 ```
 
-工具固定使用 Development；开关写入该环境的 `teable-query-settings.json`，重启应用后生效。初次导入默认关闭；启用前读取全部表和所有已映射视图。凭据继续从独立 DPAPI 配置读取，映射文件不包含 Token。Production 配置不自动修改。
+工具固定使用 Development；开关写入该环境的 `teable-query-settings.json`，重启应用后生效。初次导入默认关闭，更新映射保留现有开关；启用前读取全部表和所有已映射视图。凭据继续从独立 DPAPI 配置读取，映射文件不包含 Token。Production 配置不自动修改。
 
 适配器输出原 Notion 数据源、属性和 View ID，使现有绑定继续有效；视图取数显式使用对应 Teable viewId。未知视图绑定停止，不降级成全部记录。无视图的日期查询忽略默认视图筛选，完整分页读取后按北京时间筛选，当前规模上限十万条；规模增长时应改为服务端日期过滤。显式投影全部绑定字段，隐藏日期仍参与统计；保留 null/0 和数值精度。分页重复、字段 ID/名称/类型漂移或读取失败均不能作为零记录成功。启用后不自动回退 Notion，避免混用两份数据。
 
 自动化测试覆盖北京时间午夜边界、null/0、数值精度、视图及隐藏日期投影、跨千条分页、重复记录和字段漂移。构建、CLI 实例读取不等于 WinUI/WebView2、定时任务或腾讯外部写入验收；需由用户在 Development 中验证数据库查询和日报预览。
+
+## 当前模块读写
+
+```powershell
+dotnet run --project tools/TeableProbe -- import-business-bindings <原notion-settings.json>
+dotnet run --project tools/TeableProbe -- business-check
+dotnet run --project tools/TeableProbe -- enable-business
+# 仅回退写入，读取仍使用 Teable；重启应用后生效
+dotnet run --project tools/TeableProbe -- disable-business
+# 同时回退读写
+dotnet run --project tools/TeableProbe -- disable-query
+```
+
+`WritesEnabled` 初始关闭，启用业务时同时启用 Teable 查询，不能混用两份数据。业务绑定单独保存为 `teable-business-bindings.json`：仅迁移已映射的数据源、标题/日期/数值绑定和模块映射，不解密、复制或伪造 Notion Token。Notion 原配置保留。内部兼容模型、桥接操作及任务类型沿用原名称，Teable 模式不调用 Notion 网络；设置界面显示 Teable 实例地址和令牌，并在验证新连接后才替换凭据。
+
+`TeableBusinessStore` 使用实际字段 ID、显式投影、完整分页、北京时间日期转换和真实关联记录 ID。每次写入前核对字段 ID/名称/类型及关联目标；未知筛选即使在空表也拒绝执行。生产消息保留查重、空字段补写、字段 keep/use 和冲突确认；下料先校验日输入再创建月计划。焊接沿用同月/重复日期校验及月日关联维护。原材料入库保留 93 系统读取与预览确认规则，写入目标改为 Teable。
+
+新增按表及业务日期加进程内和文件锁，写入前复查同日期记录；在 `%LOCALAPPDATA%/ProductionAssistant/Development/teable-write-journal` 先保存 pending。POST 无自动重试，失败或回读不一致保持 pending，阻止同日期重发。应先核对日志和实际表内记录，再人工处理，不能直接删除日志重新整批执行。成功日志保留字段、记录 ID 和时间。更新前按本次查询快照复查拟写字段，PATCH 后回读；这不是服务端事务或与其他客户端之间的原子比较更新。月/日多记录操作也不是事务，中断后须按结果和日志核对已写部分。
+
+实际使用的三个绑定为焊接、下料、塔筒日库。原材料任务沿用原数据源 ID 映射，无需另造目标表。Development 已启用业务读写，Production 未切换。静态服务在应用启动时选择提供方，改开关后必须重启。
+
+## 当前模块验收与测试包
+
+后端 145 项、前端 104 项测试通过，Release 编译及 Debug + Development self-contained publish 通过。新增测试覆盖原生 Teable 生产消息、焊接层级、原材料入库、无效日输入零写入、null/0/精度、重复日期、字段冲突、关联漂移、过期检查快照和不确定 POST 防重；测试中的 Notion HTTP 客户端拒绝所有请求。
+
+六张带唯一运行标记的临时表完成真实 API 检查、新增、重复执行、冲突确认、更新、下料月计划关联、焊接月日层级和原材料写入回读。临时表保存证据后已清理，没有向正式业务表插入测试数据。正式九表只读回检仍为 2624 条。证据在 `artifacts/business-smoke/run-57356c68ecbb4aef86b19759e49b5b6a`，另归档至 Development 数据目录。
+
+标准测试包位于主检出目录 `deployments/development`，使用 Debug 构建和 Development 环境；不再采用独立 `teable-test-*` 文件夹。不启动桌面应用，也不发布 Production。用户需重启 Development 软件，检查设置连接、生产消息预览及入库、焊接导入、原材料只读预览与确认写入；本轮临时表验证没有运行 93 系统、实际计划任务、钉钉通知或腾讯外部填报。
 
 ## 2026-10-09 验证结果
 

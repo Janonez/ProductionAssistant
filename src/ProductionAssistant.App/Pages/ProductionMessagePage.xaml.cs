@@ -145,8 +145,8 @@ public sealed partial class ProductionMessagePage : Page
         SetBusy(true);
         try
         {
-            _settings = NotionSettingsStore.Load();
-            if (string.IsNullOrWhiteSpace(_settings.Token))
+            _settings = BusinessDatabaseSettingsStore.Load();
+            if (!_settings.ConnectionConfigured)
             {
                 await ShowResultDialogAsync(
                     "需要配置 Notion",
@@ -302,7 +302,7 @@ public sealed partial class ProductionMessagePage : Page
                     previous.PropertyMappings = binding.PropertyMappings;
                 }
             }
-            NotionSettingsStore.Save(_settings);
+            BusinessDatabaseSettingsStore.Save(_settings);
             RefreshBindingStatus();
             SetResultStatus("绑定已保存", "已检测并保存已选择的数据源字段；后续写入会复用这些映射。", InfoBarSeverity.Success);
         }
@@ -359,7 +359,7 @@ public sealed partial class ProductionMessagePage : Page
 
     private async Task VerifyProductionBindingsAsync()
     {
-        _settings = NotionSettingsStore.Load();
+        _settings = BusinessDatabaseSettingsStore.Load();
         var targets = TowerBindingKeys
             .Select(key => FindTarget(_settings, key))
             .ToArray();
@@ -511,9 +511,9 @@ public sealed partial class ProductionMessagePage : Page
 
     private void RefreshBindingStatus()
     {
-        _settings = NotionSettingsStore.Load();
+        _settings = BusinessDatabaseSettingsStore.Load();
         BindSourcesButton.Visibility = Visibility.Visible;
-        if (string.IsNullOrWhiteSpace(_settings.Token))
+        if (!_settings.ConnectionConfigured)
         {
             CuttingBindingInfoBar.Title = "下料数据库";
             CuttingBindingInfoBar.Message = "未绑定";
@@ -612,7 +612,7 @@ public sealed partial class ProductionMessagePage : Page
             return;
         }
 
-        var settings = NotionSettingsStore.Load();
+        var settings = BusinessDatabaseSettingsStore.Load();
         var missingTargets = values.Select(value => value.Kind switch
             {
                 ProductionMessageKind.MaterialCutting => ProductionMessageKinds.CuttingModuleKey,

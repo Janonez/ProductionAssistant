@@ -14,11 +14,15 @@ public sealed class NotionImportService : INotionImportService
     private const string WeldTitleSuffix = " 焊接";
     private const int MaxTransientRetries = 2;
     private readonly HttpClient _client;
+    private readonly Func<NotionSettings> _settings;
+    private readonly TeableBusinessStore? _teable;
 
-    public NotionImportService(HttpClient? client = null)
+    public NotionImportService(HttpClient? client = null, Func<NotionSettings>? settings = null, TeableBusinessStore? teable = null)
     {
         _client = client ?? new HttpClient();
         _client.BaseAddress ??= new Uri("https://api.notion.com/v1/");
+        _settings = settings ?? NotionSettingsStore.Load;
+        _teable = teable;
     }
 
     public async Task<NotionDiscoveryResult> DiscoverAsync(
@@ -26,6 +30,7 @@ public sealed class NotionImportService : INotionImportService
         string rootPageId,
         CancellationToken cancellationToken = default)
     {
+        if (_teable is not null) return new(true, "已读取 Teable 生产数据源映射。", _teable.Sources);
         if (string.IsNullOrWhiteSpace(token))
             return new(false, "请先填写 API 令牌。", []);
 
@@ -311,6 +316,7 @@ public sealed class NotionImportService : INotionImportService
         string dataSourceId,
         CancellationToken cancellationToken = default)
     {
+        if (_teable is not null) return await _teable.GetSchemaAsync(dataSourceId, cancellationToken);
         try
         {
             using var response = await SendWithRetryAsync(
@@ -343,8 +349,8 @@ public sealed class NotionImportService : INotionImportService
         if (request.Items.Count == 0)
             return new(false, "没有可写入的消息。", []);
 
-        var settings = NotionSettingsStore.Load();
-        if (string.IsNullOrWhiteSpace(settings.Token))
+        var settings = _settings();
+        if (!settings.ConnectionConfigured)
             return new(false, "请先在“设置”中填写 Notion API 令牌。", []);
 
         var results = new List<ProductionMessageWriteResult>();
@@ -445,6 +451,11 @@ public sealed class NotionImportService : INotionImportService
     {
         var validation = Validate(settings, settings.ActiveTarget);
         if (validation is not null) return validation;
+        if (_teable is not null)
+        {
+            var schema = await _teable.GetSchemaAsync(settings.ActiveTarget!.Id, cancellationToken);
+            return schema.Succeeded ? NotionImportResult.Success("Teable 连接成功。") : NotionImportResult.Failure(schema.Message);
+        }
 
         return await SendAsync(
             () => CreateRequest(
@@ -470,7 +481,7 @@ public sealed class NotionImportService : INotionImportService
     {
         if (request.Values.Count == 0)
             return new(false, "没有可导入的数据。", string.Empty, []);
-        var settings = NotionSettingsStore.Load();
+        var settings = _settings();
         var target = settings.Targets.FirstOrDefault(item =>
             item.ModuleKey == "daily-weld-simulation");
         var validation = Validate(settings, target);
@@ -489,24 +500,10 @@ public sealed class NotionImportService : INotionImportService
                     new { property = target.DateProperty, date = new { on_or_before = lastDate } }
                 }
             };
-        var queryBody = JsonSerializer.Serialize(new { filter, page_size = 100 });
-        using var queryResponse = await SendWithRetryAsync(
-            () => CreateRequest(
-                HttpMethod.Post,
-                $"data_sources/{target.Id}/query",
-                settings.Token,
-                queryBody),
-            cancellationToken);
-        if (!queryResponse.IsSuccessStatusCode)
-        {
-            var detail = await ReadErrorAsync(queryResponse, cancellationToken);
-            return new(false, $"读取整月数据失败：{detail}", target.QuantityProperty, []);
-        }
-
-        using var queryDocument = JsonDocument.Parse(
-            await queryResponse.Content.ReadAsStringAsync(cancellationToken));
+        var query = await QueryDataSourceAsync(settings.Token, target.Id, filter, cancellationToken);
+        if (!query.Succeeded) return new(false, $"读取整月数据失败：{query.Message}", target.QuantityProperty, []);
         var pagesByDate = new Dictionary<string, List<JsonElement>>();
-        foreach (var page in queryDocument.RootElement.GetProperty("results").EnumerateArray())
+        foreach (var page in query.Pages)
         {
             var date = ReadPageDate(page, target);
             if (string.IsNullOrWhiteSpace(date)) continue;
@@ -556,7 +553,7 @@ public sealed class NotionImportService : INotionImportService
     {
         if (request.Values.Count == 0)
             return new(false, false, "没有可导入的数据。");
-        var settings = NotionSettingsStore.Load();
+        var settings = _settings();
         var target = settings.Targets.FirstOrDefault(item =>
             item.ModuleKey == "daily-weld-simulation");
         var validation = Validate(settings, target);
@@ -579,6 +576,11 @@ public sealed class NotionImportService : INotionImportService
                 property = target.DateProperty,
                 date = new { on_or_before = request.Values.Max(value => value.Date).ToString("yyyy-MM-dd") }
             });
+        }
+        if (_teable is not null)
+        {
+            var pages = await _teable.QueryAsync(target.Id, new { and = filters }, cancellationToken);
+            return new(true, pages.Count > 0, pages.Count > 0 ? "目标月份已有产量。" : "目标月份暂无产量。");
         }
         var body = JsonSerializer.Serialize(new { filter = new { and = filters }, page_size = 1 });
         using var httpRequest = CreateRequest(
@@ -618,7 +620,21 @@ public sealed class NotionImportService : INotionImportService
         CancellationToken cancellationToken = default)
     {
         if (!plan.Succeeded) return NotionImportResult.Failure(plan.Message);
-        var settings = NotionSettingsStore.Load();
+        var settings = _settings();
+        if (_teable is not null)
+        {
+            var target = settings.Targets.Single(item => item.ModuleKey == "daily-weld-simulation");
+            var pages = await _teable.QueryAsync(target.Id, null, cancellationToken);
+            foreach (var item in plan.Items.Where(item => item.PageId is not null))
+            {
+                var page = pages.SingleOrDefault(page => page.GetProperty("id").GetString() == item.PageId);
+                if (page.ValueKind == JsonValueKind.Undefined || ReadPageDate(page, target) != item.Date.ToString("yyyy-MM-dd"))
+                    return NotionImportResult.Failure("检查后的记录或日期发生变化，请重新检查。");
+                var quantity = page.GetProperty("properties").GetProperty(plan.QuantityProperty).GetProperty("number");
+                double? current = quantity.ValueKind == JsonValueKind.Number ? quantity.GetDouble() : null;
+                if (current != item.ExistingQuantity) return NotionImportResult.Failure("检查后产量已发生变化，请重新确认覆盖。");
+            }
+        }
         var writableItems = plan.Items.Where(item =>
             item.PageId is not null &&
             (overwriteExisting || !item.ExistingQuantity.HasValue)).ToArray();
@@ -635,24 +651,8 @@ public sealed class NotionImportService : INotionImportService
                 continue;
             }
 
-            var updateBody = JsonSerializer.Serialize(new
-            {
-                properties = new Dictionary<string, object>
-                {
-                    [plan.QuantityProperty] = new { number = item.NewQuantity }
-                }
-            });
-            using var updateRequest = CreateRequest(
-                HttpMethod.Patch,
-                $"pages/{item.PageId}",
-                settings.Token,
-                updateBody);
-            using var updateResponse = await _client.SendAsync(updateRequest, cancellationToken);
-            if (!updateResponse.IsSuccessStatusCode)
-            {
-                var detail = await ReadErrorAsync(updateResponse, cancellationToken);
-                return NotionImportResult.Failure($"更新 {item.Date:yyyy-MM-dd} 失败：{detail}");
-            }
+            await UpdatePageAsync(settings.Token, item.PageId, new Dictionary<string, object>
+                { [plan.QuantityProperty] = new { number = item.NewQuantity } }, cancellationToken);
 
             updated++;
             progress?.Report(new(index + 1, plan.Items.Count, item.Date, "已完成"));
@@ -679,7 +679,7 @@ public sealed class NotionImportService : INotionImportService
         if (request.Values.Count == 0)
             return NotionImportResult.Failure("没有可导入的数据。");
 
-        var settings = NotionSettingsStore.Load();
+        var settings = _settings();
         var dayTarget = settings.Targets.FirstOrDefault(target =>
             target.ModuleKey == "daily-weld-simulation");
         var validation = Validate(settings, dayTarget);
@@ -1143,6 +1143,10 @@ public sealed class NotionImportService : INotionImportService
             return new(item.Index, item.BusinessDate, item.Kind, "unchanged",
                 "相关字段与本次输入一致，无需写入。");
 
+        // 先校验日数据，再创建月计划，防止无效输入留下孤立月记录。
+        if (!TryBuildMessageProperties(item, resolution, out var pageProperties, out var propertyMessage))
+            return WriteFailure(item, propertyMessage);
+
         string? monthlyPageId = null;
         if (item.Kind == ProductionMessageKind.MaterialCutting)
         {
@@ -1156,13 +1160,6 @@ public sealed class NotionImportService : INotionImportService
                 return new(item.Index, item.BusinessDate, item.Kind, month.Status, month.Message);
             monthlyPageId = month.PageId;
         }
-
-        if (!TryBuildMessageProperties(
-                item,
-                resolution,
-                out var pageProperties,
-                out var propertyMessage))
-            return WriteFailure(item, propertyMessage);
 
         if (item.Kind == ProductionMessageKind.MaterialCutting)
         {
@@ -1590,8 +1587,9 @@ public sealed class NotionImportService : INotionImportService
     private sealed record QueryPagesResult(bool Succeeded, string Message, List<JsonElement> Pages);
 
     private async Task<QueryPagesResult> QueryDataSourceAsync(
-        string token, string dataSourceId, object filter, CancellationToken cancellationToken)
+        string token, string dataSourceId, object? filter, CancellationToken cancellationToken)
     {
+        if (_teable is not null) return new(true, "", await _teable.QueryAsync(dataSourceId, filter, cancellationToken));
         var pages = new List<JsonElement>();
         string? cursor = null;
         do
@@ -1623,6 +1621,7 @@ public sealed class NotionImportService : INotionImportService
         string operation,
         CancellationToken cancellationToken)
     {
+        if (_teable is not null) return await _teable.CreateAsync(dataSourceId, properties, cancellationToken);
         using var request = CreateRequest(HttpMethod.Post, "pages", token,
             JsonSerializer.Serialize(new
             {
@@ -1643,6 +1642,11 @@ public sealed class NotionImportService : INotionImportService
         string token, string pageId, Dictionary<string, object> properties,
         CancellationToken cancellationToken)
     {
+        if (_teable is not null)
+        {
+            await _teable.UpdateAsync(pageId, properties, cancellationToken);
+            return;
+        }
         using var request = CreateRequest(HttpMethod.Patch, $"pages/{pageId}", token,
             JsonSerializer.Serialize(new { properties }));
         using var response = await _client.SendAsync(request, cancellationToken);
@@ -1698,7 +1702,7 @@ public sealed class NotionImportService : INotionImportService
 
     private static NotionImportResult? Validate(NotionSettings settings, NotionTargetSettings? target)
     {
-        if (string.IsNullOrWhiteSpace(settings.Token))
+        if (!settings.ConnectionConfigured)
             return NotionImportResult.Failure("请先在“设置”中填写 Notion API 令牌。");
         if (target is null)
             return NotionImportResult.Failure("请先在“设置”中为每日焊接数据模拟绑定目标数据源。");

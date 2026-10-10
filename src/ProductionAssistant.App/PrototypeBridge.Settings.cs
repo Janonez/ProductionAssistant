@@ -26,7 +26,24 @@ internal sealed partial class PrototypeBridge
         bool refresh,
         CancellationToken cancellationToken)
     {
-        var settings = NotionSettingsStore.Load();
+        var settings = BusinessDatabaseSettingsStore.Load();
+        if (settings.UsesTeable)
+        {
+            var connection = TeableSettingsStore.Load();
+            var serverUrl = ReadString(payload, "serverUrl").Trim();
+            var newToken = ReadString(payload, "token").Trim();
+            if (!string.IsNullOrWhiteSpace(serverUrl)) connection.ServerUrl = serverUrl;
+            if (!string.IsNullOrWhiteSpace(newToken)) connection.Token = newToken;
+            // 新连接先验证全部已绑定字段，失败不覆盖当前可用凭据。
+            var store = new TeableBusinessStore(TeableQuerySettingsStore.Load(),
+                () => new TeableClient(connection.ServerUrl, connection.Token));
+            foreach (var source in store.Sources) await store.GetSchemaAsync(source.Id, cancellationToken);
+            TeableSettingsStore.Save(connection);
+            settings.CachedDataSources = store.Sources.ToList();
+            settings.DataSourcesCachedAtUtc = DateTime.UtcNow;
+            BusinessDatabaseSettingsStore.Save(settings);
+            return SettingsResult("Teable 连接及生产数据源已验证。", settings);
+        }
         var token = ReadString(payload, "token").Trim();
         var rootPageId = payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("rootPageId", out _)
             ? ReadString(payload, "rootPageId").Trim()
@@ -137,7 +154,7 @@ internal sealed partial class PrototypeBridge
         NotionSettings? notion = null,
         NotificationSettings? notification = null)
     {
-        notion ??= NotionSettingsStore.Load();
+        notion ??= BusinessDatabaseSettingsStore.Load();
         notification ??= NotificationSettingsStore.Load();
         var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
@@ -146,7 +163,9 @@ internal sealed partial class PrototypeBridge
         {
             notion = new
             {
-                configured = !string.IsNullOrWhiteSpace(notion.Token),
+                configured = notion.ConnectionConfigured,
+                provider = notion.UsesTeable ? "Teable" : "Notion",
+                serverUrl = notion.UsesTeable ? TeableSettingsStore.Load().ServerUrl : "",
                 notion.RootPageId,
                 dataSourceCount = notion.CachedDataSources.Count,
                 lastSyncedAt = notion.DataSourcesCachedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? string.Empty,

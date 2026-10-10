@@ -56,9 +56,23 @@ public sealed class TeableClient : IDisposable
         SendAsync(HttpMethod.Get, $"table/{Id(tableId, "tbl")}/record/{Id(recordId, "rec")}?fieldKeyType=id",
             null, cancellationToken);
 
+    public Task<JsonObject> UpdateRecordAsync(string tableId, string recordId, JsonObject fields,
+        CancellationToken cancellationToken = default) => SendAsync(HttpMethod.Patch,
+        $"table/{Id(tableId, "tbl")}/record/{Id(recordId, "rec")}", new JsonObject
+        { ["fieldKeyType"] = "id", ["typecast"] = false, ["record"] = new JsonObject { ["fields"] = fields.DeepClone() } }, cancellationToken);
+
+    public Task<JsonObject> ReadRecordFieldsAsync(string tableId, string recordId, IEnumerable<string> fieldIds,
+        CancellationToken cancellationToken = default) => SendAsync(HttpMethod.Get,
+        $"table/{Id(tableId, "tbl")}/record/{Id(recordId, "rec")}?fieldKeyType=id" +
+        string.Concat(fieldIds.Distinct().Select(field => $"&projection={Id(field, "fld")}")), null, cancellationToken);
+
     public async Task<JsonArray> ReadFieldsAsync(string tableId, CancellationToken cancellationToken = default) =>
         await SendNodeAsync(HttpMethod.Get, $"table/{Id(tableId, "tbl")}/field", null, cancellationToken) as JsonArray
         ?? throw new InvalidOperationException("Teable 字段响应不是数组。");
+
+    public async Task<JsonArray> ReadTablesAsync(string baseId, CancellationToken cancellationToken = default) =>
+        await SendNodeAsync(HttpMethod.Get, $"base/{Id(baseId, "bse")}/table", null, cancellationToken) as JsonArray
+        ?? throw new InvalidOperationException("Teable 表响应不是数组。");
 
     public Task<JsonObject> ReadViewAsync(string tableId, string viewId, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Get, $"table/{Id(tableId, "tbl")}/view/{Id(viewId, "viw")}", null, cancellationToken);

@@ -80,7 +80,7 @@ it('loads no source data on entry, date changes or settings saves, and uses the 
 it('requires full preview and explicit confirmation; only backend results report actual writes and skips', async () => {
   await mount(); await edit('date', '2026-09-03', 'change');
   await click('source-test');
-  expect(node('target-empty').textContent).toContain('尚未检查 Notion');
+  expect(node('target-empty').textContent).toContain('尚未检查数据库');
   expect(button('run').disabled).toBe(true);
   expect(calls('notionFill.test')).toHaveLength(0);
   await click('preview'); await click('run');

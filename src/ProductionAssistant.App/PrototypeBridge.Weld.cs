@@ -11,12 +11,12 @@ internal sealed partial class PrototypeBridge
 
     private static object GetWeldState()
     {
-        var settings = NotionSettingsStore.Load();
+        var settings = BusinessDatabaseSettingsStore.Load();
         var binding = settings.Targets.FirstOrDefault(target => target.ModuleKey == WeldModuleKey);
         var catalog = DatabaseSourceCatalog.Create(AppServices.DatabaseProvider.GetSources());
         return new
         {
-            configured = !string.IsNullOrWhiteSpace(settings.Token),
+            configured = settings.ConnectionConfigured,
             binding = new
             {
                 bound = binding is not null &&
@@ -50,8 +50,8 @@ internal sealed partial class PrototypeBridge
     private static async Task<object> SaveWeldBindingAsync(JsonElement payload, CancellationToken cancellationToken)
     {
         var sourceId = ReadString(payload, "sourceId");
-        var settings = NotionSettingsStore.Load();
-        if (string.IsNullOrWhiteSpace(settings.Token))
+        var settings = BusinessDatabaseSettingsStore.Load();
+        if (!settings.ConnectionConfigured)
             throw new InvalidOperationException("请先到“设置 → Notion 连接”填写 API 令牌并获取数据源。");
         var source = settings.CachedDataSources.FirstOrDefault(item => item.Id == sourceId)
             ?? throw new InvalidOperationException("请选择已缓存的 Notion 数据源。");
@@ -87,7 +87,7 @@ internal sealed partial class PrototypeBridge
         binding.DateProperty = date.Name;
         binding.QuantityProperty = quantity.Name;
         settings.ActiveTargetId = binding.Id;
-        NotionSettingsStore.Save(settings);
+        BusinessDatabaseSettingsStore.Save(settings);
         return GetWeldState();
     }
 

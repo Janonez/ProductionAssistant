@@ -39,7 +39,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
       setState(next)
       setSelectedBusiness(next.sources.find(source => source.id === next.selected)?.businessSection || '')
       setSelectedSource(next.selected)
-    }).catch(reason => setError(reason instanceof Error ? reason.message : '读取 Notion 配置失败')).finally(() => setBusy(undefined))
+    }).catch(reason => setError(reason instanceof Error ? reason.message : '读取数据库配置失败')).finally(() => setBusy(undefined))
   }, [])
 
   const canGenerate = /^\d+$/.test(total) && Number(total) > 0
@@ -85,7 +85,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
       if (result.hasExistingData) { setOverwriteOpen(true); return }
       await write(payload, false)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Notion 数据检查失败')
+      setError(reason instanceof Error ? reason.message : '数据库检查失败')
     } finally { checkInFlight.current = false; setBusy(current => current === 'check' ? undefined : current) }
   }
 
@@ -96,7 +96,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
     try {
       const result = await invoke<{ succeeded: boolean; message: string }>('weld.write', { ...payload, overwriteExisting }, 120000, value => setProgress(value as WeldProgress))
       setMessage(result.message); setOverwriteOpen(false); setStep(3)
-    } catch (reason) { setError(reason instanceof Error ? reason.message : '写入 Notion 失败') }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : '写入数据库失败') }
     finally { writeInFlight.current = false; setBusy(undefined) }
   }
 
@@ -128,11 +128,11 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
         <div className="weld-preview-heading"><div><h2 id="weld-preview-title">{month.replace('-', ' 年 ')} 月每日拆分详情</h2><p>可直接修改任意一天的数值；不满意本次浮动效果可重新模拟。</p></div><button type="button" className="secondary" disabled={locked} onClick={generate}><RefreshCw />重新模拟浮动</button></div>
         <div className="weld-table-wrap"><table><thead><tr><th>日期</th><th>星期</th><th>类型</th><th>计划量（吨）</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.date}><td>{row.date}</td><td>{row.weekday}</td><td><span className={`weld-day-pill ${row.isWeekend ? 'weekend' : ''}`}>{row.isWeekend ? '休息日' : '工作日'}</span></td><td><NumericInput value={row.qty} disabled={locked} onChange={value => updateQuantity(index, value)} unit="吨" ariaLabel={`${row.date} 计划量`} /></td></tr>)}</tbody></table></div>
         <div className="weld-summary"><span>共 {rows.length} 天 · 计划总量 <strong>{total}</strong> 吨</span><span>拆分合计 <strong>{sum}</strong> 吨 {diff === 0 ? <em className="match">与计划总量一致</em> : <em className="mismatch">偏差 {diff > 0 ? '+' : ''}{diff} 吨，可手动调整</em>}</span></div>
-        {busy === 'write' && <div className="weld-write-progress" role="status" aria-live="polite">{progress ? `正在写入 ${progress.date.slice(0, 10)}（${progress.current}/${progress.total}）` : '正在准备 Notion 层级数据…'}</div>}
-        <div className="weld-actions split"><button type="button" className="secondary" disabled={locked} onClick={() => setStep(1)}>返回修改</button><button type="button" className="primary-button" disabled={!rowsValid || !state.binding.bound || locked} onClick={checkAndWrite}>{busy === 'check' ? '正在检查…' : busy === 'write' ? '正在写入…' : '确认并写入 Notion'}</button></div>
+        {busy === 'write' && <div className="weld-write-progress" role="status" aria-live="polite">{progress ? `正在写入 ${progress.date.slice(0, 10)}（${progress.current}/${progress.total}）` : '正在准备 月日计划数据…'}</div>}
+        <div className="weld-actions split"><button type="button" className="secondary" disabled={locked} onClick={() => setStep(1)}>返回修改</button><button type="button" className="primary-button" disabled={!rowsValid || !state.binding.bound || locked} onClick={checkAndWrite}>{busy === 'check' ? '正在检查…' : busy === 'write' ? '正在写入…' : '确认并写入数据库'}</button></div>
       </section>}
 
-      {step === 3 && <section className="complete-view weld-complete"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{message || `${month} 共 ${rows.length} 天的焊接计划数据已写入 Notion。`}</p><button className="primary-button" onClick={reset}>拆分下一个月</button></section>}
+      {step === 3 && <section className="complete-view weld-complete"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{message || `${month} 共 ${rows.length} 天的焊接计划数据已写入数据库。`}</p><button className="primary-button" onClick={reset}>拆分下一个月</button></section>}
     </div>
 
     {bindingOpen && <div className="weld-settings-overlay">
@@ -167,6 +167,6 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
         </div>
       </section>
     </div>}
-    {overwriteOpen && <div className="pm-dialog-overlay"><section className="pm-dialog weld-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="weld-overwrite-title"><h2 id="weld-overwrite-title">确认覆盖已有产量</h2><p>{month} 已存在产量数据。继续后将按本次拆分结果覆盖该月每日产量，并更新月、周、日关联。</p>{error && <div className="weld-notice error" role="alert">{error}</div>}{busy === 'write' && <div className="weld-write-progress" role="status" aria-live="polite">{progress ? `正在写入 ${progress.date.slice(0, 10)}（${progress.current}/${progress.total}）` : '正在准备 Notion 层级数据…'}</div>}<div className="pm-dialog-actions"><button type="button" disabled={busy === 'write'} onClick={() => setOverwriteOpen(false)}>取消</button><button type="button" className="primary-button" disabled={busy === 'write'} onClick={() => write(writePayload, true)}>{busy === 'write' ? '正在写入…' : '确认覆盖并写入'}</button></div></section></div>}
+    {overwriteOpen && <div className="pm-dialog-overlay"><section className="pm-dialog weld-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="weld-overwrite-title"><h2 id="weld-overwrite-title">确认覆盖已有产量</h2><p>{month} 已存在产量数据。继续后将按本次拆分结果覆盖该月每日产量，并更新月、周、日关联。</p>{error && <div className="weld-notice error" role="alert">{error}</div>}{busy === 'write' && <div className="weld-write-progress" role="status" aria-live="polite">{progress ? `正在写入 ${progress.date.slice(0, 10)}（${progress.current}/${progress.total}）` : '正在准备 月日计划数据…'}</div>}<div className="pm-dialog-actions"><button type="button" disabled={busy === 'write'} onClick={() => setOverwriteOpen(false)}>取消</button><button type="button" className="primary-button" disabled={busy === 'write'} onClick={() => write(writePayload, true)}>{busy === 'write' ? '正在写入…' : '确认覆盖并写入'}</button></div></section></div>}
   </main></div>
 }

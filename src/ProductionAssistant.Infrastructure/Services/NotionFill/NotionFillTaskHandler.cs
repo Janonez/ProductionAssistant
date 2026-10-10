@@ -138,8 +138,8 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
             string.IsNullOrWhiteSpace(job.Username) ||
             string.IsNullOrWhiteSpace(job.EncryptedPassword))
             return ("connection", "请先配置并测试93系统连接。");
-        if (string.IsNullOrWhiteSpace(NotionSettingsStore.Load().Token))
-            return ("target", "请先在系统设置中配置并测试 Notion 连接。");
+        if (!BusinessDatabaseSettingsStore.Load().ConnectionConfigured)
+            return ("target", "请先在系统设置中配置并测试数据库连接。");
         if (string.IsNullOrWhiteSpace(job.TargetDataSourceId))
             return ("target", "没有找到原材料入库数据库，请先刷新 Notion 数据库目录。");
         if (!job.ConfigurationValidated) return ("test", "请先使用历史日期完成只读测试。");
@@ -164,10 +164,11 @@ public sealed class NotionFillTaskHandler(MaterialInboundNotionFillService? serv
         var status = enabled && !schedulerInstalled ? "schedule-error" : enabled ? "enabled" :
             missing?.Step is "basics" or "connection" or "target" ? "incomplete" :
             !job.ConfigurationValidated ? "pending-test" : "ready";
-        var notion = NotionSettingsStore.Load();
+        var notion = BusinessDatabaseSettingsStore.Load();
+        var provider = notion.UsesTeable ? "Teable" : "Notion";
         var connection = string.IsNullOrWhiteSpace(job.Username) ? "93系统未配置" :
-            string.IsNullOrWhiteSpace(notion.Token) ? "Notion 未配置" : "93系统 + Notion";
-        return new(Type, "Notion 自动填报", job.Id, job.Name,
+            !notion.ConnectionConfigured ? $"{provider} 未配置" : $"93系统 + {provider}";
+        return new(Type, $"{provider} 自动填报", job.Id, job.Name,
             $"每天 {job.RunTime} · 前一天", enabled, NotionFillTaskScheduler.IsSchedulingAvailable,
             status, schedulerMessage, connection,
             last is null ? "暂无运行记录" : $"{last.StartedAt:MM-dd HH:mm} · {(last.Succeeded ? "成功" : "失败")}",
