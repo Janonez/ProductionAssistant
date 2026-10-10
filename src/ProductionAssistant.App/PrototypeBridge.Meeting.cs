@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
 using ProductionAssistant.Services;
-using Microsoft.Windows.Storage.Pickers;
 
 namespace ProductionAssistant;
 
@@ -19,9 +18,7 @@ internal sealed partial class PrototypeBridge
         {
             if (operation == "meeting.pickFile")
             {
-                var picker = new FileOpenPicker(App.MainWindow.AppWindow.Id);
-                foreach (var extension in new[] { ".xlsx", ".xlsm", ".xls" }) picker.FileTypeFilter.Add(extension);
-                return new { path = (await picker.PickSingleFileAsync())?.Path };
+                return new { path = await DesktopFilePicker.PickExcelAsync(App.MainWindow.AppWindow.Id) };
             }
             if (operation == "meeting.export")
             {

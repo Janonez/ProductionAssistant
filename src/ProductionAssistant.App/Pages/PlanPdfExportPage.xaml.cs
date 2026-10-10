@@ -4,7 +4,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using ProductionAssistant.Models;
 using ProductionAssistant.Services;
-using Microsoft.Windows.Storage.Pickers;
 
 namespace ProductionAssistant.Pages;
 
@@ -44,11 +43,10 @@ public sealed partial class PlanPdfExportPage : Page
 
     private async void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
-        var picker = new FolderPicker(App.MainWindow.AppWindow.Id);
-        var folder = await picker.PickSingleFolderAsync();
-        if (folder is not null)
+        var path = await DesktopFilePicker.PickFolderAsync(App.MainWindow.AppWindow.Id);
+        if (path is not null)
         {
-            WorkflowShell.InputBox.Text = folder.Path;
+            WorkflowShell.InputBox.Text = path;
             ResetResults();
         }
     }

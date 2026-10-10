@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Text.Json;
 using ProductionAssistant.Models;
 using ProductionAssistant.Services;
-using Microsoft.Windows.Storage.Pickers;
 
 namespace ProductionAssistant;
 
@@ -22,8 +21,7 @@ internal sealed partial class PrototypeBridge
         {
             if (operation == "plan.pickFolder")
             {
-                var picker = new FolderPicker(App.MainWindow.AppWindow.Id);
-                return new { path = (await picker.PickSingleFolderAsync())?.Path };
+                return new { path = await DesktopFilePicker.PickFolderAsync(App.MainWindow.AppWindow.Id) };
             }
             if (operation == "plan.audit")
             {

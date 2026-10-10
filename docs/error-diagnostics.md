@@ -22,4 +22,10 @@
 
 挂网和生产会的 React 桥接及保留原生页面均使用现有 Windows App SDK 1.8 的 `Microsoft.Windows.Storage.Pickers`，通过主窗口 `AppWindow.Id` 关联。桥接打开选择器前先让出 WebView2 消息回调，避免在回调中启动模态对话框；取消仍返回空路径。参考 [桌面选择器](https://learn.microsoft.com/en-us/windows/apps/develop/files/using-file-folder-pickers)和 [WebView2 重入限制](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/threading-model)。
 
+选择器通过 `DesktopFilePicker` 在后台创建和调用，界面线程只读取窗口 ID 并接收返回路径。API 名称中的 `Async` 不能保证首次原生初始化不阻塞调用线程；仅 `Task.Yield` 仍会回到界面线程，不能消除这段阻塞。`startup.log` 的 `picker-…-create-start`、`show-start`、`request-returned`、`selected/cancelled` 可区分构造、原生调用和用户交互的耗时。新选择器具备 [Agile 和 ThreadingModel.Both](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.windows.storage.pickers.folderpicker?view=windows-app-sdk-1.8)，后台代码不访问 XAML/WebView2 对象。
+
+历史上，1.5.6（2026-09-08，3485246）将挂网入口从原生按钮迁移到 React/WebView2 桥接，选择器调用没有同步调整；1.6.2 和 1.7.0 沿用这段调用。这是既存调用风险，不能仅凭迁移历史认定本次回归原因。
+
+用户确认正常的 `development-backup-30e8f6e` 实际为 2026-10-02 的 1.6.2 / d188dd2 包：主 DLL SHA-256 为 D26CF837783D08F3CE3007261CC8AC96263981EBF01598E01B1C34C19FE89B5D，与包内 build-info 一致。文件夹名称不能作为提交依据；真正的 30e8f6e 测试包在 `development-backup-before-3acd70b-20261010-135617`。正常包与首次故障 3acd70b 包的目录选择器、主窗口及 WebView2 启动代码相同，265 个非业务 DLL 哈希相同。尚未证明是哪项运行时状态或其他变化触发了故障；首次初始化和后续缓存差异只是待验证推断。db5d611 用户反馈首次选择仍短暂无响应，不能视为已恢复。
+
 桌面验收需确认选择目录、选择 Excel、取消、重复打开后页面仍响应，并能继续检查或拆分。编译和模拟桥接测试不能证明系统对话框已在用户电脑上恢复。
