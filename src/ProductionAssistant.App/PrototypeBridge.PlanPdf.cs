@@ -44,12 +44,14 @@ internal sealed partial class PrototypeBridge
             if (!PlanPdfService.IsSourceCurrent(_planAudit))
             {
                 _planRepaired = false;
-                throw new InvalidOperationException("源 Excel 已变化，请重新检查并修复后再导出。");
+                throw new InvalidOperationException("源 Excel 已变化，请重新检查后再导出。");
             }
             if (!payload.TryGetProperty("confirmed", out var confirmed) || confirmed.ValueKind != JsonValueKind.True)
                 throw new InvalidOperationException("请先确认本次操作。");
             if (operation == "plan.repair")
             {
+                if (!_planAudit.Issues.Any(issue => issue.CanAutoFix))
+                    throw new InvalidOperationException("没有可自动修复的格式或序号警告。时间等业务错误请在 Excel 中手动处理后重新检查。");
                 _planRepaired = false;
                 _planOutput = null;
                 var repair = await AppServices.PlanPdf.RepairAsync(_planAudit.Workspace);
@@ -59,11 +61,11 @@ internal sealed partial class PrototypeBridge
             }
             if (operation == "plan.export")
             {
-                if (!_planRepaired || _planAudit.Issues.Any(issue => issue.Severity == "错误"))
-                    throw new InvalidOperationException("请先完成修复，并处理剩余错误。");
+                if (!_planAudit.CanExport)
+                    throw new InvalidOperationException("请手动处理时间等业务错误，修复格式警告，再重新检查后导出。");
                 _planOutput = null;
                 var progress = new Progress<PlanExportProgress>(value => Post(new { id, type = "progress", data = value }));
-                _planOutput = await AppServices.PlanPdf.ExportCandidatesAsync(_planAudit.Workspace, progress);
+                _planOutput = await AppServices.PlanPdf.ExportCandidatesAsync(_planAudit, progress);
                 return _planOutput;
             }
             throw new InvalidOperationException("不支持的挂网计划操作。");
@@ -78,6 +80,6 @@ internal sealed partial class PrototypeBridge
         issues = _planAudit.Issues,
         sheetCount = _planAudit.VisibleSheets.Count,
         repaired = _planRepaired,
-        canExport = _planRepaired && !_planAudit.Issues.Any(issue => issue.Severity == "错误")
+        canExport = _planAudit.CanExport
     };
 }

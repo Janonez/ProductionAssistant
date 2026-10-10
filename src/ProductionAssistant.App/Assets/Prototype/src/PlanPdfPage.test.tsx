@@ -6,8 +6,9 @@ import { PlanPdfPage } from './PlanPdfPage'
 const invoke = vi.fn()
 vi.mock('./bridge', () => ({ invoke: (...args: unknown[]) => invoke(...args) }))
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-const audit = { auditId: 'audit-1', workspace: { rootPath: 'D:/plans', workbookPath: 'D:/plans/一二三级计划.xlsx', year: 2026, month: 9 }, issues: [], sheetCount: 12, repaired: false, canExport: false }
-const repair = { audit: { ...audit, repaired: true, canExport: true }, repair: { backupPath: 'D:/backup.xlsx', changedCells: 2, changedRows: 4 } }
+const formatWarning = { severity: '警告', sheet: '技术准备', location: '打印设置', message: '打印缩放不符合规则', canAutoFix: true }
+const audit = { auditId: 'audit-1', workspace: { rootPath: 'D:/plans', workbookPath: 'D:/plans/一二三级计划.xlsx', year: 2026, month: 9 }, issues: [formatWarning], sheetCount: 12, repaired: false, canExport: false }
+const repair = { audit: { ...audit, issues: [], repaired: true, canExport: true }, repair: { backupPath: 'D:/backup.xlsx', changedCells: 2, changedRows: 4 } }
 const output = { outputFolder: 'D:/candidate', files: ['D:/candidate/生产计划.pdf'] }
 let container: HTMLDivElement
 let root: Root
@@ -80,6 +81,30 @@ it('keeps remaining errors actionable and blocks export after a failed source ch
   expect(container.textContent).toContain('需手动处理')
   expect(container.textContent).toContain('日期超出计划月份')
   expect(button('导出 PDF').disabled).toBe(true)
+  expect(button('备份并修复').disabled).toBe(true)
+})
+
+it('keeps format warnings blocking until reinspection is clear, even after a repair', async () => {
+  await choose(); await click('检查计划')
+  expect(container.textContent).toContain('格式警告必须修复并复查通过后才能导出')
+  expect(button('导出 PDF').disabled).toBe(true)
+  invoke.mockResolvedValueOnce({ ...repair, audit: { ...audit, repaired: true, canExport: false } })
+  await click('备份并修复'); await click('备份并修复', document.querySelector('[role="dialog"]')!)
+  expect(button('导出 PDF').disabled).toBe(true)
+  expect(button('再次修复').disabled).toBe(false)
+})
+
+it('permits export after manual correction and a clean audit without modifying Excel again', async () => {
+  await choose()
+  invoke.mockResolvedValueOnce({ ...audit, issues: [], canExport: true })
+  await click('检查计划')
+  expect(button('备份并修复').disabled).toBe(true)
+  expect(button('导出 PDF').disabled).toBe(false)
+  await click('导出 PDF')
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('当前月度目录的“生产助手预览”')
+  await click('确认导出')
+  expect(invoke.mock.calls.some(call => call[0] === 'plan.repair')).toBe(false)
+  expect(invoke.mock.calls.some(call => call[0] === 'plan.export')).toBe(true)
 })
 
 it('shows the actual folder access failure with its diagnostic reference and allows checking again', async () => {

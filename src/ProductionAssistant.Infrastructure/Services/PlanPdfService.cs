@@ -114,9 +114,16 @@ public sealed partial class PlanPdfService
         RunExcelAsync(() => Repair(workspace));
 
     public Task<PlanExportResult> ExportCandidatesAsync(
-        PlanWorkspace workspace,
+        PlanAuditResult audit,
         IProgress<PlanExportProgress>? progress = null) =>
-        RunExcelAsync(() => ExportCandidates(workspace, progress));
+        RunExcelAsync(() =>
+        {
+            if (!audit.CanExport)
+                throw new InvalidOperationException("检查尚未通过：请手动处理时间等业务错误，修复格式警告，再重新检查后导出。");
+            if (!IsSourceCurrent(audit))
+                throw new InvalidOperationException("源 Excel 已变化，请重新检查后再导出。");
+            return ExportCandidates(audit.Workspace, progress);
+        });
 
     public static bool IsSourceCurrent(PlanAuditResult audit)
     {
@@ -521,7 +528,7 @@ public sealed partial class PlanPdfService
                 }
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误", Sheet = sheet,
+                    Severity = "警告", Sheet = sheet,
                     Location = CellAddress(firstRow + row - 1, firstColumn + column - 1),
                     Message = "该行有内容但缺少序号",
                     CanAutoFix = true
@@ -535,7 +542,7 @@ public sealed partial class PlanPdfService
             {
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误", Sheet = sheet, Location = location,
+                    Severity = "警告", Sheet = sheet, Location = location,
                     Message = $"序号 {text} 重复",
                     CanAutoFix = true
                 });
@@ -547,7 +554,7 @@ public sealed partial class PlanPdfService
                 if (number[0] != 1 || number[^1] != 1)
                     issues.Add(new PlanAuditIssue
                     {
-                        Severity = "错误", Sheet = sheet, Location = location,
+                        Severity = "警告", Sheet = sheet, Location = location,
                         Message = $"本组首个序号应从1开始，当前为 {text}",
                         CanAutoFix = true
                     });
@@ -560,7 +567,7 @@ public sealed partial class PlanPdfService
             else if (!IsNextSequence(previous, number))
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误", Sheet = sheet, Location = location,
+                    Severity = "警告", Sheet = sheet, Location = location,
                     Message = $"序号从 {string.Join('.', previous)} 跳到 {text}",
                     CanAutoFix = true
                 });
@@ -601,7 +608,7 @@ public sealed partial class PlanPdfService
 
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误", Sheet = sheet,
+                    Severity = "警告", Sheet = sheet,
                     Location = CellAddress(firstRow + row - 1, firstColumn + column - 1),
                     Message = "该项目行有内容但缺少序号",
                     CanAutoFix = true
@@ -617,7 +624,7 @@ public sealed partial class PlanPdfService
                 {
                     issues.Add(new PlanAuditIssue
                     {
-                        Severity = "错误", Sheet = sheet, Location = location,
+                        Severity = "警告", Sheet = sheet, Location = location,
                         Message = $"项目序号应为 {nextProject}，当前为 {project}，中间项目序号不连续",
                         CanAutoFix = true
                     });
@@ -633,7 +640,7 @@ public sealed partial class PlanPdfService
             {
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误", Sheet = sheet, Location = location,
+                    Severity = "警告", Sheet = sheet, Location = location,
                     Message = $"子项目序号 {string.Join('.', number)} 出现在项目序号之前",
                     CanAutoFix = true
                 });
@@ -645,7 +652,7 @@ public sealed partial class PlanPdfService
             {
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误", Sheet = sheet, Location = location,
+                    Severity = "警告", Sheet = sheet, Location = location,
                     Message = $"子项目序号 {string.Join('.', number)} 不属于项目 {currentProject}",
                     CanAutoFix = true
                 });
@@ -656,7 +663,7 @@ public sealed partial class PlanPdfService
             {
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误", Sheet = sheet, Location = location,
+                    Severity = "警告", Sheet = sheet, Location = location,
                     Message = $"项目 {currentProject} 的子序号应为 {currentProject}.{nextDetail}，当前为 {string.Join('.', number)}",
                     CanAutoFix = true
                 });
@@ -665,7 +672,7 @@ public sealed partial class PlanPdfService
         }
     }
 
-    private static void AuditDateColumns(
+    internal static void AuditDateColumns(
         string sheet, object[,] values, int firstRow, int firstColumn,
         int rowCount, int columnCount, PlanWorkspace workspace,
         List<PlanAuditIssue> issues)
@@ -694,9 +701,9 @@ public sealed partial class PlanPdfService
                 if (!TryGetDate(values[row, col], out var date)) continue;
                 var location = CellAddress(firstRow + row - 1, firstColumn + col - 1);
                 if (date < start)
-                    issues.Add(new PlanAuditIssue { Severity = "警告", Sheet = sheet, Location = location, Message = $"{header} {date:yyyy-MM-dd} 早于{monthLabel}1日，可能是逾期或结转任务" });
+                    issues.Add(new PlanAuditIssue { Severity = "错误", Sheet = sheet, Location = location, Message = $"{header} {date:yyyy-MM-dd} 早于{monthLabel}1日，请手动核实并处理" });
                 else if (date >= end)
-                    issues.Add(new PlanAuditIssue { Severity = "警告", Sheet = sheet, Location = location, Message = $"{header} {date:yyyy-MM-dd} 不属于{monthLabel}" });
+                    issues.Add(new PlanAuditIssue { Severity = "错误", Sheet = sheet, Location = location, Message = $"{header} {date:yyyy-MM-dd} 不属于{monthLabel}，请手动核实并处理" });
             }
         }
     }
@@ -758,10 +765,10 @@ public sealed partial class PlanPdfService
 
             issues.Add(new PlanAuditIssue
             {
-                Severity = "警告",
+                Severity = "错误",
                 Sheet = sheet,
                 Location = CellAddress(firstRow + row - 1, firstColumn + actualColumn - 1),
-                Message = $"已标记“否”，但实际（预计）完成时间 {actualDate:yyyy-MM-dd} 早于{monthStart:yyyy年M月d日}，任务仍可能逾期"
+                Message = $"已标记“否”，但实际（预计）完成时间 {actualDate:yyyy-MM-dd} 早于{monthStart:yyyy年M月d日}，请手动核实并处理"
             });
         }
     }
@@ -805,7 +812,7 @@ public sealed partial class PlanPdfService
                     {
                         issues.Add(new PlanAuditIssue
                         {
-                            Severity = "错误",
+                            Severity = "警告",
                             Sheet = sheetName,
                             Location = $"第{firstRow + row - 1}行",
                             Message = $"内容行行高 {actualHeight:0.##} 小于标准 {standardHeight:0.##}",
@@ -825,7 +832,7 @@ public sealed partial class PlanPdfService
         AuditBorders(sheet, values, firstRow, issues);
     }
 
-    private static void AuditPageSetup(
+    internal static void AuditPageSetup(
         dynamic sheet, string sheetName, List<PlanAuditIssue> issues)
     {
         dynamic? pageSetup = null;
@@ -841,7 +848,7 @@ public sealed partial class PlanPdfService
             {
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误",
+                    Severity = "警告",
                     Sheet = sheetName,
                     Location = "打印设置",
                     Message = "纸张、方向、缩放或分页宽度不符合默认打印规则",
@@ -853,7 +860,7 @@ public sealed partial class PlanPdfService
         {
             issues.Add(new PlanAuditIssue
             {
-                Severity = "错误",
+                Severity = "警告",
                 Sheet = sheetName,
                 Location = "打印设置",
                 Message = $"无法读取打印设置：{PrototypeBridgeProtocol.SafeError(ex)}",
@@ -945,7 +952,7 @@ public sealed partial class PlanPdfService
             {
                 issues.Add(new PlanAuditIssue
                 {
-                    Severity = "错误",
+                    Severity = "警告",
                     Sheet = sheetName,
                     Location = "打印区域边框",
                     Message = "边框不是默认黑色细实线",
@@ -957,7 +964,7 @@ public sealed partial class PlanPdfService
         {
             issues.Add(new PlanAuditIssue
             {
-                Severity = "错误",
+                Severity = "警告",
                 Sheet = sheetName,
                 Location = "打印区域边框",
                 Message = $"无法读取打印区域边框：{PrototypeBridgeProtocol.SafeError(ex)}",
@@ -978,7 +985,7 @@ public sealed partial class PlanPdfService
         string sheet, List<PlanAuditIssue> issues, string message) =>
         issues.Add(new PlanAuditIssue
         {
-            Severity = "错误",
+            Severity = "警告",
             Sheet = sheet,
             Location = "打印区域",
             Message = message,
@@ -995,12 +1002,7 @@ public sealed partial class PlanPdfService
     private static PlanExportResult ExportCandidates(
         PlanWorkspace workspace, IProgress<PlanExportProgress>? progress)
     {
-        var outputRoot = RuntimeEnvironment.Current.IsDevelopment
-            ? Path.Combine(RuntimeEnvironment.ExportDirectory, "plan-pdf")
-            : workspace.RootPath;
-        var outputFolder = Path.Combine(
-            outputRoot, "生产助手预览", DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-        Directory.CreateDirectory(outputFolder);
+        var outputFolder = CreateCandidateOutputFolder(workspace);
         dynamic? excel = null;
         dynamic? workbook = null;
         dynamic? worksheets = null;
@@ -1040,6 +1042,14 @@ public sealed partial class PlanPdfService
             ReleaseCom(workbook);
             ReleaseCom(excel);
         }
+    }
+
+    internal static string CreateCandidateOutputFolder(PlanWorkspace workspace)
+    {
+        var folder = Path.Combine(workspace.RootPath, "生产助手预览",
+            DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture));
+        Directory.CreateDirectory(folder);
+        return folder;
     }
 
     private static string CreateWorkbookBackup(PlanWorkspace workspace)

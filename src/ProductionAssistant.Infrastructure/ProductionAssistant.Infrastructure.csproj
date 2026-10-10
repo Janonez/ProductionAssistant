@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ProductionAssistant.Core\ProductionAssistant.Core.csproj" />
+    <InternalsVisibleTo Include="ProductionAssistant.Tests" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.1" />

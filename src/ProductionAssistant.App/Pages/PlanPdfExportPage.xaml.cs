@@ -12,7 +12,6 @@ public sealed partial class PlanPdfExportPage : Page
     private readonly PlanPdfService _service = AppServices.PlanPdf;
     private PlanAuditResult? _auditResult;
     private string? _outputFolder;
-    private bool _repairCompleted;
     private bool _pageReady;
 
     public ObservableCollection<PlanAuditIssue> Issues { get; } = [];
@@ -23,7 +22,7 @@ public sealed partial class PlanPdfExportPage : Page
         NavigationCacheMode = Microsoft.UI.Xaml.Navigation.NavigationCacheMode.Required;
         WorkflowShell.Configure(
             "挂网计划 PDF",
-            "选择目录后按顺序完成检查、修复和候选 PDF 导出。",
+            "检查计划，手动处理时间错误、修复格式警告后导出候选 PDF。",
             "选择月度目录",
             "选择挂网计划目录",
             "选择目录",
@@ -89,12 +88,19 @@ public sealed partial class PlanPdfExportPage : Page
     private async void RepairButton_Click(object sender, RoutedEventArgs e)
     {
         if (_auditResult is null) return;
+        if (!PlanPdfService.IsSourceCurrent(_auditResult))
+        {
+            ResetResults();
+            await ShowDialogAsync("需要重新检查", "源 Excel 已变化，请重新检查后再修复。");
+            return;
+        }
+        if (!_auditResult.Issues.Any(issue => issue.CanAutoFix)) return;
 
         var confirm = new ContentDialog
         {
             XamlRoot = XamlRoot,
             Title = "确认备份并修复",
-            Content = "将备份 Excel，修复格式和序号，并自动复查。",
+            Content = "将备份 Excel，修复格式和序号，并自动复查。日期和时间必须在 Excel 中手动处理。",
             PrimaryButtonText = "备份并修复",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Close
@@ -109,18 +115,18 @@ public sealed partial class PlanPdfExportPage : Page
         {
             await _service.RepairAsync(_auditResult.Workspace);
             var audit = await _service.AuditAsync(_auditResult.Workspace.RootPath);
-            ApplyAuditResult(audit, repaired: true);
+            ApplyAuditResult(audit);
 
             var errors = Issues.Count(item => item.Severity == "错误");
-            WorkflowShell.StatusBar.Title = errors == 0 ? "修复完成" : "修复完成，需手动处理";
-            WorkflowShell.StatusBar.Message = errors == 0
+            WorkflowShell.StatusBar.Title = audit.CanExport ? "修复完成" : "复查仍有问题";
+            WorkflowShell.StatusBar.Message = audit.CanExport
                 ? "请点击“导出”。"
-                : "请处理剩余错误后重新检查。";
-            WorkflowShell.StatusBar.Severity = errors == 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning;
+                : "请手动处理时间等业务错误，修复剩余格式警告后重新检查。";
+            WorkflowShell.StatusBar.Severity = errors > 0 ? InfoBarSeverity.Error : audit.CanExport ? InfoBarSeverity.Success : InfoBarSeverity.Warning;
         }
         catch (Exception ex)
         {
-            _repairCompleted = false;
+            _auditResult = null;
             WorkflowShell.StatusBar.Title = "修复失败";
             WorkflowShell.StatusBar.Message = ex.Message;
             WorkflowShell.StatusBar.Severity = InfoBarSeverity.Error;
@@ -134,21 +140,20 @@ public sealed partial class PlanPdfExportPage : Page
     private async void ExportButton_Click(object sender, RoutedEventArgs e)
     {
         if (_auditResult is null) return;
-        if (!_repairCompleted || !PlanPdfService.IsSourceCurrent(_auditResult))
+        if (!PlanPdfService.IsSourceCurrent(_auditResult))
         {
-            _repairCompleted = false;
-            SetBusy(false);
-            await ShowDialogAsync("需要重新检查", "源Excel在最近一次检查或修复后发生了变化，请重新检查并修复后再导出。");
+            ResetResults();
+            await ShowDialogAsync("需要重新检查", "源 Excel 已变化，请重新检查后再导出。");
             return;
         }
 
-        if (_auditResult.Issues.Any(item => item.Severity == "错误")) return;
+        if (!_auditResult.CanExport) return;
 
         var confirm = new ContentDialog
         {
             XamlRoot = XamlRoot,
             Title = "确认只导出",
-            Content = "只生成 11 份 PDF，不修改 Excel。",
+            Content = "将在当前月度目录的“生产助手预览”文件夹生成 11 份 PDF，不修改 Excel。",
             PrimaryButtonText = "只导出",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Close
@@ -168,7 +173,7 @@ public sealed partial class PlanPdfExportPage : Page
                 WorkflowShell.ProgressBar.Value = state.Current;
                 WorkflowShell.ProgressLabel.Text = $"{state.Current} / {state.Total} · {state.Name}";
             });
-            var result = await _service.ExportCandidatesAsync(_auditResult.Workspace, progress);
+            var result = await _service.ExportCandidatesAsync(_auditResult, progress);
             _outputFolder = result.OutputFolder;
             WorkflowShell.ProgressBar.Value = 11;
             WorkflowShell.ProgressLabel.Text = $"已生成 {result.Files.Count} 份候选PDF";
@@ -200,25 +205,19 @@ public sealed partial class PlanPdfExportPage : Page
     {
         WorkflowShell.SetBusy(busy);
         WorkflowShell.SetActionAvailability(
-            _auditResult is not null,
+            _auditResult?.Issues.Any(issue => issue.CanAutoFix) == true,
             CanExport(),
             _outputFolder is not null && Directory.Exists(_outputFolder));
     }
 
     private bool CanExport() =>
-        _repairCompleted &&
         _auditResult is not null &&
-        !_auditResult.Issues.Any(item => item.Severity == "错误") &&
+        _auditResult.CanExport &&
         PlanPdfService.IsSourceCurrent(_auditResult);
 
-    private void ApplyAuditResult(PlanAuditResult result, bool? repaired = null)
+    private void ApplyAuditResult(PlanAuditResult result)
     {
-        var sameWorkbook = string.Equals(
-            _auditResult?.Workspace.WorkbookPath,
-            result.Workspace.WorkbookPath,
-            StringComparison.OrdinalIgnoreCase);
         _auditResult = result;
-        _repairCompleted = repaired ?? (sameWorkbook && _repairCompleted);
         _outputFolder = null;
         WorkflowShell.OutputAction.IsEnabled = false;
         Issues.Clear();
@@ -230,10 +229,10 @@ public sealed partial class PlanPdfExportPage : Page
         IssueCountText.Text = $"{errors} 个错误 · {warnings} 个警告";
         WorkflowShell.StatusBar.Title = errors == 0 ? "检查完成" : "检查发现错误";
         WorkflowShell.StatusBar.Message = errors > 0
-            ? "请点击“修复”，剩余错误需手动处理。"
-            : _repairCompleted
-                ? "请点击“导出”。"
-                : "请点击“修复”。";
+            ? "时间等业务错误必须在 Excel 中手动处理，再重新检查；格式警告可单独修复。"
+            : warnings > 0
+                ? "格式警告必须修复并复查通过后才能导出。"
+                : "检查通过，可以导出。";
         WorkflowShell.StatusBar.Severity = errors > 0
             ? InfoBarSeverity.Error
             : warnings == 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning;
@@ -243,7 +242,6 @@ public sealed partial class PlanPdfExportPage : Page
     {
         _auditResult = null;
         _outputFolder = null;
-        _repairCompleted = false;
         Issues.Clear();
         IssueCountText.Text = "尚未检查";
         WorkflowShell.ProgressBar.Value = 0;
