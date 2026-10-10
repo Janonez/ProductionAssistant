@@ -231,6 +231,7 @@ public sealed partial class PlanPdfService
                     sheet = worksheets.Item[sheetName];
                     if ((int)sheet.Visible != XlSheetVisible)
                         throw new InvalidOperationException($"导出所需的Sheet“{sheetName}”不可见，无法修复。");
+                    changedRows += RemoveBlankContentRows(sheet);
                     changedCells += FixSheetSequences(sheet);
                     changedRows += RepairSheetFormat(sheet);
                 }
@@ -796,6 +797,7 @@ public sealed partial class PlanPdfService
         int firstRow, int firstColumn, List<PlanAuditIssue> issues)
     {
         var sheetName = (string)sheet.Name;
+        AuditBlankContentRows(sheet, values, firstRow, firstColumn, issues);
         var standardHeight = GetStandardRowHeight(sheetName);
         var header = FindHeaderColumn(values, "序号");
         if (header is not null)
@@ -830,6 +832,90 @@ public sealed partial class PlanPdfService
         AuditPageSetup(sheet, sheetName, issues);
         AuditPrintArea(sheet, values, firstRow, firstColumn, issues);
         AuditBorders(sheet, values, firstRow, issues);
+    }
+
+    internal static void AuditBlankContentRows(
+        dynamic sheet, object[,] values, int firstRow, int firstColumn, List<PlanAuditIssue> issues)
+    {
+        foreach (int row in FindBlankContentRows(sheet, values, firstRow, firstColumn))
+            issues.Add(new PlanAuditIssue
+            {
+                Severity = "警告", Sheet = (string)sheet.Name, Location = $"第{row}行",
+                Message = "表头下方或数据之间存在空白行，修复时将删除该空行",
+                CanAutoFix = true
+            });
+    }
+
+    internal static int RemoveBlankContentRows(dynamic sheet)
+    {
+        dynamic? usedRange = null;
+        try
+        {
+            usedRange = sheet.UsedRange;
+            if (usedRange.Value2 is not object[,] values) return 0;
+            List<int> rows = FindBlankContentRows(sheet, values, (int)usedRange.Row, (int)usedRange.Column);
+            // Delete bottom-up so the recorded positions of earlier rows remain valid.
+            for (var index = rows.Count - 1; index >= 0; index--)
+            {
+                dynamic? rowRange = null;
+                try { rowRange = sheet.Rows.Item[rows[index]]; rowRange.Delete(); }
+                finally { ReleaseCom(rowRange); }
+            }
+            return rows.Count;
+        }
+        finally { ReleaseCom(usedRange); }
+    }
+
+    private static List<int> FindBlankContentRows(dynamic sheet, object[,] values, int firstRow, int firstColumn)
+    {
+        var rows = new List<int>();
+        var header = FindHeaderColumn(values, "序号");
+        if (header is null) return rows;
+        var lastContentRow = FindLastContentRow(values);
+        for (var row = header.Value.Row + 1; row < lastContentRow; row++)
+        {
+            if (RowHasMeaningfulContent(values, row, header.Value.Column)) continue;
+            var absoluteRow = firstRow + row - 1;
+            dynamic? rowRange = null;
+            try
+            {
+                rowRange = sheet.Rows.Item[absoluteRow];
+                // Formula results can look empty. A null HasFormula means a mixed range.
+                if (!Equals((object?)rowRange.HasFormula, false) ||
+                    Convert.ToBoolean(rowRange.Hidden, CultureInfo.InvariantCulture)) continue;
+            }
+            finally { ReleaseCom(rowRange); }
+
+            var protectedRow = false;
+            for (var column = 1; column <= values.GetLength(1) && !protectedRow; column++)
+            {
+                dynamic? cell = null;
+                dynamic? comment = null;
+                dynamic? mergeArea = null;
+                dynamic? mergeRows = null;
+                try
+                {
+                    cell = sheet.Cells.Item[absoluteRow, firstColumn + column - 1];
+                    comment = cell.Comment;
+                    if (comment is not null) protectedRow = true;
+                    else if (Convert.ToBoolean(cell.MergeCells, CultureInfo.InvariantCulture))
+                    {
+                        mergeArea = cell.MergeArea;
+                        mergeRows = mergeArea.Rows;
+                        protectedRow = (int)mergeRows.Count > 1;
+                    }
+                }
+                finally
+                {
+                    ReleaseCom(mergeRows);
+                    ReleaseCom(mergeArea);
+                    ReleaseCom(comment);
+                    ReleaseCom(cell);
+                }
+            }
+            if (!protectedRow) rows.Add(absoluteRow);
+        }
+        return rows;
     }
 
     internal static void AuditPageSetup(

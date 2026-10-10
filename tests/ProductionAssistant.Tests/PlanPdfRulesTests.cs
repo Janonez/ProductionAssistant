@@ -104,6 +104,88 @@ public sealed class PlanPdfRulesTests
     private static object[,] Cells(int rows, int columns) =>
         (object[,])Array.CreateInstance(typeof(object), [rows, columns], [1, 1]);
 
+    [Fact]
+    public void Blank_rows_below_header_and_between_records_are_warnings_and_deleted_bottom_up()
+    {
+        var values = Cells(8, 2);
+        values[1, 1] = "发运计划";
+        values[2, 1] = "序号";
+        values[2, 2] = "工作令";
+        values[4, 1] = 1d; values[4, 2] = "71126001";
+        values[5, 1] = 2d; // A leftover number without a record is also blank.
+        values[6, 1] = 3d; values[6, 2] = "03026001";
+        var deleted = new List<int>();
+        var sheet = BlankRowSheet(values, deleted);
+        var issues = new List<PlanAuditIssue>();
+
+        PlanPdfService.AuditBlankContentRows(sheet, values, 1, 1, issues);
+        Assert.Equal(["第3行", "第5行"], issues.Select(issue => issue.Location));
+        Assert.All(issues, issue => { Assert.Equal("警告", issue.Severity); Assert.True(issue.CanAutoFix); });
+        Assert.False(Result(issues).CanExport);
+        Assert.Equal(2, PlanPdfService.RemoveBlankContentRows(sheet));
+        Assert.Equal([5, 3], deleted);
+        // Header, real records and trailing padding are outside the deletion set.
+    }
+
+    [Theory]
+    [InlineData("formula")]
+    [InlineData("merged")]
+    [InlineData("comment")]
+    [InlineData("hidden")]
+    public void Apparently_blank_rows_with_protected_content_are_preserved(string protection)
+    {
+        var values = Cells(4, 2);
+        values[1, 1] = "序号"; values[1, 2] = "工作令";
+        values[3, 1] = 1d; values[3, 2] = "71126001";
+        var deleted = new List<int>();
+        var sheet = BlankRowSheet(values, deleted, protection);
+        var issues = new List<PlanAuditIssue>();
+        PlanPdfService.AuditBlankContentRows(sheet, values, 1, 1, issues);
+        Assert.Empty(issues);
+        Assert.Equal(0, PlanPdfService.RemoveBlankContentRows(sheet));
+        Assert.Empty(deleted);
+    }
+
+    private static object BlankRowSheet(object[,] values, List<int> deleted, string? protection = null)
+    {
+        dynamic sheet = new ExpandoObject();
+        sheet.Name = "产品发运";
+        dynamic used = new ExpandoObject();
+        used.Value2 = values; used.Row = 1; used.Column = 1;
+        sheet.UsedRange = used;
+        dynamic rows = new ExpandoObject();
+        rows.Item = new FakeIndex((row, _) =>
+        {
+            dynamic range = new ExpandoObject();
+            range.HasFormula = protection == "formula" ? (object?)null : false;
+            range.Hidden = protection == "hidden";
+            range.Delete = (Action)(() => deleted.Add(row));
+            return range;
+        });
+        sheet.Rows = rows;
+        dynamic cells = new ExpandoObject();
+        cells.Item = new FakeIndex((_, _) =>
+        {
+            dynamic cell = new ExpandoObject();
+            cell.Comment = protection == "comment" ? new object() : null;
+            cell.MergeCells = protection == "merged";
+            dynamic area = new ExpandoObject();
+            dynamic mergedRows = new ExpandoObject();
+            mergedRows.Count = 2;
+            area.Rows = mergedRows;
+            cell.MergeArea = area;
+            return cell;
+        });
+        sheet.Cells = cells;
+        return sheet;
+    }
+
+    public sealed class FakeIndex(Func<int, int, object> get)
+    {
+        public object this[int row] => get(row, 0);
+        public object this[int row, int column] => get(row, column);
+    }
+
     private static PlanAuditResult Result(IReadOnlyList<PlanAuditIssue> issues) =>
         new(Workspace, [], issues, DateTime.MinValue, 0);
 }

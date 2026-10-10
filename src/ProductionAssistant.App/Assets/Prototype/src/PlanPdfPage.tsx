@@ -94,7 +94,7 @@ export function PlanPdfPage() {
     </div>
     <Dialog.Root open={!!confirm} onOpenChange={open => { if (!open) setConfirm(undefined) }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="plan-confirm">
       <div><Dialog.Title>{confirm === 'repair' ? '确认备份并修复' : '确认导出 PDF'}</Dialog.Title><Dialog.Close asChild><button className="secondary" aria-label="关闭确认"><X /></button></Dialog.Close></div>
-      <Dialog.Description>{confirm === 'repair' ? '将先备份 Excel，再修复格式和序号，并自动复查。日期和时间不会自动修改，需在 Excel 中手动处理。' : '将在当前月度目录的“生产助手预览”文件夹生成 11 份候选 PDF，不修改 Excel。'}</Dialog.Description>
+      <Dialog.Description>{confirm === 'repair' ? '将先备份 Excel，再清除表格中的纯空行、修复格式和序号，并自动复查。日期和时间不会自动修改，需在 Excel 中手动处理。' : '将在当前月度目录的“生产助手预览”文件夹生成 11 份候选 PDF，不修改 Excel。'}</Dialog.Description>
       <footer><Dialog.Close asChild><button className="secondary" autoFocus>取消</button></Dialog.Close><button className="primary" onClick={() => confirm && void execute(confirm)}>{confirm === 'repair' ? '备份并修复' : '确认导出'}</button></footer>
     </Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>
