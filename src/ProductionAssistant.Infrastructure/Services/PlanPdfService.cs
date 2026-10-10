@@ -841,7 +841,7 @@ public sealed partial class PlanPdfService
             issues.Add(new PlanAuditIssue
             {
                 Severity = "警告", Sheet = (string)sheet.Name, Location = $"第{row}行",
-                Message = "表头下方或数据之间存在空白行，修复时将删除该空行",
+                Message = "发运计划表头下方或数据之间存在空白行，修复时将删除该空行",
                 CanAutoFix = true
             });
     }
@@ -869,6 +869,8 @@ public sealed partial class PlanPdfService
     private static List<int> FindBlankContentRows(dynamic sheet, object[,] values, int firstRow, int firstColumn)
     {
         var rows = new List<int>();
+        // Other plans intentionally use spacing rows and merged section headings.
+        if ((string)sheet.Name != "产品发运") return rows;
         var header = FindHeaderColumn(values, "序号");
         if (header is null) return rows;
         var lastContentRow = FindLastContentRow(values);

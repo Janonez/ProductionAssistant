@@ -146,10 +146,33 @@ public sealed class PlanPdfRulesTests
         Assert.Empty(deleted);
     }
 
-    private static object BlankRowSheet(object[,] values, List<int> deleted, string? protection = null)
+    [Theory]
+    [InlineData("生产计划")]
+    [InlineData("项目计划（锻压）")]
+    [InlineData("项目计划（海工）")]
+    [InlineData("技术准备")]
+    public void Non_shipping_plans_preserve_spacing_and_section_rows(string sheetName)
+    {
+        var values = Cells(6, 2);
+        values[1, 1] = "序号"; values[1, 2] = "工作令";
+        values[3, 1] = 1d; values[3, 2] = "71126001";
+        values[5, 1] = 2d; values[5, 2] = "03026001";
+        var deleted = new List<int>();
+        var sheet = BlankRowSheet(values, deleted, sheetName: sheetName);
+        var issues = new List<PlanAuditIssue>();
+
+        // Preserve layout rows even when their values look entirely blank.
+        PlanPdfService.AuditBlankContentRows(sheet, values, 1, 1, issues);
+        Assert.Empty(issues);
+        Assert.Equal(0, PlanPdfService.RemoveBlankContentRows(sheet));
+        Assert.Empty(deleted);
+    }
+
+    private static object BlankRowSheet(object[,] values, List<int> deleted, string? protection = null,
+        string sheetName = "产品发运")
     {
         dynamic sheet = new ExpandoObject();
-        sheet.Name = "产品发运";
+        sheet.Name = sheetName;
         dynamic used = new ExpandoObject();
         used.Value2 = values; used.Row = 1; used.Column = 1;
         sheet.UsedRange = used;

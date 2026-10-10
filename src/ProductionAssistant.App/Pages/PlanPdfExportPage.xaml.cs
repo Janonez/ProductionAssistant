@@ -100,7 +100,7 @@ public sealed partial class PlanPdfExportPage : Page
         {
             XamlRoot = XamlRoot,
             Title = "确认备份并修复",
-            Content = "将备份 Excel，清除表格中的纯空行、修复格式和序号，并自动复查。日期和时间必须在 Excel 中手动处理。",
+            Content = "将备份 Excel，清除发运计划中的纯空行、修复格式和序号，并自动复查。其他计划的间隔行和合并标题保留；日期和时间必须在 Excel 中手动处理。",
             PrimaryButtonText = "备份并修复",
             CloseButtonText = "取消",
             DefaultButton = ContentDialogButton.Close
