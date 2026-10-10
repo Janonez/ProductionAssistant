@@ -62,6 +62,7 @@ it('clears a previous export when the directory changes and preserves it if the 
   await checkAndRepair(); await click('导出 PDF'); await click('确认导出')
   invoke.mockResolvedValueOnce({ path: null })
   await choose()
+  expect(invoke).toHaveBeenLastCalledWith('plan.pickFolder', { path: 'D:/plans' }, 600000)
   expect(container.textContent).toContain('生产计划.pdf')
   invoke.mockResolvedValueOnce({ path: 'D:/new-month' })
   await choose()

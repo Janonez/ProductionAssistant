@@ -18,7 +18,9 @@ internal sealed partial class PrototypeBridge
         {
             if (operation == "meeting.pickFile")
             {
-                return new { path = await DesktopFilePicker.PickExcelAsync(App.MainWindow.AppWindow.Id) };
+                return new { path = await DesktopFilePicker.PickExcelAsync(
+                    WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow),
+                    ReadString(payload, "path"), PrototypeWebViewRuntime.Mark) };
             }
             if (operation == "meeting.export")
             {

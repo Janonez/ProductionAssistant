@@ -42,12 +42,25 @@ public sealed partial class PlanPdfExportPage : Page
 
     private async void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
-        var path = await DesktopFilePicker.PickFolderAsync(App.MainWindow.AppWindow.Id);
-        if (path is not null)
+        SetBusy(true);
+        try
         {
-            WorkflowShell.InputBox.Text = path;
-            ResetResults();
+            var path = await DesktopFilePicker.PickFolderAsync(
+                WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow),
+                WorkflowShell.InputBox.Text, PrototypeWebViewRuntime.Mark);
+            if (path is not null)
+            {
+                WorkflowShell.InputBox.Text = path;
+                ResetResults();
+            }
         }
+        catch (Exception error)
+        {
+            WorkflowShell.StatusBar.Title = "选择目录失败";
+            WorkflowShell.StatusBar.Message = BridgeErrorLog.Record("plan.pickFolder", error);
+            WorkflowShell.StatusBar.Severity = InfoBarSeverity.Error;
+        }
+        finally { SetBusy(false); }
     }
 
     private void FolderPathBox_TextChanged(object sender, TextChangedEventArgs e)

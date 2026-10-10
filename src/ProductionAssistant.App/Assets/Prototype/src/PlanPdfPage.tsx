@@ -48,7 +48,7 @@ export function PlanPdfPage() {
     if (['audit', 'repair', 'export'].includes(action)) { setOutput(undefined); setProgress(undefined) }
     try {
       if (action === 'pickFolder') {
-        const next = await invoke<{ path?: string }>('plan.pickFolder', undefined, 10 * 60 * 1000)
+        const next = await invoke<{ path?: string }>('plan.pickFolder', { path: path.trim() }, 10 * 60 * 1000)
         if (current !== version.current) return
         if (next.path) { locked.current = false; changePath(next.path); locked.current = true }
       } else {

@@ -26,9 +26,13 @@ Development 和 Production 的候选 PDF 均生成在所选月度目录的 `生�
 
 若日志中的操作是 `plan.pickFolder` 或 `meeting.pickFile`，失败发生在选择器阶段，尚未开始 Excel 业务处理。2026-10-10 的 `0x800706BE` 同时对应 Windows 事件日志中的 `PickerHost.exe` 和生产助手 `AppHangB1`。
 
-挂网和生产会的 React 桥接及保留原生页面均使用现有 Windows App SDK 1.8 的 `Microsoft.Windows.Storage.Pickers`，通过主窗口 `AppWindow.Id` 关联。桥接打开选择器前先让出 WebView2 消息回调，避免在回调中启动模态对话框；取消仍返回空路径。参考 [桌面选择器](https://learn.microsoft.com/en-us/windows/apps/develop/files/using-file-folder-pickers)和 [WebView2 重入限制](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/threading-model)。
+挂网和生产会的 React 桥接及保留原生页面统一通过 `DesktopFilePicker` 打开 Windows 本地 `IFileDialog`。对话框在专用 STA 线程创建、配置、显示和释放，界面线程只传主窗口 HWND 和当前路径并异步接收结果。桥接打开选择器前仍先让出 WebView2 消息回调；取消返回空路径，其他原生错误保留 HRESULT，并写诊断编号和日志，不能把原生失败当成用户取消。参考 [本地通用文件对话框](https://learn.microsoft.com/en-us/windows/win32/shell/common-file-dialog)和 [WebView2 重入限制](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/threading-model)。
 
-选择器通过 `DesktopFilePicker` 在后台创建和调用，界面线程只读取窗口 ID 并接收返回路径。API 名称中的 `Async` 不能保证首次原生初始化不阻塞调用线程；仅 `Task.Yield` 仍会回到界面线程，不能消除这段阻塞。`startup.log` 的 `picker-…-create-start`、`show-start`、`request-returned`、`selected/cancelled` 可区分构造、原生调用和用户交互的耗时。新选择器具备 [Agile 和 ThreadingModel.Both](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.windows.storage.pickers.folderpicker?view=windows-app-sdk-1.8)，后台代码不访问 XAML/WebView2 对象。
+选择窗口优先进入当前填写的本地目录；文件选择使用当前文件的父目录，其次使用本次进程上次成功选择的本地目录。无有效本地路径时进入实际用户主目录，避免默认打开 Home/Quick Access 或重定向库。首次配置不会探测 UNC 或映射网络盘；用户仍可在对话框中主动选择网络路径。[SetFolder](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifiledialog-setfolder) 会覆盖系统最近目录，适用于本模块明确填写源目录的流程。
+
+`startup.log` 的 `picker-…-native-create-start-STA`、`configured`、`show-start`、`dialog-visible`、`selected/cancelled` 均带本次操作累计耗时。`dialog-visible` 在 100 ms 轮询精度内检测属于当前进程、以主窗口为 owner 的可见原生对话框；未在取消前检测到则不伪造记录。它区分窗口出现前的等待与之后用户操作时间；可见不代表目录内容已全部加载。诊断不记录所选路径、不影响原生选择结果，代码不会在诊断时控制用户桌面。
+
+此前 db5d611 改用 Windows App SDK 1.8 选择器，034550e 再增加外层 Task.Run，但 [1.8.0 实现](https://github.com/microsoft/WindowsAppSDK/blob/v1.8.0/dev/Interop/StoragePickers/FolderPicker.cpp) 内部本来就调用 resume_background 后创建本地 IFileOpenDialog，因此外层 Task.Run 没有改变最终显示线程路径。当前直接 STA 实现与明确起始目录是针对这些可控因素的修正；不是已经证明此次卡顿来自某个网络位置或 Shell 扩展。
 
 历史上，1.5.6（2026-09-08，3485246）将挂网入口从原生按钮迁移到 React/WebView2 桥接，选择器调用没有同步调整；1.6.2 和 1.7.0 沿用这段调用。这是既存调用风险，不能仅凭迁移历史认定本次回归原因。
 
