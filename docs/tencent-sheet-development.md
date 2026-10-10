@@ -26,8 +26,7 @@
 
 ## 数据与日期
 
-v1.7.0 起由 Teable 提供正式数据库查询，沿用原来源、字段和视图 ID；内部 TencentSheetNotionService 和配置键 
-otion 保留兼容，不调用 Notion 网络。数据库配置与验证见 [Teable 业务接入](teable-business.md)。
+v1.7.0 起由 Teable 提供正式数据库查询，沿用原来源、字段和视图 ID；内部 `TencentSheetNotionService` 和配置键 `notion` 保留兼容，不调用 Notion 网络。数据库配置与验证见 [Teable 业务接入](teable-business.md)。
 
 
 - 新任务字段为空，不注入下料、装焊、公司、园区、行列或月份名称默认值。
