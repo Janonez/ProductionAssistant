@@ -39,6 +39,7 @@ it('waits for explicit splitting and locks input until the result returns', asyn
 it('preserves results on picker cancellation and discards them for a different file', async () => {
   await click('选择文件'); await click('开始拆分')
   invoke.mockResolvedValueOnce({ path: null }); await click('选择文件')
+  expect(invoke).toHaveBeenLastCalledWith('meeting.pickFile', { path: 'D:/meeting/资料.xlsx' }, 600000)
   expect(container.textContent).toContain(result.outputPath)
   invoke.mockResolvedValueOnce({ path: 'D:/next.xlsx' }); await click('选择文件')
   expect(container.textContent).not.toContain(result.outputPath)

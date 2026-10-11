@@ -24,7 +24,7 @@ export function ProductionMeetingPage() {
     setBusy(action); setError(''); if (action === 'export') setResult(undefined)
     try {
       if (action === 'pick') {
-        const file = await invoke<{ path?: string }>('meeting.pickFile', undefined, 600000)
+        const file = await invoke<{ path?: string }>('meeting.pickFile', { path: path.trim() }, 600000)
         if (current === version.current && file.path) { setPath(file.path); setResult(undefined) }
       } else if (action === 'export') {
         const next = await invoke<Result>('meeting.export', { path: path.trim() }, 1800000)

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
 using ProductionAssistant.Services;
-using Windows.Storage.Pickers;
 
 namespace ProductionAssistant;
 
@@ -19,10 +18,9 @@ internal sealed partial class PrototypeBridge
         {
             if (operation == "meeting.pickFile")
             {
-                var picker = new FileOpenPicker();
-                foreach (var extension in new[] { ".xlsx", ".xlsm", ".xls" }) picker.FileTypeFilter.Add(extension);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow));
-                return new { path = (await picker.PickSingleFileAsync())?.Path };
+                return new { path = await DesktopFilePicker.PickExcelAsync(
+                    WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow),
+                    ReadString(payload, "path"), PrototypeWebViewRuntime.Mark) };
             }
             if (operation == "meeting.export")
             {

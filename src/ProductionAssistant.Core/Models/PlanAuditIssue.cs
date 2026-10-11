@@ -22,7 +22,10 @@ public sealed record PlanAuditResult(
     IReadOnlyList<string> VisibleSheets,
     IReadOnlyList<PlanAuditIssue> Issues,
     DateTime SourceLastWriteTimeUtc,
-    long SourceLength);
+    long SourceLength)
+{
+    public bool CanExport => Issues.Count == 0;
+}
 
 public sealed record PlanExportProgress(int Current, int Total, string Name);
 

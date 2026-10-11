@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using ProductionAssistant.Models;
 using ProductionAssistant.Services;
-using Windows.Storage.Pickers;
 
 namespace ProductionAssistant.Pages;
 
@@ -34,22 +33,29 @@ public sealed partial class ProductionMeetingExportPage : Page
 
     private async void BrowseRequested(object sender, RoutedEventArgs e)
     {
-        var picker = new FileOpenPicker();
-        picker.FileTypeFilter.Add(".xlsx");
-        picker.FileTypeFilter.Add(".xlsm");
-        picker.FileTypeFilter.Add(".xls");
-        var windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, windowHandle);
-        var file = await picker.PickSingleFileAsync();
-        if (file is null) return;
+        WorkflowShell.SetBusy(true);
+        try
+        {
+            var path = await DesktopFilePicker.PickExcelAsync(
+                WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow),
+                WorkflowShell.InputBox.Text, PrototypeWebViewRuntime.Mark);
+            if (path is null) return;
 
-        WorkflowShell.InputPath = file.Path;
-        WorkflowShell.SetActionAvailability(false, true);
-        WorkflowShell.TransitionTo(
-            WorkflowOperationState.InputSelected,
-            "源文件已选择",
-            "请确认文件后点击“开始拆分”。",
-            InfoBarSeverity.Informational);
+            WorkflowShell.InputPath = path;
+            WorkflowShell.SetActionAvailability(false, true);
+            WorkflowShell.TransitionTo(
+                WorkflowOperationState.InputSelected,
+                "源文件已选择",
+                "请确认文件后点击“开始拆分”。",
+                InfoBarSeverity.Informational);
+        }
+        catch (Exception error)
+        {
+            WorkflowShell.StatusBar.Title = "选择文件失败";
+            WorkflowShell.StatusBar.Message = BridgeErrorLog.Record("meeting.pickFile", error);
+            WorkflowShell.StatusBar.Severity = InfoBarSeverity.Error;
+        }
+        finally { WorkflowShell.SetBusy(false); }
     }
 
     private async void ExecuteRequested(object sender, RoutedEventArgs e)
