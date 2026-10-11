@@ -45,7 +45,9 @@ Scheduler 由 [appsettings.Development.json](src/ProductionAssistant.App/appsett
 
 生产业务库第一阶段创建了 9 张空表、45 个原字段及 8 个日期区间结束字段，包含关联、汇总与公式。该阶段的可恢复脚本、字段映射及验证记录见 [Teable 结构迁移](docs/teable-schema-migration.md)。
 
-2026-10-09 已完成上述九个生产库的字段数据与关联迁移，共 2,624 条记录；修复用户先行导入的精度/日期差异并核对计算结果。数据迁移范围、平台文本规范化及恢复方法见 [Teable 数据迁移](docs/teable-data-migration.md)。v1.7.0 的 Development 和 Production 当前业务入口统一使用 Teable。
+2026-10-09 已完成上述九个生产库的字段数据与关联迁移，共 2,624 条记录；修复用户先行导入的精度/日期差异并核对计算结果。数据迁移范围、平台文本规范化及恢复方法见 [Teable 数据迁移](docs/teable-data-migration.md)。从 v1.7.0 起，Development 和 Production 当前业务入口统一使用 Teable。
+
+v1.8.0 的 Windows x64 稳定包见 [GitHub Release](https://github.com/Janonez/ProductionAssistant/releases/tag/v1.8.0)，挂网检查、修复和导出变化见 [变更记录](CHANGELOG.md)。
 
 ## React 新版界面
 
