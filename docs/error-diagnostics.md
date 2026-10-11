@@ -24,6 +24,8 @@ Development 和 Production 的候选 PDF 均生成在所选月度目录的 `生�
 
 ## 文件或目录选择器故障
 
+挂网页面的“选择目录”只打开系统选择窗口，页面不显示转圈或额外等待状态；窗口关闭前仍禁止重复点击，取消保留检查和导出结果，失败继续显示诊断错误。移除页面提示不代表系统选择窗口的首次卡顿已验收通过。
+
 若日志中的操作是 `plan.pickFolder` 或 `meeting.pickFile`，失败发生在选择器阶段，尚未开始 Excel 业务处理。2026-10-10 的 `0x800706BE` 同时对应 Windows 事件日志中的 `PickerHost.exe` 和生产助手 `AppHangB1`。
 
 挂网和生产会的 React 桥接及保留原生页面统一通过 `DesktopFilePicker` 打开 Windows 本地 `IFileDialog`。对话框在专用 STA 线程创建、配置、显示和释放，界面线程只传主窗口 HWND 和当前路径并异步接收结果。桥接打开选择器前仍先让出 WebView2 消息回调；取消返回空路径，其他原生错误保留 HRESULT，并写诊断编号和日志，不能把原生失败当成用户取消。参考 [本地通用文件对话框](https://learn.microsoft.com/en-us/windows/win32/shell/common-file-dialog)和 [WebView2 重入限制](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/threading-model)。

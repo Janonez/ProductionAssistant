@@ -14,7 +14,7 @@ interface Audit {
 interface Output { outputFolder: string; files: string[] }
 interface Repair { backupPath: string; changedCells: number; changedRows: number }
 type Action = 'audit' | 'repair' | 'export' | 'pickFolder' | 'openOutput'
-const labels = { audit: '正在检查', repair: '正在备份修复并复查', export: '正在导出', pickFolder: '选择目录', openOutput: '正在打开目录' }
+const labels = { audit: '正在检查', repair: '正在备份修复并复查', export: '正在导出', openOutput: '正在打开目录' }
 const fileName = (path: string) => path.split(/[\\/]/).pop()
 
 export function PlanPdfPage() {
@@ -68,13 +68,13 @@ export function PlanPdfPage() {
     } finally { if (current === version.current) { locked.current = false; setBusy(undefined); setProgress(undefined) } }
   }
 
-  const status = busy ? labels[busy] : output ? '候选 PDF 已生成' : !audit ? '等待检查' : errors ? '存在待处理错误' : audit.canExport ? '可以导出' : '检查完成，待修复'
+  const status = busy && busy !== 'pickFolder' ? labels[busy] : output ? '候选 PDF 已生成' : !audit ? '等待检查' : errors ? '存在待处理错误' : audit.canExport ? '可以导出' : '检查完成，待修复'
   return <div className="page plan-pdf-page">
     <header className="plan-header"><h1>挂网计划导出</h1><span>{status}</span></header>
     <div className="plan-content">
       <section className="plan-source"><label htmlFor="plan-folder">月度目录</label><div><input id="plan-folder" value={path} disabled={!!busy} placeholder="选择包含一二三级计划的月份目录" onChange={event => changePath(event.target.value)} /><button className="secondary" disabled={!!busy} onClick={() => void execute('pickFolder')}><FolderOpen />选择目录</button><button className="primary" disabled={!!busy || !path.trim()} onClick={() => void execute('audit')}>{audit ? '重新检查' : '检查计划'}</button></div></section>
       {error && <p className="plan-error" role="alert">{error}</p>}
-      {busy && <div className="plan-progress" role="status"><span><LoaderCircle className="spin" />{labels[busy]}</span>{busy === 'export' && progress && <><span>{progress.current} / {progress.total} · {progress.name}</span><progress aria-label="PDF 导出进度" max={progress.total || 11} value={progress.current} /></>}</div>}
+      {busy && busy !== 'pickFolder' && <div className="plan-progress" role="status"><span><LoaderCircle className="spin" />{labels[busy]}</span>{busy === 'export' && progress && <><span>{progress.current} / {progress.total} · {progress.name}</span><progress aria-label="PDF 导出进度" max={progress.total || 11} value={progress.current} /></>}</div>}
       <div className="plan-workspace">
         <section className="plan-inspection">
           <div className="plan-pane-heading"><h2>检查结果</h2>{audit && <span>{audit.sheetCount} 个工作表</span>}</div>
