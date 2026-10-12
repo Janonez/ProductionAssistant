@@ -48,6 +48,7 @@ body:has(.desktop-shell) {
 }
 
 .desktop-shell-navigation .sidebar-brand {
+  padding: 0 18px;
   font-weight: var(--fw-semibold);
 }
 

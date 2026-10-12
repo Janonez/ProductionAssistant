@@ -56,12 +56,6 @@
   background: rgb(254, 242, 242);
 }
 
-.production-message-demo .field-table-header .header-status,
-.production-message-demo .field-status {
-  justify-content: flex-start;
-  text-align: left;
-}
-
 .production-message-demo .match-status-warning,
 .production-message-demo .match-status-warning .new-record-icon {
   color: var(--status-warn-text);
@@ -180,6 +174,9 @@
 }
 
 .production-message-content .content-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   flex: none;
   justify-content: space-between;
   gap: 24px;
@@ -261,13 +258,6 @@
 
 /* ===== 视觉对齐修正 ===== */
 
-/* 页头与卡片共用滚动区宽度，滚动时保持页头可见。 */
-.production-message-content .content-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-
 /* 两栏纵向排列，底部操作栏贴底。 */
 .production-message-demo .workspace-panel { min-height: 600px; }
 .production-message-demo .message-pane,
@@ -287,9 +277,6 @@
 }
 /* 24px 标题 + 8px 间距 + 24px 描述行。 */
 .production-message-demo .review-header { min-height: 56px; }
-.production-message-demo .message-textarea { margin-top: 22px; }
-.production-message-demo .identity-section { padding-top: 22px; }
-
 .production-message-demo .message-textarea {
   flex: 1;
   height: auto;
@@ -326,6 +313,7 @@
 .production-message-demo .database-value { width: auto; }
 
 .production-message-demo .identity-section {
+  padding-top: 22px;
   grid-template-columns:
     calc(var(--col-name) + var(--col-gap) + var(--col-value))
     minmax(0, 1fr);
