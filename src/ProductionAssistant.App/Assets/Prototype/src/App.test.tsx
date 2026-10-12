@@ -384,7 +384,7 @@ describe('production message Demo UI', () => {
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
     expect(container.querySelector('.production-message-content')).toBeTruthy()
     expect(container.querySelector('.content-header h1')?.textContent).toBe('生产消息入库')
-    expect(container.querySelector('.content-header + .production-message-scroll')).toBeTruthy()
+    expect(container.querySelector('.production-message-scroll > .content-header')).toBeTruthy()
     const templateConfig = container.querySelector('.template-config-button') as HTMLButtonElement
     expect(templateConfig.getAttribute('aria-label')).toBe('数据库绑定')
     expect(templateConfig.disabled).toBe(false)

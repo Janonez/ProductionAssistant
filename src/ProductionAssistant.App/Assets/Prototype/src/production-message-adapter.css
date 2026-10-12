@@ -258,3 +258,98 @@
 .production-message-content .template-config-button svg { width: 18px; height: 18px; }
 .production-message-content .template-config-button:hover:not(:disabled) { background: var(--surface-muted); }
 .production-message-content .template-config-button:disabled { opacity: .5; cursor: default; }
+
+/* ===== 视觉对齐修正 ===== */
+
+/* 页头与卡片共用滚动区宽度，滚动时保持页头可见。 */
+.production-message-content .content-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+/* 两栏纵向排列，底部操作栏贴底。 */
+.production-message-demo .workspace-panel { min-height: 600px; }
+.production-message-demo .message-pane,
+.production-message-demo .review-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.production-message-demo .pane-title h2,
+.production-message-demo .review-header h2,
+.production-message-demo .review-empty h2 { line-height: 24px; }
+.production-message-demo .pane-title p,
+.production-message-demo .review-empty p {
+  margin: 8px 0 0;
+  line-height: 1.6;
+}
+/* 24px 标题 + 8px 间距 + 24px 描述行。 */
+.production-message-demo .review-header { min-height: 56px; }
+.production-message-demo .message-textarea { margin-top: 22px; }
+.production-message-demo .identity-section { padding-top: 22px; }
+
+.production-message-demo .message-textarea {
+  flex: 1;
+  height: auto;
+  min-height: 260px;
+}
+.production-message-demo .parse-action,
+.production-message-demo .review-footer {
+  margin-top: auto;
+  padding-top: 20px;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+}
+.production-message-demo .parse-action { justify-content: flex-end; }
+.production-message-demo .review-footer { justify-content: space-between; }
+
+/* 输入框与数据表格共用列宽。 */
+.production-message-demo .review-pane {
+  --col-name: 88px;
+  --col-value: 160px;
+  --col-db: 118px;
+  --col-gap: 20px;
+}
+.production-message-demo .field-table { min-width: 0; }
+.production-message-demo .field-table-header,
+.production-message-demo .field-row {
+  grid-template-columns: var(--col-name) var(--col-value) var(--col-db) minmax(0, 1fr);
+  column-gap: var(--col-gap);
+}
+.production-message-demo .field-name { width: auto; }
+.production-message-demo .field-editor,
+.production-message-demo .compact-input,
+.production-message-demo .input-unit-wrap { width: var(--col-value); }
+.production-message-demo .database-value { width: auto; }
+
+.production-message-demo .identity-section {
+  grid-template-columns:
+    calc(var(--col-name) + var(--col-gap) + var(--col-value))
+    minmax(0, 1fr);
+  column-gap: var(--col-gap);
+}
+
+.production-message-demo .input-unit-wrap .field-input,
+.production-message-demo .database-value { text-align: right; }
+.production-message-demo .field-table-header > div:nth-child(2),
+.production-message-demo .field-table-header > div:nth-child(3) { text-align: right; }
+.production-message-demo .field-table-header > div:last-child,
+.production-message-demo .field-table-header .header-status,
+.production-message-demo .field-status {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+@media (max-width: 1320px) {
+  /* 左栏描述换成两行；保留状态列的可用宽度。 */
+  .production-message-demo .review-header { min-height: 80px; }
+  .production-message-demo .review-pane {
+    --col-name: 64px;
+    --col-value: 112px;
+    --col-db: 76px;
+    --col-gap: 12px;
+  }
+}
