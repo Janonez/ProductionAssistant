@@ -176,12 +176,12 @@ export default function ProductionMessagePage() {
     && confirmFields.every((field) => Boolean(conflictChoices[`${field.draft.index}:${field.key}`]));
 
   if (completed) return <div className="app-shell"><main className="main-content">
-    <PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><div className="production-message-scroll"><StepIndicator current={3} />
+    <div className="production-message-scroll"><PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><StepIndicator current={3} />
     <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入数据库`}</p><button className="primary-button" onClick={handleNext}>录入下一条</button></section></div>
   </main>{bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} close={() => setBindingOpen(false)} save={saveBindings} />}</div>;
 
   return <div className="app-shell"><main className="main-content">
-    <PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><div className="production-message-scroll"><StepIndicator current={parsed ? 2 : 1} />
+    <div className="production-message-scroll"><PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><StepIndicator current={parsed ? 2 : 1} />
     <div className="workspace-panel">
       <section className="message-pane">
         <div className="pane-title"><h2>原始消息</h2><p>输入生产消息，系统将自动解析并检查已有数据。</p></div>

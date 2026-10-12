@@ -25,6 +25,13 @@ const css = [
 ].join('\n\n')
 
 const root = postcss.parse(css)
+// These selectors belong to removed formal UI states, even if an older Demo retains them.
+root.walkRules(rule => {
+  if (/\.(?:home-roof|home-door|pill-info|pill-ok|pill-warn|field-row-conflict)(?![\w-])/.test(rule.selector)) rule.remove()
+})
+root.walkAtRules('keyframes', rule => {
+  if (rule.params.trim() === 'home-roof-enter') rule.remove()
+})
 root.walkRules(rule => {
   let parent = rule.parent
   while (parent) {

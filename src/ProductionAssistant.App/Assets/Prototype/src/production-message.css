@@ -427,47 +427,6 @@
    NAV ANIMATIONS
 ========================================================= */
 
-.production-message-demo .sidebar-item-active
-.home-roof {
-  animation:
-    home-roof-enter
-    320ms
-    cubic-bezier(
-      0.2,
-      0.8,
-      0.2,
-      1
-    );
-}
-
-
-.production-message-demo .sidebar-item-active
-.home-door {
-  animation:
-    fade-rise
-    280ms
-    ease-out;
-}
-
-
-@keyframes
-home-roof-enter {
-  0% {
-    transform:
-      translateY(2px);
-  }
-
-  65% {
-    transform:
-      translateY(-1px);
-  }
-
-  100% {
-    transform:
-      translateY(0);
-  }
-}
-
 
 .production-message-demo .sidebar-item-active
 .folder-lid {
@@ -1898,12 +1857,6 @@ spinner {
 }
 
 
-.production-message-demo .field-row-conflict {
-  border-bottom:
-    none;
-}
-
-
 /* =========================================================
    FIELD NAME
 ========================================================= */
@@ -2040,33 +1993,6 @@ span {
 
   white-space:
     nowrap;
-}
-
-
-.production-message-demo .pill-ok {
-  color:
-    var(--status-ok-text);
-
-  background:
-    var(--status-ok-bg);
-}
-
-
-.production-message-demo .pill-info {
-  color:
-    var(--status-info-text);
-
-  background:
-    var(--status-info-bg);
-}
-
-
-.production-message-demo .pill-warn {
-  color:
-    var(--status-warn-text);
-
-  background:
-    var(--status-warn-bg);
 }
 
 
