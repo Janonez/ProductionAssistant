@@ -11,6 +11,7 @@
 - 我批准的只是那一条命令，不要请求"始终允许"类的永久授权。
 - 不得修改 C:\Users\zhang\.codex\config.toml；不得为了绕过沙箱而提高沙箱权限。
 - 命令被拒绝或申请未获批准时，立即停止并汇报原始输出。
+- `dotnet restore`、`.\scripts\verify.ps1` 等构建命令在沙箱内会失败（输出为空，退出码 1）。需要运行时，对这一条命令向我申请在沙箱外执行，申请前写明完整命令；`verify.ps1` 不得带 `-SyncRelease`。
 
 ## 分支与 PR（PR + squash）
 - 主目录是唯一的工作目录，不使用 git worktree，不创建额外的工作树文件夹。平时停在 main，不在 main 上直接改代码。
@@ -21,6 +22,7 @@
 - 合并前确认 CI 通过（`gh pr checks`），并经我确认。
 - 合并后：在主目录 `git switch main`，`git pull --ff-only`，再运行 verify。稳定版必须从合并后的 main 打，不得从需求分支打。
 - 提交前只按路径暂存本次需求要改的文件（`git add <路径>`），不要使用 `git add -A` 或 `git add .`。verify.ps1 会重新生成已跟踪的前端产物（Assets/Prototype/dist、Assets/ReportEditor/editor.js）；如果本次需求没有改前端源码，这些改动必须先查明原因，确认是纯构建差异后再还原，不得原样提交。
+- 本机运行 verify.ps1 后，`Assets/Prototype/dist` 下的已跟踪文件常被重新生成，Git 会显示为已修改。处理方式：先运行 `git diff --stat --ignore-cr-at-eol`；如果输出里没有任何"文件名 | 数字"的统计行（只有 LF/CRLF 换行警告），说明只是换行差异，用 `git restore -- <明确路径或 dist 目录>` 还原，不要提交；如果有统计行，先停下告诉我。若 `git status -sb` 里除 dist 外还有别的非本次需求的文件，也先停下告诉我。不得使用 `git restore .`、`git checkout .`、`reset --hard`、`clean`。
 
 ## 清理分支
 - 远程分支在 PR 合并后由 GitHub 自动删除。
