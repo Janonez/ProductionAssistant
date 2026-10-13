@@ -15,6 +15,26 @@
 
         <Frame x:Name="ShellFrame" Grid.RowSpan="2" Grid.ColumnSpan="2" />
         <Frame x:Name="ContentFrame" Grid.Row="1" Grid.Column="1" Visibility="Collapsed" />
-        <Grid x:Name="AppTitleBar" Grid.Column="1" Margin="0,0,140,0" />
+        <Grid x:Name="AppTitleBar" Grid.Column="1" Margin="0,0,140,0" Canvas.ZIndex="20">
+            <Border
+                x:Name="DevelopmentEnvironmentMarker"
+                Visibility="Collapsed"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Center"
+                Margin="24,0,0,0"
+                Padding="12,4"
+                Background="{StaticResource GlassSubtleBrush}"
+                BorderBrush="{StaticResource MutedTextBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                IsHitTestVisible="False">
+                <TextBlock
+                    Text="测试环境"
+                    FontFamily="{StaticResource ContentControlThemeFontFamily}"
+                    FontSize="14"
+                    FontWeight="SemiBold"
+                    Foreground="#44403C" />
+            </Border>
+        </Grid>
     </Grid>
 </Window>
