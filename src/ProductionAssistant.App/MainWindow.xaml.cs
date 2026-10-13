@@ -14,6 +14,8 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        DevelopmentEnvironmentMarker.Visibility = RuntimeEnvironment.Current.IsDevelopment
+            ? Visibility.Visible : Visibility.Collapsed;
         Title = RuntimeEnvironment.Current.IsDevelopment ? "生产助手 [Development]" : "生产助手";
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
