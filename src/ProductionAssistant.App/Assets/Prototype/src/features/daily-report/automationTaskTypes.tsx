@@ -1,0 +1,102 @@
+import type { ReactNode } from "react";
+import { invoke } from "../../bridge/index";
+import { MessageTemplatePage } from "./MessageTemplatePage";
+import { NotionFillPage } from "./notion-fill/NotionFillPage";
+import { DailyReportCreateWizard } from "./DailyReportCreateWizard";
+import { NotionFillCreateWizard } from "./notion-fill/NotionFillCreateWizard";
+import { TencentSheetCreate, TencentSheetPage } from "./tencent-sheet/TencentSheetPage";
+import type { DailyRun, NotionFillRun } from "../../lib/types";
+
+export type AutomationTaskEditorProps = {
+  openSettings?: () => void;
+  id: string;
+  section: string;
+  navigate: (section: string) => void;
+  changed: () => void;
+};
+
+export type AutomationTaskCreateProps = {
+  onCreated: (result: { id: string }) => Promise<void>;
+  onBack: () => void;
+  onCancel: () => void;
+};
+
+export type AutomationRunView = {
+  id: string;
+  time: string;
+  source: string;
+  status: string;
+  title: string;
+  details: string[];
+  error?: string;
+};
+
+export type AutomationTaskTypeDefinition = {
+  taskType: string;
+  name: string;
+  description: string;
+  includeBasics?: boolean;
+  renderCreate: (props: AutomationTaskCreateProps) => ReactNode;
+  taskTabs: Array<{ id: string; label: string }>;
+  resolveSection: (missingStep: string) => string;
+  issueTitle: (missingStep: string) => string;
+  renderEditor: (props: AutomationTaskEditorProps) => ReactNode;
+  loadRuns: (id: string) => Promise<AutomationRunView[]>;
+};
+
+export const automationTaskTypes: AutomationTaskTypeDefinition[] = [
+  {
+    taskType: "tencent_sheet_fill",
+    name: "腾讯文档填报",
+    includeBasics: false,
+    description: "录制文档控件与业务位置，按执行规则从 Teable 取数填报。",
+    renderCreate: props => <TencentSheetCreate {...props} />,
+    taskTabs: [{ id: "configuration", label: "配置与填报" }],
+    resolveSection: () => "configuration",
+    issueTitle: () => "请完成文档连接与位置检查",
+    renderEditor: props => <TencentSheetPage key={props.id} id={props.id} changed={props.changed} />,
+    loadRuns: id => invoke<{ runs: { id: string; time: string; source: string; status: string; businessDate: string; message?: string; error?: string }[] }>("tencentSheet.runs", { id }).then(({ runs }) => runs.map(run => ({ ...run, source: run.source === "background-test" ? "后台自动测试" : run.source === "automatic" ? "定时填报" : "前台测试", title: run.businessDate, details: run.message ? [run.message] : [] }))),
+  },
+  {
+    taskType: "daily_report",
+    name: "日报推送",
+    description: "查询日报数据、生成消息并发送钉钉。",
+    renderCreate: (props) => <DailyReportCreateWizard {...props} />,
+    taskTabs: [{ id: "configuration", label: "任务配置" }, { id: "execution", label: "运行与测试" }],
+    resolveSection: (missingStep) => missingStep === "basics" ? "basics" : missingStep === "template" ? "configuration" : "execution",
+    issueTitle: (missingStep) => missingStep === "notification" ? "通知渠道未就绪" : missingStep === "template" ? "日报配置尚未验证" : "基本信息不完整",
+    renderEditor: (props) => <MessageTemplatePage id={props.id} back={() => props.navigate("list")} changed={props.changed} openSettings={props.openSettings} />,
+    loadRuns: (id) => invoke<{ runs: DailyRun[] }>("daily.runs", { id }).then(({ runs }) => runs.map(run => ({
+      id: run.id,
+      time: run.time,
+      source: run.source,
+      status: run.status,
+      title: run.textSummary || `业务日期 ${run.businessDate || "—"}`,
+      details: [`业务日期：${run.businessDate || "—"}`, `阶段：${run.stage}`, `尝试：${run.attempts}`],
+      error: run.error,
+    }))),
+  },
+  {
+    taskType: "notion_fill",
+    name: "Teable 自动填报",
+    description: "读取 93 系统前一天入库数据并新增到 Teable。",
+    renderCreate: (props) => <NotionFillCreateWizard {...props} />,
+    taskTabs: [{ id: "configuration", label: "任务配置" }, { id: "execution", label: "运行与测试" }],
+    resolveSection: (missingStep) => missingStep === "basics" ? "basics" : missingStep === "test" ? "execution" : "configuration",
+    issueTitle: (missingStep) => missingStep === "connection" ? "93 系统连接未就绪" : missingStep === "target" ? "Teable 填报目标未就绪" : missingStep === "test" ? "任务尚未完成只读测试" : "基本信息不完整",
+    renderEditor: (props) => <NotionFillPage id={props.id} back={() => props.navigate("list")} changed={props.changed} openSettings={props.openSettings} />,
+    loadRuns: (id) => invoke<{ runs: NotionFillRun[] }>("notionFill.runs", { id }).then(({ runs }) => runs.map(run => ({
+      id: run.id,
+      time: run.time,
+      source: run.source === "source-test" ? "93读取测试" : run.source === "test" ? "只读测试" : run.source === "manual" ? "手动执行" : "自动执行",
+      status: run.status === "created" ? "已新增" : run.status === "checked" ? "已检查" : "失败",
+      title: `${run.businessDate} · 板材 ${run.plateWeight.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 吨 · 型材 ${run.sectionWeight.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 吨`,
+      details: [run.message].filter(Boolean),
+      error: run.error,
+    }))),
+  },
+];
+
+export function findAutomationTaskType(taskType: string) {
+  return automationTaskTypes.find((item) => item.taskType === taskType);
+}

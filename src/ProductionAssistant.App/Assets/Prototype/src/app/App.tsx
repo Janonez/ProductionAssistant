@@ -1,0 +1,70 @@
+import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { RouteSkeleton } from '../components/layout/LoadingSkeleton'
+import { invoke } from '../bridge/index'
+import { useHostRoute } from '../hooks/useHostRoute'
+import { RouteReady } from '../routes/RouteReady'
+import { OperationSidebar } from '../components/layout/OperationSidebar'
+import ProductionMessagePage from '../features/production-message/ProductionMessagePage'
+const AutomationPage = lazy(() => import('../features/daily-report/AutomationPage').then(module => ({ default: module.AutomationPage })))
+const DailyWeldPage = lazy(() => import('../features/daily-weld/DailyWeldPage').then(module => ({ default: module.DailyWeldPage })))
+const PlanPdfPage = lazy(() => import('../features/plan-pdf/PlanPdfPage').then(module => ({ default: module.PlanPdfPage })))
+const ProductionMeetingPage = lazy(() => import('../features/production-meeting/ProductionMeetingPage').then(module => ({ default: module.ProductionMeetingPage })))
+const ReportCenterPage = lazy(() => import('../features/report-center/ReportCenterPage').then(module => ({ default: module.ReportCenterPage })))
+const DatabaseViewerPage = lazy(() => import('../features/database-viewer/DatabaseViewerPage').then(module => ({ default: module.DatabaseViewerPage })))
+import SettingsModal from './SettingsModal'
+
+class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    if (!this.state.failed) return this.props.children
+    const error = <div className="route-load-status" role="alert">界面加载失败，请重新加载。<button className="secondary" onClick={() => window.location.reload()}>重新加载</button>{this.props.onClose && <button className="secondary" onClick={this.props.onClose}>关闭</button>}</div>
+    return this.props.onClose ? <div className="settings-overlay"><div className="settings-window">{error}</div></div> : error
+  }
+}
+
+
+
+export function App() {
+  const { route, navigation } = useHostRoute()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+
+  const goNative = (tag: string) => invoke('app.navigateNative', { tag }).catch(() => undefined)
+  const active = route.startsWith('navigation:') ? route.slice('navigation:'.length) : route
+  const native = route.startsWith('navigation:')
+
+  useEffect(() => {
+    document.body.classList.toggle('settings-over-native', native && settingsOpen)
+    return () => document.body.classList.remove('settings-over-native')
+  }, [native, settingsOpen])
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false)
+    window.dispatchEvent(new Event('production-settings-updated'))
+    invoke('settings.close').catch(() => undefined)
+  }, [])
+
+  return <div className={`desktop-shell ${native && settingsOpen ? 'settings-over-native' : ''}`}>
+    <div className="production-message-demo desktop-shell-navigation">
+      <OperationSidebar active={active} navigate={goNative} openSettings={() => setSettingsOpen(true)} />
+    </div>
+    <div className={`desktop-shell-content ${native ? 'desktop-shell-content-native' : ''}`}>
+      {native ? <><div className="native-content-slot" aria-hidden="true" /><RouteReady route={route} navigation={navigation} /></>
+        : <div
+              key={route}
+              className={route === 'production-message' || route === 'daily-weld' ? 'production-message-demo production-message-content' : 'app-shell'}
+              data-page-route={route}
+            >
+              <LoadBoundary key={navigation}>
+                <Suspense fallback={<RouteSkeleton route={route} />}>
+                  <RouteReady route={route} navigation={navigation} />
+                  {route === 'production-message' ? <ProductionMessagePage /> : route === 'daily-weld' ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === 'production-meeting' ? <ProductionMeetingPage /> : route === 'plan-pdf' ? <PlanPdfPage /> : route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+
+                </Suspense>
+              </LoadBoundary>
+            </div>}
+    </div>
+    {settingsOpen && <LoadBoundary onClose={closeSettings}><SettingsModal open onClose={closeSettings} /></LoadBoundary>}
+  </div>
+}
