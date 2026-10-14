@@ -2,7 +2,11 @@
 
 ## 总原则
 - 遇到不确定的情况先停下报告，不要自行决定。先只读检查，再动手。
-- 删除、合并、推送、打稳定版、发布 Release 之前，先列出将执行的完整命令和影响范围，等我回复"确认"后才执行。
+- 默认自行往下执行，不逐步询问：只读检查、pull、新建分支、改代码、运行 verify、按路径暂存、提交、推送功能分支、开 PR、查看 CI、合并 PR、合并后回到 main 并 pull、核对并删除本次需求自己那个已合并的本地分支（核对条件：对应 PR 为 MERGED，且分支顶端提交等于 PR 的 headRefOid；删除前先把"完整哈希 分支名"追加到 D:\zhang\工作\ChatGPT\branch-backup-20261012.txt）。
+- 我只在以下节点说话：提出需求；验收测试版后回复"通过"，这句话同时授权合并该 PR；更新稳定版（-SyncRelease）、打版本标签、发布 Release 之前，必须先列出完整命令和影响范围，等我回复"确认"。
+- 不需要我验收的需求（纯文档、不改运行效果）：CI 通过后直接合并。
+- 合并只在 CI 的 verify 为 pass 时进行；CI 未完成时只汇报状态，不要反复轮询，等我下次通知后再继续。
+- 删除本需求分支以外的任何分支、文件夹或文件，仍需先列清单并等我确认。
 - 任何一步失败立即停止并报告原始输出，不要自行使用强制手段。
 
 ## Codex 沙箱限制（Windows）
@@ -16,7 +20,7 @@
 ## 分支与 PR（PR + squash）
 - 主目录是唯一的工作目录，不使用 git worktree，不创建额外的工作树文件夹。平时停在 main，不在 main 上直接改代码。
 - 每个需求开始前：确认 `git status -sb` 干净 → `git switch main` → `git pull --ff-only` → `git switch -c codex/简述`，在这个分支上开发。切换分支前工作区必须干净；有未提交的改动时先告诉我，不要自行 stash、丢弃或带着改动切换。
-- 推送前必须运行 `.\scripts\verify.ps1`，不通过不得推送。
+- 推送前必须运行 `.\scripts\verify.ps1`，不通过不得推送。仅修改文档（AGENTS.md、README、docs 等，不涉及代码、配置或前端源码）的需求不需要运行 verify.ps1，以 CI 为准，不得为此申请在沙箱外运行。
 - 前端源码有改动时，随应用提交的前端产物（Assets/Prototype/dist）按现有做法一并更新。
 - 通过 GitHub PR 合并，合并方式只用 squash。PR 标题写成一句中文的用户可见变化；纯重构、清理、文档分别以"重构："、"清理："、"文档："开头。PR 正文写明：改了什么、验证结果、是否涉及版本号或发布。
 - 合并前确认 CI 通过（`gh pr checks`），并经我确认。
@@ -49,7 +53,7 @@
 - 版本号只在 src/ProductionAssistant.App/ProductionAssistant.csproj 的 `<Version>` 修改，并同步 AssemblyVersion、FileVersion、InformationalVersion。
 - 只修 bug 升第三位，新增功能升第二位。
 - 同步更新 CHANGELOG.md，只写用户可见变化，遵循文件开头的规则；整理时参考 `git log 上一个版本标签..main`。
-- 顺序：改版本与变更记录 → verify → 推送并经 PR 合并 → 确认 CI 通过 → 打标签 v版本号 → 打稳定版 → 生成 ZIP → 发布 Release。每一步先问我。
+- 顺序：改版本与变更记录 → verify → 推送并经 PR 合并 → 确认 CI 通过 → 打标签 v版本号 → 打稳定版 → 生成 ZIP → 发布 Release。其中打版本标签、更新稳定版、发布 Release 这三步之前先列出命令并等我确认，其余步骤自行执行。
 - 发布 ZIP 不得包含运行时用户数据：deployments\production 下的 *.WebView2 文件夹（含 EBWebView）、浏览器配置、登录状态、日志和本地设置。打包前列出 ZIP 将包含的顶层条目给我确认；打包后列出文件名核对（不显示文件内容）。
 
 ## 安全
