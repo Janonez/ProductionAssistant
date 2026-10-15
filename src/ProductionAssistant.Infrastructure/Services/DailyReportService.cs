@@ -23,8 +23,10 @@ public sealed partial class DailyReportService
         _database = database ?? (notionClient is not null || notionSettings is not null
             ? new NotionDatabaseQueryProvider(notionClient, notionSettings)
             : DatabaseProviderFactory.Create());
-        _dingTalkClient = dingTalkClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _dingTalkClient = dingTalkClient ?? new HttpClient(CreateDingTalkHandler()) { Timeout = TimeSpan.FromSeconds(30) };
     }
+
+    internal static HttpClientHandler CreateDingTalkHandler() => new() { UseProxy = false };
 
     public Task<DailyReportBuildResult> BuildAsync(
         DailyReportJob settings,
@@ -436,12 +438,51 @@ public sealed partial class DailyReportService
             var message = document.RootElement.TryGetProperty("errmsg", out var error)
                 ? error.GetString()
                 : "未知错误";
-            return new(false, $"钉钉拒绝发送：{message}");
+            return new(false, $"钉钉拒绝发送：{RedactDingTalkMessage(message ?? string.Empty, uri, secret, text, signature)}");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
-            return new(false, $"钉钉连接失败：{ex.Message}");
+            return new(false, FormatDingTalkFailure(ex, uri, secret, text, signature));
         }
+    }
+
+    private static string FormatDingTalkFailure(Exception exception, Uri webhook, params string[] sensitiveValues)
+    {
+        var details = new StringBuilder($"钉钉连接失败：{RedactDingTalkMessage(exception.Message, webhook, sensitiveValues)}");
+        AppendException(exception, 0);
+        return details.ToString();
+
+        void AppendException(Exception current, int depth)
+        {
+            details.AppendLine();
+            details.Append($"诊断[{depth}] {current.GetType().FullName} HResult=0x{current.HResult:X8}: " +
+                           RedactDingTalkMessage(current.Message, webhook, sensitiveValues));
+            if (current is System.Net.Sockets.SocketException socket)
+                details.Append($"; SocketError={socket.SocketErrorCode}; ErrorCode={socket.ErrorCode}");
+            if (current is AggregateException aggregate)
+            {
+                foreach (var inner in aggregate.InnerExceptions) AppendException(inner, depth + 1);
+            }
+            else if (current.InnerException is { } inner)
+            {
+                AppendException(inner, depth + 1);
+            }
+        }
+    }
+
+    private static string RedactDingTalkMessage(string message, Uri webhook, params string[] sensitiveValues)
+    {
+        var queryValues = webhook.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Split('=', 2)).Where(parts => parts.Length == 2)
+            .SelectMany(parts => new[] { parts[1], Uri.UnescapeDataString(parts[1]), System.Net.WebUtility.UrlDecode(parts[1]) });
+        var redactions = sensitiveValues.Concat(queryValues).Where(value => !string.IsNullOrEmpty(value))
+            .SelectMany(value => new[] { value, Uri.EscapeDataString(value), JsonSerializer.Serialize(value)[1..^1] })
+            .Distinct().OrderByDescending(value => value.Length);
+        // Exception messages and remote errmsg may echo credentials or the request body.
+        foreach (var value in redactions)
+            message = message.Replace(value, "[已隐藏]", StringComparison.OrdinalIgnoreCase);
+        message = Regex.Replace(message, "https?://[^\\s\"'<>]+", "[URL已隐藏]", RegexOptions.IgnoreCase);
+        return message.Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal);
     }
 
     public async Task<DailyReportSendResult> CheckConnectionAsync(
@@ -460,7 +501,7 @@ public sealed partial class DailyReportService
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            return new(false, $"钉钉连接失败：{ex.Message}");
+            return new(false, FormatDingTalkFailure(ex, uri));
         }
     }
 
