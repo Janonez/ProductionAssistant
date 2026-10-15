@@ -2,6 +2,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "sync:production-message-demo": "node sync-production-message-demo.mjs",
     "lint:font-weights": "node scripts/check-font-weights.mjs",
     "build": "tsc --noEmit && vite build",
