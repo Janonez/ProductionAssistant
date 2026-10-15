@@ -199,6 +199,193 @@ public sealed class DailyReportServiceTests
     }
 
     [Fact]
+    public void Default_dingtalk_handler_bypasses_proxy()
+    {
+        using var handler = DailyReportService.CreateDingTalkHandler();
+        Assert.False(handler.UseProxy);
+    }
+
+    [Fact]
+    public async Task SendAsync_preserves_the_injected_client_and_its_settings()
+    {
+        var calls = 0;
+        using var client = new HttpClient(new RouteHandler(request =>
+        {
+            calls++;
+            Assert.Equal("injected", request.Headers.GetValues("X-DingTalk-Test").Single());
+            return Json("""{"errcode":0,"errmsg":"ok"}""");
+        })) { Timeout = TimeSpan.FromSeconds(75) };
+        client.DefaultRequestHeaders.Add("X-DingTalk-Test", "injected");
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.SendAsync("https://example.com/robot", "fixture-secret", "fixture-body");
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("钉钉发送成功。", result.Message);
+        Assert.Equal(TimeSpan.FromSeconds(75), client.Timeout);
+        Assert.Equal(1, calls);
+    }
+
+    [Theory]
+    [InlineData(400)]
+    [InlineData(429)]
+    [InlineData(500)]
+    public async Task SendAsync_preserves_http_failure_results(int status)
+    {
+        using var client = new HttpClient(new RouteHandler(_ => new((HttpStatusCode)status)
+        {
+            Content = new StringContent("response body must not be logged")
+        }));
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.SendAsync("https://example.com/robot", "fixture-secret", "fixture-body");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal($"钉钉返回 HTTP {status}。", result.Message);
+    }
+
+    [Theory]
+    [InlineData(310000, "关键词不匹配")]
+    [InlineData(400001, "sign mismatch")]
+    public async Task SendAsync_preserves_business_rejection_results(int code, string message)
+    {
+        using var client = new HttpClient(new RouteHandler(_ => Json(JsonSerializer.Serialize(new { errcode = code, errmsg = message }))));
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.SendAsync("https://example.com/robot", "fixture-secret", "fixture-body");
+
+        Assert.False(result.Succeeded);
+        Assert.Equal($"钉钉拒绝发送：{message}", result.Message);
+    }
+
+    [Fact]
+    public async Task SendAsync_appends_the_exception_chain_and_socket_codes_without_replacing_the_error()
+    {
+        var socket = new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionRefused);
+        var tls = new System.Security.Authentication.AuthenticationException("TLS handshake failed", socket);
+        var failure = new HttpRequestException("The SSL connection could not be established, see inner exception.", tls);
+        var calls = 0;
+        using var client = new HttpClient(new RouteHandler(_ => { calls++; throw failure; }));
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.SendAsync("https://example.com/robot", "fixture-secret", "fixture-body");
+
+        Assert.False(result.Succeeded);
+        Assert.StartsWith($"钉钉连接失败：{failure.Message}{Environment.NewLine}", result.Message);
+        foreach (var error in new Exception[] { failure, tls, socket })
+        {
+            Assert.Contains(error.GetType().FullName!, result.Message);
+            Assert.Contains($"HResult=0x{error.HResult:X8}", result.Message);
+            Assert.Contains(error.Message, result.Message);
+        }
+        Assert.Contains($"SocketError={socket.SocketErrorCode}; ErrorCode={socket.ErrorCode}", result.Message);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task SendAsync_diagnostics_include_every_aggregate_exception_branch()
+    {
+        var failure = new HttpRequestException("outer failure", new AggregateException(
+            new IOException("first branch"), new InvalidOperationException("second branch")));
+        using var client = new HttpClient(new RouteHandler(_ => throw failure));
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.SendAsync("https://example.com/robot", "fixture-secret", "fixture-body");
+
+        Assert.Contains("System.IO.IOException", result.Message);
+        Assert.Contains("first branch", result.Message);
+        Assert.Contains("System.InvalidOperationException", result.Message);
+        Assert.Contains("second branch", result.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendAsync_redacts_request_secrets_from_exceptions_and_remote_errors(bool remoteError)
+    {
+        const string token = "fixture-token/A1+?";
+        const string secret = "fixture-secret-B2";
+        const string text = "fixture payload C3\n第二行";
+        var webhook = "https://example.com/robot/send?access_token=" + Uri.EscapeDataString(token);
+        var signature = "";
+        using var client = new HttpClient(new RouteHandler(request =>
+        {
+            signature = Uri.UnescapeDataString(request.RequestUri!.Query.Split('&')
+                .Single(part => part.StartsWith("sign=", StringComparison.Ordinal))[5..]);
+            var echo = $"request={request.RequestUri}; token={token}; secret={secret}; signature={signature}; " +
+                       $"body={text}; json={JsonSerializer.Serialize(text)[1..^1]}; encoded={Uri.EscapeDataString(text).ToLowerInvariant()}";
+            if (remoteError) return Json(JsonSerializer.Serialize(new { errcode = 310000, errmsg = echo }));
+            throw new HttpRequestException("transport failed " + echo, new IOException("inner " + echo));
+        }));
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.SendAsync(webhook, secret, text);
+
+        Assert.False(result.Succeeded);
+        Assert.NotEmpty(signature);
+        foreach (var value in new[] { token, secret, signature, text })
+        {
+            Assert.DoesNotContain(value, result.Message);
+            Assert.DoesNotContain(Uri.EscapeDataString(value), result.Message);
+            Assert.DoesNotContain(JsonSerializer.Serialize(value)[1..^1], result.Message);
+        }
+        Assert.DoesNotContain("https://example.com/robot", result.Message);
+        Assert.DoesNotContain(Uri.EscapeDataString(text).ToLowerInvariant(), result.Message);
+        Assert.Contains("[已隐藏]", result.Message);
+    }
+
+    [Fact]
+    public async Task SendAsync_preserves_json_failure_as_an_unsuccessful_result()
+    {
+        using var client = new HttpClient(new RouteHandler(_ => Json("not-json")));
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.SendAsync("https://example.com/robot", "fixture-secret", "fixture-body");
+
+        Assert.False(result.Succeeded);
+        Assert.StartsWith("钉钉连接失败：", result.Message);
+        Assert.Contains("System.Text.Json.Json", result.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SendAsync_preserves_timeout_and_caller_cancellation_results(bool cancelBeforeSend)
+    {
+        var handler = new WaitForCancellationHandler();
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(100) };
+        using var cancellation = new CancellationTokenSource();
+        if (cancelBeforeSend) cancellation.Cancel();
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.SendAsync("https://example.com/robot", "fixture-secret", "fixture-body", cancellation.Token);
+
+        Assert.False(result.Succeeded);
+        Assert.StartsWith("钉钉连接失败：", result.Message);
+        Assert.Contains("TaskCanceledException", result.Message);
+        Assert.InRange(handler.Calls, cancelBeforeSend ? 0 : 1, 1);
+    }
+
+    [Fact]
+    public async Task CheckConnectionAsync_appends_diagnostics_without_exposing_the_webhook()
+    {
+        using var client = new HttpClient(new RouteHandler(request =>
+        {
+            Assert.Equal(HttpMethod.Head, request.Method);
+            throw new HttpRequestException($"HEAD unavailable for {request.RequestUri}");
+        }));
+        var service = new DailyReportService(dingTalkClient: client, database: new DateRangeProvider([]));
+
+        var result = await service.CheckConnectionAsync("https://example.com/robot?access_token=fixture-head-token");
+
+        Assert.False(result.Succeeded);
+        Assert.StartsWith("钉钉连接失败：HEAD unavailable", result.Message);
+        Assert.Contains("System.Net.Http.HttpRequestException", result.Message);
+        Assert.DoesNotContain("https://example.com", result.Message);
+        Assert.DoesNotContain("fixture-head-token", result.Message);
+    }
+
+    [Fact]
     public async Task Selected_view_is_the_only_aggregation_boundary_even_for_tower()
     {
         var pages = new[]
@@ -787,6 +974,18 @@ public sealed class DailyReportServiceTests
             {
                 Content = new StringContent("{\"errcode\":0,\"errmsg\":\"ok\"}")
             };
+        }
+    }
+
+    private sealed class WaitForCancellationHandler : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return Json("""{"errcode":0}""");
         }
     }
 
