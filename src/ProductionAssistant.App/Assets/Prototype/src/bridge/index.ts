@@ -1,9 +1,13 @@
-import * as webview from '../bridge'
+import * as webview from './webview'
+
+const hasWebView = () => Boolean((window as typeof window & { chrome?: { webview?: unknown } }).chrome?.webview)
 
 type ProgressListener = (value: unknown) => void
 const progressListeners = new Map<string, Set<ProgressListener>>()
 
 export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 30000, progress?: ProgressListener): Promise<T> {
+  if (import.meta.env.DEV && !hasWebView())
+    return import('./mock').then(mock => mock.invoke<T>(operation, payload))
   return webview.invoke<T>(operation, payload, timeoutMs, value => {
     progress?.(value)
     progressListeners.get(operation)?.forEach(listener => listener(value))
@@ -22,7 +26,13 @@ export function onProgress(operation: string, listener: ProgressListener): () =>
   }
 }
 
-export const notifyReady = webview.notifyReady
+export function notifyReady(route: string, navigation: string): void {
+  if (import.meta.env.DEV && !hasWebView()) {
+    void import('./mock').then(mock => mock.ready(route, navigation))
+    return
+  }
+  webview.notifyReady(route, navigation)
+}
 export const bridge = { invoke, onProgress, ready: notifyReady }
-export { cancelPending } from '../bridge'
-export type { BridgeRequest, BridgeResponse } from '../bridge'
+export { cancelPending } from './webview'
+export type { BridgeRequest, BridgeResponse } from './webview'

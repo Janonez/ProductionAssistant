@@ -10,7 +10,7 @@ describe('desktop bridge', () => {
       postMessage: (value: { id: string }) => { sent = value },
       addEventListener: (_: string, value: (event: MessageEvent) => void) => { handler = value }
     } } })
-    const { invoke } = await import('../bridge')
+    const { invoke } = await import('./webview')
     const result = invoke<{ value: number }>('test')
     handler?.({ data: { id: sent?.id, ok: true, data: { value: 0 } } } as MessageEvent)
     await expect(result).resolves.toEqual({ value: 0 })
@@ -23,7 +23,7 @@ describe('desktop bridge', () => {
       postMessage: (value: { id: string }) => { id = value.id },
       addEventListener: (_: string, value: (event: MessageEvent) => void) => { handler = value }
     } } })
-    const { invoke } = await import('../bridge')
+    const { invoke } = await import('./webview')
     const result = invoke('bad')
     handler?.({ data: { id, ok: false, error: '无效请求' } } as MessageEvent)
     await expect(result).rejects.toThrow('无效请求')
@@ -37,7 +37,7 @@ describe('desktop bridge', () => {
       postMessage: (value: { id: string }) => { id = value.id },
       addEventListener: (_: string, value: (event: MessageEvent) => void) => { handler = value }
     } } })
-    const { invoke } = await import('../bridge')
+    const { invoke } = await import('./webview')
     const result = invoke<{ done: boolean }>('report.run', undefined, 30000, progress)
     handler?.({ data: { id, type: 'progress', data: { stage: 'collect', current: 1, total: 2, message: '正在下载' } } } as MessageEvent)
     expect(progress).toHaveBeenCalledWith({ stage: 'collect', current: 1, total: 2, message: '正在下载' })
@@ -52,7 +52,7 @@ describe('desktop bridge', () => {
       postMessage,
       addEventListener: () => undefined
     } } })
-    const { notifyReady } = await import('../bridge')
+    const { notifyReady } = await import('./webview')
     notifyReady('daily-report', 'navigation-2')
     notifyReady('daily-report', 'navigation-2')
     expect(sent).toEqual({ type: 'app.ready', route: 'daily-report', navigation: 'navigation-2', moduleEntryMs: expect.any(Number), readyMs: expect.any(Number) })

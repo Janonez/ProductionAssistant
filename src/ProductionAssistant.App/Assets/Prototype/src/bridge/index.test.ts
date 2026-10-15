@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BridgeRequest, BridgeResponse } from '../bridge'
+import type { BridgeRequest, BridgeResponse } from './index'
 
 describe('WebView2 bridge adapter', () => {
   let receive: (event: MessageEvent<BridgeResponse>) => void
@@ -8,6 +8,7 @@ describe('WebView2 bridge adapter', () => {
 
   beforeEach(() => {
     vi.resetModules()
+    vi.stubEnv('DEV', false)
     requests = []
     postMessage = vi.fn((request: BridgeRequest) => requests.push(request))
     Object.assign(window, { chrome: { webview: {
@@ -16,7 +17,7 @@ describe('WebView2 bridge adapter', () => {
     } } })
   })
 
-  afterEach(() => { Reflect.deleteProperty(window, 'chrome') })
+  afterEach(() => { vi.unstubAllEnvs(); Reflect.deleteProperty(window, 'chrome') })
 
   it('preserves the request payload and resolves the matching response', async () => {
     const { bridge } = await import('./index')

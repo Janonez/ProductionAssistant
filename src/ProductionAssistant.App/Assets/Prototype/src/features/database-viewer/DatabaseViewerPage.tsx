@@ -4,11 +4,8 @@ import { invoke } from '../../bridge/index'
 import { RouteSkeleton, SkeletonLines } from '../../components/layout/LoadingSkeleton'
 import { ChoicePicker } from '../../components/ui/FormPickers'
 import DatePicker from '../../components/ui/DatePicker'
+import type { DatabaseSource as Source, DatabaseDataset as Dataset, DatabaseField as Field, DatabaseInspectResult as Result, DatabaseState, DatabaseSchema } from './types'
 
-type Source = { id: string; name: string; path: string; businessSection: string }
-type Dataset = { id: string; name: string }
-type Field = { id: string; name: string; type: string }
-type Result = { providerName: string; sourceName: string; datasetName: string; startDate: string; endDate: string; recordCount: number; total?: number; truncated: boolean; records: Array<{ id: string; values: Record<string, unknown> }> }
 const today = new Date().toISOString().slice(0, 10)
 
 export function DatabaseViewerPage() {
@@ -32,7 +29,7 @@ export function DatabaseViewerPage() {
   const [result, setResult] = useState<Result>()
 
   useEffect(() => {
-    invoke<{ provider: string; usesBusinessSections: boolean; businessSections: string[]; sources: Source[] }>('database.getState')
+    invoke<DatabaseState>('database.getState')
       .then(value => { setProvider(value.provider); setUsesBusinessSections(value.usesBusinessSections); setBusinessSections(value.businessSections); setSources(value.sources) })
       .catch(reason => setError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setBusy(''))
@@ -44,7 +41,7 @@ export function DatabaseViewerPage() {
     if (!value) return
     setBusy('schema')
     try {
-      const data = await invoke<{ fields: Field[]; datasets: Dataset[] }>('database.getSchema', { sourceId: value })
+      const data = await invoke<DatabaseSchema>('database.getSchema', { sourceId: value })
       setFields(data.fields); setDatasets(data.datasets)
       setDateFieldId(data.fields.find(field => field.type === 'date')?.id || '')
       setValueFieldId(data.fields.find(field => field.type === 'number')?.id || '')
