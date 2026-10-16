@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BridgeRequest, BridgeResponse } from './index'
+import type { DatabaseState } from '../features/database-viewer/types'
 
 describe('WebView2 bridge adapter', () => {
   let receive: (event: MessageEvent<BridgeResponse>) => void
@@ -75,5 +76,41 @@ describe('WebView2 bridge adapter', () => {
     await expect(pending).rejects.toThrow('fixture error')
     Reflect.deleteProperty(window, 'chrome')
     await expect(bridge.invoke('database.inspect')).rejects.toThrow('当前页面未连接到桌面宿主')
+  })
+})
+
+describe('bridge transport selection', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('DEV', true)
+    Reflect.deleteProperty(window, 'chrome')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+    Reflect.deleteProperty(window, 'chrome')
+  })
+
+  it('keeps the original missing-host error outside DEV', async () => {
+    vi.stubEnv('DEV', false)
+    const mock = await import('./mock')
+    const mocked = vi.spyOn(mock, 'invoke')
+    const { bridge } = await import('./index')
+    await expect(bridge.invoke('database.getState')).rejects.toThrow('当前页面未连接到桌面宿主')
+    bridge.ready('database-viewer', 'production-navigation')
+    expect(mocked).not.toHaveBeenCalled()
+  })
+
+  it('uses the real WebView2 host when present even in DEV', async () => {
+    let receive!: (event: MessageEvent<BridgeResponse>) => void
+    const hostState: DatabaseState = { provider: 'Host fixture', usesBusinessSections: false, businessSections: [], sources: [] }
+    const postMessage = vi.fn((request: BridgeRequest) => {
+      queueMicrotask(() => receive({ data: { id: request.id, ok: true, data: hostState } } as MessageEvent<BridgeResponse>))
+    })
+    Object.assign(window, { chrome: { webview: { postMessage, addEventListener: (_: string, handler: typeof receive) => { receive = handler } } } })
+    const { bridge } = await import('./index')
+    await expect(bridge.invoke('database.getState')).resolves.toEqual(hostState)
+    expect(postMessage).toHaveBeenCalledWith({ id: expect.any(String), operation: 'database.getState', payload: undefined })
   })
 })
