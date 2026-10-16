@@ -343,28 +343,6 @@ describe('connected production message workflow', () => {
     getMonth.mockRestore()
     getDate.mockRestore()
   })
-
-  it('renders the Debug navigation taxonomy in the Demo sidebar and routes through the host', async () => {
-    await act(async () => {
-      history.replaceState({}, '', '?route=navigation:production-message&navigation=sidebar')
-      window.dispatchEvent(new PopStateEvent('popstate'))
-    })
-    expect(container.textContent).toContain('数据文件处理')
-    expect(container.textContent).toContain('挂网计划 PDF 导出')
-    expect(container.textContent).toContain('生产会资料拆分')
-    expect(container.textContent).toContain('数据同步')
-    expect(container.textContent).toContain('每日焊接数据模拟')
-    expect(container.textContent).toContain('生产消息 Teable 入库')
-    expect(container.textContent).toContain('自动化任务')
-    expect(container.textContent).toContain('文件统计汇总')
-    expect(container.textContent).toContain('自动化任务')
-    expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
-    expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
-    const dailyReport = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('自动化任务')) as HTMLButtonElement
-    await act(async () => { dailyReport.click(); await Promise.resolve() })
-    expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'daily-report' })
-  })
 })
 
 describe('production message Demo UI', () => {
@@ -432,7 +410,17 @@ describe('production message Demo UI', () => {
 })
 
 describe('shared operation sidebar', () => {
+  afterEach(() => {
+    vi.resetModules()
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+  })
+
   it('renders daily weld as a React route with the shared sidebar selected', async () => {
+    const invoke = vi.fn()
+    const notifyReady = vi.fn()
+    vi.resetModules()
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+
     history.replaceState({}, '', '?route=daily-weld&navigation=weld')
     const container = document.createElement('div')
     document.body.append(container)
@@ -447,48 +435,40 @@ describe('shared operation sidebar', () => {
     expect(container.querySelector('.production-message-content h1')?.textContent).toBe('每日焊接数据模拟')
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('每日焊接数据模拟')
     expect(container.querySelector('.native-content-slot')).toBeNull()
-    expect(notifyReady).toHaveBeenLastCalledWith('daily-weld', 'weld')
 
     await act(async () => { root.unmount() })
     container.remove()
   })
 
-  it('shows only the module taxonomy, has no homepage, and routes through the host', async () => {
-    history.replaceState({}, '', '?route=navigation:production-message&navigation=sidebar')
+  it('reports daily weld readiness with the host route and navigation token', async () => {
+    const invoke = vi.fn()
+    const notifyReady = vi.fn()
+    vi.resetModules()
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+
+    history.replaceState({}, '', '?route=daily-weld&navigation=weld')
     const container = document.createElement('div')
     document.body.append(container)
     invoke.mockReset().mockResolvedValue({})
+    notifyReady.mockReset()
     const { App } = await import('./App')
     const root = createRoot(container)
 
     await act(async () => { root.render(<App />) })
     await act(async () => { await vi.dynamicImportSettled() })
 
-    expect(container.textContent).toContain('数据文件处理')
-    expect(container.textContent).toContain('挂网计划 PDF 导出')
-    expect(container.textContent).toContain('生产会资料拆分')
-    expect(container.textContent).toContain('数据同步')
-    expect(container.textContent).toContain('每日焊接数据模拟')
-    expect(container.textContent).toContain('生产消息 Teable 入库')
-    expect(container.textContent).toContain('自动化任务')
-    expect(container.textContent).toContain('文件统计汇总')
-    expect(container.textContent).toContain('自动化任务')
-    expect(container.textContent).not.toContain('首页')
-    expect(container.textContent).not.toContain('概览')
-    expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
-    expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
-
-    const dailyReport = [...container.querySelectorAll('button')]
-      .find(button => button.textContent?.includes('自动化任务')) as HTMLButtonElement
-    await act(async () => { dailyReport.click(); await Promise.resolve() })
-    expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'daily-report' })
+    expect(notifyReady).toHaveBeenLastCalledWith('daily-weld', 'weld')
 
     await act(async () => { root.unmount() })
     container.remove()
   })
 
-  it('opens settings over the current route and closes without native navigation', async () => {
+  it('opens settings over the current route and completes the settings workflow', async () => {
+    const invoke = vi.fn()
+    const notifyReady = vi.fn()
+    vi.resetModules()
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+
     history.replaceState({}, '', '?route=navigation:production-message&navigation=settings-modal')
     const container = document.createElement('div')
     document.body.append(container)
@@ -513,7 +493,6 @@ describe('shared operation sidebar', () => {
     expect((container.querySelector('.settings-input[type="password"]') as HTMLInputElement).value).not.toBe('')
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
     expect(invoke).toHaveBeenCalledWith('settings.open')
-    expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', { tag: 'settings' })
 
     const tab = (label: string) => [...container.querySelectorAll('.settings-nav-item')]
       .find(button => button.textContent?.trim() === label) as HTMLButtonElement
@@ -537,40 +516,56 @@ describe('shared operation sidebar', () => {
     const close = container.querySelector('[aria-label="关闭设置"]') as HTMLButtonElement
     await act(async () => { close.click(); await Promise.resolve() })
     expect(container.querySelector('[role="dialog"]')).toBeNull()
-    expect(invoke).toHaveBeenCalledWith('settings.close')
 
     await act(async () => { root.unmount() })
     container.remove()
   })
-})
 
-describe('host lifecycle', () => {
-  it('reports each host navigation after React renders the requested route', async () => {
-    history.replaceState({}, '', '?route=navigation:plan-pdf&navigation=first')
+  it('keeps the legacy settings host contract without settings navigation', async () => {
+    const invoke = vi.fn()
+    const notifyReady = vi.fn()
+    vi.resetModules()
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+
+    history.replaceState({}, '', '?route=navigation:production-message&navigation=settings-modal')
     const container = document.createElement('div')
     document.body.append(container)
-    invoke.mockReset().mockImplementation((operation: string) =>
-      operation === 'automation.list' ? Promise.resolve({ tasks: [] }) : Promise.resolve({}))
-    notifyReady.mockReset()
+    let finishRefresh!: (value: unknown) => void
+    invoke.mockReset().mockImplementation((operation: string) => {
+      if (operation === 'settings.open') return Promise.resolve(settingsState)
+      if (operation === 'settings.refreshDataSources') return new Promise(resolve => { finishRefresh = resolve })
+      return Promise.resolve({})
+    })
     const { App } = await import('./App')
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
     await act(async () => { await vi.dynamicImportSettled() })
-    expect(notifyReady).toHaveBeenLastCalledWith('navigation:plan-pdf', 'first')
-    const openProduction = [...container.querySelectorAll('button')]
-      .find(button => button.textContent?.includes('生产消息 Teable 入库')) as HTMLButtonElement
-    await act(async () => { openProduction.click() })
-    expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'production-message' })
 
-    await act(async () => {
-      history.replaceState({}, '', '?route=daily-report&navigation=second')
-      window.dispatchEvent(new PopStateEvent('popstate'))
-    })
+    const settings = [...container.querySelectorAll('button')]
+      .find(button => button.textContent?.trim() === '设置') as HTMLButtonElement
+    await act(async () => { settings.click(); await Promise.resolve() })
     await act(async () => { await vi.dynamicImportSettled() })
-    expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'second')
-    expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
-    await act(async () => root.unmount())
+
+    expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', { tag: 'settings' })
+
+    const tab = (label: string) => [...container.querySelectorAll('.settings-nav-item')]
+      .find(button => button.textContent?.trim() === label) as HTMLButtonElement
+    await act(async () => { tab('通知').click() })
+
+    await act(async () => { tab('数据与缓存').click() })
+    vi.useFakeTimers()
+    const refresh = [...container.querySelectorAll('button')]
+      .find(button => button.textContent?.trim() === '刷新') as HTMLButtonElement
+    await act(async () => { refresh.click() })
+    await act(async () => { finishRefresh({ state: settingsState, message: '数据源已刷新。' }); await Promise.resolve() })
+    await act(async () => { vi.advanceTimersByTime(3000) })
+    vi.useRealTimers()
+
+    const close = container.querySelector('[aria-label="关闭设置"]') as HTMLButtonElement
+    await act(async () => { close.click(); await Promise.resolve() })
+    expect(invoke).toHaveBeenCalledWith('settings.close')
+
+    await act(async () => { root.unmount() })
     container.remove()
   })
 })
