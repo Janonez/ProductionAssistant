@@ -2,12 +2,6 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { expect, it, vi } from 'vitest'
 
-const { notifyReady, invoke, delayed } = vi.hoisted(() => ({
-  notifyReady: vi.fn(), invoke: vi.fn().mockResolvedValue({}),
-  delayed: { resolve: undefined as undefined | ((value: { DailyWeldPage: () => React.ReactNode }) => void) },
-}))
-vi.mock('../bridge/index', () => ({ notifyReady, invoke }))
-vi.mock('../features/daily-weld/DailyWeldPage', () => new Promise<{ DailyWeldPage: () => React.ReactNode }>(resolve => { delayed.resolve = resolve }))
 vi.mock('../features/production-message/ProductionMessagePage', () => ({ default: () => <h1>生产消息入库</h1> }))
 vi.mock('motion/react', () => ({
   AnimatePresence: ({ children }: { children: unknown }) => children,
@@ -15,8 +9,42 @@ vi.mock('motion/react', () => ({
   useReducedMotion: () => true,
 }))
 
-it('opens production messages first and keeps navigation usable while another route loads', async () => {
+it('opens the default production message page and reports its first readiness', async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  const notifyReady = vi.fn()
+  const invoke = vi.fn().mockResolvedValue({})
+  const delayed = { resolve: undefined as undefined | ((value: { DailyWeldPage: () => React.ReactNode }) => void) }
+  vi.resetModules()
+  vi.doMock('../bridge/index', () => ({ notifyReady, invoke }))
+  vi.doMock('../features/daily-weld/DailyWeldPage', () => new Promise<{ DailyWeldPage: () => React.ReactNode }>(resolve => { delayed.resolve = resolve }))
+
+  history.replaceState({}, '', '?navigation=start')
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+  const { App } = await import('./App')
+  try {
+    await act(async () => root.render(<App />))
+    expect(container.querySelector('h1')?.textContent).toBe('生产消息入库')
+    expect(container.querySelector('.sidebar-nav button')?.getAttribute('aria-current')).toBe('page')
+    expect(container.querySelector('.sidebar-nav button')?.textContent).toContain('生产消息 Teable 入库')
+    expect(notifyReady).toHaveBeenLastCalledWith('production-message', 'start')
+    expect(delayed.resolve).toBeUndefined()
+  } finally {
+    await act(async () => root.unmount())
+    container.remove()
+  }
+})
+
+it('keeps the full host navigation sequence while a delayed route module loads', async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  const notifyReady = vi.fn()
+  const invoke = vi.fn().mockResolvedValue({})
+  const delayed = { resolve: undefined as undefined | ((value: { DailyWeldPage: () => React.ReactNode }) => void) }
+  vi.resetModules()
+  vi.doMock('../bridge/index', () => ({ notifyReady, invoke }))
+  vi.doMock('../features/daily-weld/DailyWeldPage', () => new Promise<{ DailyWeldPage: () => React.ReactNode }>(resolve => { delayed.resolve = resolve }))
+
   history.replaceState({}, '', '?navigation=start')
   const container = document.createElement('div')
   document.body.append(container)
