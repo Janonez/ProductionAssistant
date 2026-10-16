@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Copy, FileSpreadsheet, LoaderCircle, Settings2, X } from 'lucide-react'
 import { invoke } from '../../bridge/index'
+import { ROUTES } from '../../routes/routeTable'
 import { RouteSkeleton, SkeletonLines } from '../../components/layout/LoadingSkeleton'
 import DatePicker from '../../components/ui/DatePicker'
 import type { ReportCenterState, ReportRunProgress, ReportRunSummary } from '../../lib/types'
@@ -99,7 +100,7 @@ export function ReportCenterPage() {
     catch { setError('无法复制，请选中文件路径手动复制。') }
   }
 
-  if (busy === 'load' && !state) return <RouteSkeleton route="report-center" />
+  if (busy === 'load' && !state) return <RouteSkeleton route={ROUTES.reportCenter} />
   return <div className="page report-center-page">
     <header className="report-header"><h1>文件统计汇总</h1><div className="report-header-actions">
       <span className="report-status">{busy === 'load' ? '加载中' : state?.authenticated ? '已验证登录' : '未验证登录'}</span>

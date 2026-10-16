@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Database, LoaderCircle, Play, Rows3, Sigma } from 'lucide-react'
 import { invoke } from '../../bridge/index'
+import { ROUTES } from '../../routes/routeTable'
 import { RouteSkeleton, SkeletonLines } from '../../components/layout/LoadingSkeleton'
 import { ChoicePicker } from '../../components/ui/FormPickers'
 import DatePicker from '../../components/ui/DatePicker'
@@ -71,7 +72,7 @@ export function DatabaseViewerPage() {
   const needsCustomRange = rangeKind === 'week' || rangeKind === 'custom'
   const canQuery = sourceId && datasetId && (!supportsDateRanges || dateFieldId && (!needsCustomRange || startDate && endDate))
 
-  if (busy === 'load') return <RouteSkeleton route="database-viewer" />
+  if (busy === 'load') return <RouteSkeleton route={ROUTES.databaseViewer} />
   return <div className="page database-viewer-page">
     <header><div><h1>数据库查看</h1><p>按当前适配器提供的目录选择数据库并查看真实 View；目录层级不会由界面写死。</p></div><span className="database-provider"><Database />当前适配器：{provider || '读取中'}</span></header>
     <section className="database-query-panel">

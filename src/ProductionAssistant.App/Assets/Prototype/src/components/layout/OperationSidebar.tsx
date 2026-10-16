@@ -1,32 +1,8 @@
-type Module = {
-  category: string
-  name: string
-}
+import { routeFor, SIDEBAR_MODULES } from '../../routes/routeTable'
 
-export const modules: Module[] = [
-  { category: '数据同步', name: '生产消息 Teable 入库' },
-  { category: '数据同步', name: '每日焊接数据模拟' },
-  { category: '数据同步', name: '数据库查看' },
-  { category: '数据文件处理', name: '挂网计划 PDF 导出' },
-  { category: '数据文件处理', name: '生产会资料拆分' },
-  { category: '数据文件处理', name: '文件统计汇总' },
-  { category: '自动化', name: '自动化任务' },
-]
+export const modules = SIDEBAR_MODULES
 
 const categories = [...new Set(modules.map(module => module.category))]
-
-function routeFor(name: string) {
-  switch (name) {
-    case '挂网计划 PDF 导出': return 'plan-pdf'
-    case '生产会资料拆分': return 'production-meeting'
-    case '每日焊接数据模拟': return 'daily-weld'
-    case '生产消息 Teable 入库': return 'production-message'
-    case '数据库查看': return 'database-viewer'
-    case '文件统计汇总': return 'report-center'
-    case '自动化任务': return 'daily-report'
-    default: return 'plan-pdf'
-  }
-}
 
 export function OperationSidebar({ active, navigate, openSettings }: {
   active: string
