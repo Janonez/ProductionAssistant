@@ -1,7 +1,17 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+function listFiles(directory, prefix = '') {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const file = `${prefix}${entry.name}`
+    if (entry.isDirectory()) return listFiles(join(directory, entry.name), `${file}/`)
+    return entry.isFile() ? [file] : []
+  })
+}
 
 const source = new URL('../src/', import.meta.url)
+const files = listFiles(fileURLToPath(source)).sort()
 const excluded = new Set(['production-message.css', 'styles.css'])
 const allowed = new Set(['400', '500', '600', '700'])
 const errors = []
@@ -19,7 +29,7 @@ for (const [name, value] of Object.entries(expectedTokens)) {
   }
 }
 
-for (const file of readdirSync(source).filter(name => name.endsWith('.css') && !excluded.has(name))) {
+for (const file of files.filter(name => name.endsWith('.css') && !excluded.has(name))) {
   const css = readFileSync(new URL(file, source), 'utf8')
   for (const match of css.matchAll(/font-weight\s*:\s*(\d+)/g)) {
     if (!allowed.has(match[1])) {
@@ -30,7 +40,7 @@ for (const file of readdirSync(source).filter(name => name.endsWith('.css') && !
 }
 
 // New UI must use the shared font token rather than a page-specific system font.
-for (const file of readdirSync(source).filter(name => /\.(css|tsx)$/.test(name) && name !== 'production-message.css')) {
+for (const file of files.filter(name => /\.(css|tsx)$/.test(name) && name !== 'production-message.css')) {
   const text = readFileSync(new URL(file, source), 'utf8')
   for (const match of text.matchAll(/font-family\s*:\s*([^;}]+)/g)) {
     if (file !== 'typography.css' && !/^(?:inherit|var\(--font-ui\))$/.test(match[1].trim()))
