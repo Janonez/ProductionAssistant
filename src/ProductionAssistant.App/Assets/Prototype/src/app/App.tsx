@@ -3,6 +3,7 @@ import { RouteSkeleton } from '../components/layout/LoadingSkeleton'
 import { invoke } from '../bridge/index'
 import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
+import { LEGACY_NAVIGATION_PREFIX, ROUTES } from '../routes/routeTable'
 import { OperationSidebar } from '../components/layout/OperationSidebar'
 import ProductionMessagePage from '../features/production-message/ProductionMessagePage'
 const AutomationPage = lazy(() => import('../features/daily-report/AutomationPage').then(module => ({ default: module.AutomationPage })))
@@ -31,8 +32,8 @@ export function App() {
 
 
   const goNative = (tag: string) => invoke('app.navigateNative', { tag }).catch(() => undefined)
-  const active = route.startsWith('navigation:') ? route.slice('navigation:'.length) : route
-  const native = route.startsWith('navigation:')
+  const active = route.startsWith(LEGACY_NAVIGATION_PREFIX) ? route.slice(LEGACY_NAVIGATION_PREFIX.length) : route
+  const native = route.startsWith(LEGACY_NAVIGATION_PREFIX)
 
   useEffect(() => {
     document.body.classList.toggle('settings-over-native', native && settingsOpen)
@@ -53,13 +54,13 @@ export function App() {
       {native ? <><div className="native-content-slot" aria-hidden="true" /><RouteReady route={route} navigation={navigation} /></>
         : <div
               key={route}
-              className={route === 'production-message' || route === 'daily-weld' ? 'production-message-demo production-message-content' : 'app-shell'}
+              className={route === ROUTES.productionMessage || route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}
               data-page-route={route}
             >
               <LoadBoundary key={navigation}>
                 <Suspense fallback={<RouteSkeleton route={route} />}>
                   <RouteReady route={route} navigation={navigation} />
-                  {route === 'production-message' ? <ProductionMessagePage /> : route === 'daily-weld' ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === 'production-meeting' ? <ProductionMeetingPage /> : route === 'plan-pdf' ? <PlanPdfPage /> : route === 'database-viewer' ? <DatabaseViewerPage /> : route === 'daily-report' ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+                  {route === ROUTES.productionMessage ? <ProductionMessagePage /> : route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : route === ROUTES.planPdf ? <PlanPdfPage /> : route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : route === ROUTES.dailyReport ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
 
                 </Suspense>
               </LoadBoundary>
