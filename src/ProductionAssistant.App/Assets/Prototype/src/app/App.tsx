@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { RouteSkeleton } from '../components/layout/LoadingSkeleton'
 import { invoke } from '../bridge/index'
+import { navigate } from '../routes/navigation'
 import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
 import { LEGACY_NAVIGATION_PREFIX, ROUTES } from '../routes/routeTable'
@@ -31,7 +32,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
 
-  const goNative = (tag: string) => invoke('app.navigateNative', { tag }).catch(() => undefined)
+  const goNative = (tag: string) => navigate(tag)
   const active = route.startsWith(LEGACY_NAVIGATION_PREFIX) ? route.slice(LEGACY_NAVIGATION_PREFIX.length) : route
   const native = route.startsWith(LEGACY_NAVIGATION_PREFIX)
 
