@@ -1,10 +1,28 @@
 # 导航契约设计
 
-日期：2026-10-15。状态：设计待评审，尚未实施。
+日期：2026-10-15。状态：设计已评审；兼容段已实施（#43–#49）；切换段与删除段未实施。更新于 2026-10-17。
 
-源码基线：`285476f`。本轮在用户预建的 `codex/nav-contract-design` 分支抽查，HEAD 与基线一致；开始时工作区干净。本文路径均相对仓库根目录，行号对应该基线，不是后续重构后的永久定位。现有文档的本地行号另列于第 8 节。
+源码基线：`285476f`。本轮在用户预建的 `codex/nav-contract-design` 分支抽查，HEAD 与基线一致；开始时工作区干净。本文路径均相对仓库根目录，行号对应该基线，不是后续重构后的永久定位。现有文档的本地行号另列于第 8 节。兼容段完成后 main 为 `7b4ad16`；第 3 节事实依据与行号仍对应设计基线 `285476f`，其中新增的兼容段状态说明另行标注。兼容段涉及的前端文件已变化，切换段开工前必须重新核对。
 
 本文仅记录设计与后续改动边界。本轮只新增本文档，不修改现有文档、代码、测试、依赖或构建产物，不提交或发布。下文“必须”指后续实现的验收约束，不表示已经获得执行后续 PR 的授权。
+
+## 实施进度（截至 7b4ad16）
+
+下表前端文件路径均相对 `src/ProductionAssistant.App/Assets/Prototype/src`；现状按 `7b4ad16` 核对，不替换下文设计基线的行号引用。
+
+| 阶段/项目 | 状态 | 对应 PR 与文件/现状 |
+|---|---|---|
+| 兼容段：路由表集中 | 已完成 | #43；`routes/routeTable.ts` 集中七标签、默认值和侧栏元数据，`routes/index.ts` 使用集中规则 |
+| 兼容段：导航入口集中 | 已完成 | #44；`routes/navigation.ts` 提供统一入口，`app/App.tsx` 委托该入口，仍调用 app.navigateNative |
+| 兼容段：测试契约拆分与补测 | 已完成 | #45–#48；`app/App.navigation.test.tsx`、`routes/hostRoute.contract.test.ts`、`components/layout/OperationSidebar.test.tsx`、`bridge/webview.test.ts`、`bridge/index.test.ts`、`bridge/mock.test.tsx`、`app/App.database-preview.business.test.tsx` 分担导航、解析、侧栏、transport、mock 与集成契约；#48 补测旧前缀宿主契约 |
+| 兼容段：旧前缀归一 | 已完成 | #49；`routes/index.ts` 返回 `{ route, navigation, displayRoute }`，`app/App.tsx` 保留原始 route/navigation 握手并按 displayRoute 展示；已移除前端原生占位分支与 settings-over-native 逻辑；仅有自动化测试验证，真实桌面未验证 |
+| 切换段 | 未开始 | `routes/navigation.ts` 与 C# bridge 仍有 app.navigateNative；`src/ProductionAssistant.App/MainWindow.xaml.cs` 仍有 `_currentTag`，`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs` 仍有 `_navigationId`、IsCurrentNavigation 校验与 15 秒 ready 等待 |
+| 删除段 | 未开始 | #49 已先移除前端占位逻辑；CSS 残留及 `app/App.tsx` 的 settings.close 调用仍在；`src/ProductionAssistant.App/MainWindow.xaml.cs` 的层级切换、`src/ProductionAssistant.App/PrototypeBridge.Settings.cs` 的设置层级操作、C# settings.close 操作，以及 `src/ProductionAssistant.App/Pages/ProductionMessagePage.xaml.cs` 的 AutoMap/MappingAliases 仍在 |
+
+登记项：
+
+- CSS 死样式清理另开小 PR：`settings-modal.css` 第 1–7 行是完整的旧原生覆盖/透明背景规则（第 1–5 行为选择器，第 6 行为透明背景声明，第 7 行闭合）；第 9 行开始的 `.settings-overlay` 规则仍在使用。`operation-sidebar.css:72,76,83` 确为旧选择器，其中第 76 行仅移除旧选择器，保留第 77–81 行的共享规则；`app/App.test.tsx:437` 仍断言 native-content-slot 不存在。
+- `bridge/mock.test.tsx` 尚未改名，登记后续改名为 `bridge/mock.test.ts`。
 
 ## 1. 目标与非目标
 
@@ -88,7 +106,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 ### 3.4 设置、来源和独立协议
 
 - settings.open 当前既返回设置数据，也抬高 ShellFrame；settings.close 仅降低层级。依据：`src/ProductionAssistant.App/PrototypeBridge.Settings.cs:12-21`；`src/ProductionAssistant.App/MainWindow.xaml.cs:68-69`。
-- 前端仅在原生占位且设置打开时增加 settings-over-native；关闭时隐藏弹窗、派发 production-settings-updated，再通知 settings.close。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:34-45,48-53`；透明背景见 `src/ProductionAssistant.App/Assets/Prototype/src/settings-modal.css:1-7`。
+- 前端仅在原生占位且设置打开时增加 settings-over-native；关闭时隐藏弹窗、派发 production-settings-updated，再通知 settings.close。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:34-45,48-53`；透明背景见 `src/ProductionAssistant.App/Assets/Prototype/src/settings-modal.css:1-7`。以上为 `285476f` 基线事实；兼容段状态：前端原生占位分支与 settings-over-native 逻辑已在 #49 删除，样式残留待删除段清理。
 - settings.open 数据读取、Escape、焦点恢复和连接刷新后的字段缓存失效属于设置行为，不依赖原生内容覆盖。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/SettingsModal.tsx:51-68,77-85`。
 - 来源检查限定 HTTPS、默认端口、指定虚拟主机及 `/index.html`；消息和顶层导航均使用检查。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87`；`src/ProductionAssistant.App/PrototypeBridge.cs:33`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:80-84`。
 - ReportEditor 有独立 WebView2 消息协议，不经 Prototype 的 bridge/index.ts。依据：`src/ProductionAssistant.App/Assets/ReportEditor/editor-source.js:5,67,156,170`。
@@ -113,7 +131,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 | 文档路径 | 过渡期保持 `/index.html` 和 query 路由，继续满足当前受信路径约束；不引入 pathname 依赖 |
 | 业务参数 | 使用 `route`；七个合法值是 `production-message`、`daily-weld`、`database-viewer`、`plan-pdf`、`production-meeting`、`report-center`、`daily-report`；区分大小写 |
 | 缺省/未知值 | 归一为 `production-message`；不产生原生空占位 |
-| 旧前缀 | `navigation:` 后为已知标签时映射到该 React 路由，否则回默认页；目录名称不参与解析 |
+| 旧前缀 | `navigation:` 后为已知标签时映射到该 React 路由，否则回默认页；目录名称不参与解析。兼容段 #49 已由 resolveHostRoute 返回 `{ route, navigation, displayRoute }`，保留原始宿主握手字段，另用 displayRoute 展示归一结果；字段用途及切换后的处理见下文 |
 | 写入与历史 | 模块切换继续使用 replaceState，不新增返回/前进历史；写入和前端订阅更新由统一入口协调，不能只改地址栏而不更新页面。前端切页写 URL 时只更新 route，必须保留 query 中的其他参数，包括承载文档加载代次的 navigation 字段，不得重建整个 query |
 | 重载/重试 | 路由变化时写回 URL；切换段后 C# 不保存业务路由，宿主重试必须基于“重载当前文档”，不得用宿主自存的旧值重新设置 Source。完整重载和宿主重试从当前 URL 恢复模块；缺省入口仍由前端选择默认模块。WebView2 的 URL 保留行为未确认，见 5.2、9.2 |
 | navigation 字段 | 兼容段保留旧握手意义；切换后不决定业务页。若承载文档加载代次，仅属于装载元数据，业务切页不修改其代次 |
@@ -127,7 +145,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 
 兼容段的“行为零变化”指正常七入口的导航模式、历史和业务动作不变；旧前缀由空占位变为 React 路由是已定的兼容修正，必须单独验收，不能声称所有旧输入的显示均不变。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:34-35,52-53`。
 
-旧前缀归一还必须区分“展示用业务路由”和“旧宿主要求回传的握手 route”：兼容段不得单方面把后者改成归一结果，也不得放松 C# 校验。若旧地址带宿主令牌，必须证明旧 expected route/令牌仍能匹配；只有切换段才取消宿主的业务 route 比较。该约束来自 `src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`，不是给前端增加永久双路由。实际外部旧地址来源未确认。
+旧前缀归一还必须区分“展示用业务路由”和“旧宿主要求回传的握手 route”：兼容段不得单方面把后者改成归一结果，也不得放松 C# 校验。若旧地址带宿主令牌，必须证明旧 expected route/令牌仍能匹配；只有切换段才取消宿主的业务 route 比较。该约束来自 `src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`，不是给前端增加永久双路由。实际外部旧地址来源未确认。兼容段 #49 的实际实现：`src/ProductionAssistant.App/Assets/Prototype/src/routes/index.ts` 中 resolveHostRoute 返回 `{ route, navigation, displayRoute }`；route 保持宿主握手原始值，navigation 保留宿主令牌，`app/App.tsx` 的容器 key 与 RouteReady 读取 route，RouteReady 同时回传 navigation；展示、骨架和侧栏高亮读取 displayRoute。切换段取消宿主 route 比较后，再评估 route 字段的去留。
 
 ### 4.3 ready 的两种语义
 
@@ -170,7 +188,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 
 ### 4.5 设置弹窗、原生能力与发布边界
 
-- 原生内容分支退役时，一起移除 native-content-slot、settings-over-native、透明背景、ShellFrame 层级切换及 settings.close 调用/操作；删除段不删除整个设置样式文件。
+- 前端侧 native-content-slot 渲染与 settings-over-native 切换已移除；删除段剩余项为 CSS 死样式、App.tsx 的 settings.close 调用、C# 侧层级切换与 settings.close 操作、透明背景；仍然不删除整个设置样式文件。
 - settings.open 的数据返回能力保留，去掉层级副作用；前端遮罩、Escape、焦点恢复、production-settings-updated 和字段缓存失效保持。现状依据见 3.4。
 - WinUI 过渡宿主仍需维护标题栏、环境标记与当前尺寸；业务 XAML 退役不等于这些窗口能力已经由 Electron 实现。依据：`src/ProductionAssistant.App/MainWindow.xaml:7-20`；`src/ProductionAssistant.App/MainWindow.xaml.cs:17-22`。
 - operation 白名单、消息来源检查、请求/响应/进度、业务结果 ID 与文件选择 Task.Yield 保护保留；切换段只撤掉导航权，不能顺带放开文件系统、凭据或任意 operation。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:5-87`；`src/ProductionAssistant.App/PrototypeBridge.cs:33,48-70`。
@@ -179,6 +197,8 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 ## 5. 三段迁移与回滚
 
 ### 5.1 兼容段：集中入口，保持旧宿主驱动
+
+状态：已完成（#43 路由表，#44 导航入口，#45–#48 测试契约，#49 旧前缀归一）；自动化测试通过，真实桌面验收见 9.2。
 
 建议按单一目的拆成独立 PR：路由表集中、导航入口集中、测试契约拆分、旧前缀归一。每个 PR 只承接其中一项；归一所需的旧握手适配属于同一兼容目的。
 
@@ -286,7 +306,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 ### 7.3 删除段
 
 - 把原生生产消息页面整体删掉，破坏仍使用的 AutoMap/MappingAliases。依据：`src/ProductionAssistant.App/PrototypeBridge.cs:366`；`src/ProductionAssistant.App/Pages/ProductionMessagePage.xaml.cs:11-29,470-492`。
-- 原生 Frame 已删，前端还渲染 native-content-slot；或 settings.close 已删，设置数据读取被一并误删。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:45,52-53`；`src/ProductionAssistant.App/PrototypeBridge.Settings.cs:12-21`。
+- 删除 C# 侧 Frame 或 settings.close 时误删设置数据读取；清理 CSS 时误删整个设置样式文件。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:45,52-53`；`src/ProductionAssistant.App/PrototypeBridge.Settings.cs:12-21`。
 - 删除页面时顺带删文件选择 Task.Yield、业务结果 ID 或操作级锁，可能引入选择器重入、无效结果访问和并发问题。依据：`src/ProductionAssistant.App/PrototypeBridge.cs:54-56`；`PrototypeBridge.PlanPdf.cs:18-19,37-38,75`、`PrototypeBridge.Meeting.cs:15-16,32-37`（同一 App 目录）。
 - 把 PrototypePage 当旧业务页删除，提前移除仍在工作的 WinUI 装载与错误层。依据：`src/ProductionAssistant.App/MainWindow.xaml.cs:37`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml:7-12,90-99`。
 
@@ -324,7 +344,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 ### 9.2 未确认项
 
 1. 独立协议文档的实际路径与维护归属；当前被跟踪文件中未发现独立 PrototypeBridge 协议文档，不能捏造路径或把协议代码当作文档。已有本地相关说明及跟踪状态见第 8 节。
-2. 仓库外旧 navigation:* 地址的真实来源、是否携带旧宿主令牌；不能以测试构造地址推定实际外部兼容已完成。测试依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.test.tsx:349,457,492,549`。
+2. 仓库外旧 navigation:* 地址的真实来源、是否携带旧宿主令牌；不能以测试构造地址推定实际外部兼容已完成。测试依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.test.tsx:349,457,492,549`。以上仍未确认；#49 仅有自动化测试，真实桌面未验证，不得视为通过。
 3. Electron 文档来源、能力 transport、localStorage 迁移及后端业务会话是否长驻；不能假设当前 WebView 通道直接可用。依据：`src/ProductionAssistant.App/Assets/Prototype/src/bridge/index.ts:3-14`；`bridge/webview.ts:31-41`（同一 src 目录）。
 4. 文档加载 ID 的最终字段命名、启动计时边界和前端同路由重试的具体接口；语义已由 4.2-4.3 固定，实现形状在对应 PR 评审，不重新开放七项决策。未确认的设计张力：4.3 与 5.2 同时要求“宿主重试基于重载当前文档”和“重试更换文档加载代次”；若加载代次通过 URL 的 navigation 字段承载，直接重载当前文档会带回旧代次，两项要求无法同时满足。切换段实现设计需要在候选方案中二选一或另定方案，例如：代次不放在 URL、由宿主通过其他通道传递；或将重试改为受控的整文档导航，并明确当前 route 与其他参数的保留及加载代次更新规则。这里只记录张力和待决事项，不预选方案，不重新开放七条已定决策。
 5. 实际桌面加载、超时/晚到 ready、系统对话框和关窗期间业务结果的运行表现；本轮只读抽查，没有执行构建、测试或桌面验收，不能标记通过。
