@@ -338,7 +338,19 @@ describe('legacy navigation prefix host contract', () => {
   })
 
   async function mountAppAt(search: string) {
-    const invoke = vi.fn().mockResolvedValue({})
+    const invoke = vi.fn().mockImplementation((operation: string) => {
+      if (operation === 'database.getState') return Promise.resolve({
+        provider: '', usesBusinessSections: false, businessSections: [], sources: [],
+      })
+      if (operation === 'production.getBindings') return Promise.resolve({
+        configured: false,
+        cutting: { bound: false, name: '', path: '' },
+        towerDaily: { bound: false, name: '', path: '' },
+        selected: { cutting: '', towerDaily: '' },
+        usesBusinessSections: false, businessSections: [], sources: [],
+      })
+      return Promise.resolve({})
+    })
     const notifyReady = vi.fn()
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
     vi.doMock('motion/react', () => ({
@@ -357,6 +369,7 @@ describe('legacy navigation prefix host contract', () => {
     mounted = { container, root }
     const { App } = await import('./App')
     await act(async () => { root.render(<App />) })
+    await act(async () => { await vi.dynamicImportSettled() })
     return { container, root, invoke, notifyReady }
   }
 
@@ -396,5 +409,68 @@ describe('legacy navigation prefix host contract', () => {
 
     const navigationCalls = invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')
     expect(navigationCalls).toEqual([['app.navigateNative', { tag }]])
+  })
+
+  it.each([
+    ['production-message', '生产消息 Teable 入库'],
+    ['daily-weld', '每日焊接数据模拟'],
+    ['database-viewer', '数据库查看'],
+    ['plan-pdf', '挂网计划 PDF 导出'],
+    ['production-meeting', '生产会资料拆分'],
+    ['report-center', '文件统计汇总'],
+    ['daily-report', '自动化任务'],
+  ] as const)('[legacy-prefix:display] renders the known legacy suffix %s', async (tag, label) => {
+    const route = `navigation:${tag}`
+    const navigation = 'first'
+    const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
+
+    expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe(tag)
+    expect(sidebarButton(container, label).getAttribute('aria-current')).toBe('page')
+    expect(notifyReady.mock.calls).toEqual([[route, navigation]])
+  })
+
+  it.each([
+    'navigation:unknown', 'navigation:', 'navigation: ', 'navigation:PRODUCTION-MESSAGE',
+  ])('[legacy-prefix:display] renders the default page for %s', async route => {
+    const navigation = 'first'
+    const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
+
+    expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
+    expect(sidebarButton(container, '生产消息 Teable 入库').getAttribute('aria-current')).toBe('page')
+    expect(notifyReady.mock.calls).toEqual([[route, navigation]])
+  })
+
+  it.each([
+    ['plain to legacy', 'production-message', 'navigation:plan-pdf', 'plan-pdf', '挂网计划 PDF 导出'],
+    ['legacy to plain', 'navigation:plan-pdf', 'production-message', 'production-message', '生产消息 Teable 入库'],
+  ] as const)('[legacy-prefix:display] updates on popstate from %s without sending another ready for the same token', async (_direction, firstRoute, nextRoute, displayRoute, label) => {
+    const navigation = 'first'
+    const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
+    const postMessage = vi.fn()
+    Object.assign(window, { chrome: { webview: { postMessage, addEventListener: () => undefined } } })
+
+    try {
+      const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(firstRoute)}&navigation=${encodeURIComponent(navigation)}`)
+      const { notifyReady: sendReady } = await import('../bridge/webview')
+      // Forward the captured initial ready and later updates through the real token deduplication.
+      for (const [route, token] of notifyReady.mock.calls) sendReady(route, token)
+      notifyReady.mockImplementation(sendReady)
+      expect(notifyReady.mock.calls).toEqual([[firstRoute, navigation]])
+      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation })]])
+
+      await act(async () => {
+        history.replaceState({}, '', `?route=${encodeURIComponent(nextRoute)}&navigation=${encodeURIComponent(navigation)}`)
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      })
+      await act(async () => { await vi.dynamicImportSettled() })
+
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe(displayRoute)
+      expect(sidebarButton(container, label).getAttribute('aria-current')).toBe('page')
+      expect(notifyReady.mock.calls).toEqual([[firstRoute, navigation], [nextRoute, navigation]])
+      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation })]])
+    } finally {
+      if (previousChrome) Object.defineProperty(window, 'chrome', previousChrome)
+      else Reflect.deleteProperty(window, 'chrome')
+    }
   })
 })
