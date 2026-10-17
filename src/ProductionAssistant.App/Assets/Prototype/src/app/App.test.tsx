@@ -568,6 +568,57 @@ describe('shared operation sidebar', () => {
     await act(async () => { root.unmount() })
     container.remove()
   })
+
+  it('keeps the legacy settings host contract across two open-close cycles', async () => {
+    const invoke = vi.fn()
+    const notifyReady = vi.fn()
+    vi.resetModules()
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+
+    const order: string[] = []
+    invoke.mockImplementation((operation: string) => {
+      if (operation === 'settings.close') order.push('settings.close')
+      return Promise.resolve(operation === 'settings.open' ? settingsState : {})
+    })
+    const route = 'navigation:production-message'
+    const navigation = 'first'
+    const search = `?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`
+    history.replaceState({}, '', search)
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    const updated = () => { order.push('production-settings-updated') }
+    window.addEventListener('production-settings-updated', updated)
+
+    try {
+      const { App } = await import('./App')
+      await act(async () => { root.render(<App />) })
+      const settings = [...container.querySelectorAll<HTMLButtonElement>('.sidebar button')]
+        .find(button => button.textContent?.trim() === '设置')!
+
+      for (let cycle = 0; cycle < 2; cycle++) {
+        await act(async () => { settings.click() })
+        expect(window.location.search).toBe(search)
+        expect(notifyReady.mock.calls.map(([readyRoute]) => readyRoute)).toEqual([route])
+        await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
+      }
+
+      const settingsCalls = invoke.mock.calls.filter(([operation]) => operation === 'settings.open' || operation === 'settings.close')
+      expect(settingsCalls).toEqual([
+        ['settings.open'], ['settings.close'], ['settings.open'], ['settings.close'],
+      ])
+      expect(order).toEqual([
+        'production-settings-updated', 'settings.close',
+        'production-settings-updated', 'settings.close',
+      ])
+      expect(invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')).toEqual([])
+    } finally {
+      window.removeEventListener('production-settings-updated', updated)
+      await act(async () => {
+        try { root.unmount() } finally { container.remove() }
+      })
+    }
+  })
 })
 
 describe('automation task creation', () => {
