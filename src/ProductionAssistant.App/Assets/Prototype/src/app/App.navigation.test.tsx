@@ -315,3 +315,86 @@ describe('App host navigation contracts', () => {
     }
   })
 })
+
+describe('legacy navigation prefix host contract', () => {
+  let mounted: { container: HTMLDivElement; root: ReturnType<typeof createRoot> } | undefined
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    vi.resetModules()
+  })
+
+  afterEach(async () => {
+    await act(async () => {
+      try {
+        mounted?.root.unmount()
+      } finally {
+        mounted?.container.remove()
+        mounted = undefined
+        vi.doUnmock('../bridge/index')
+        vi.doUnmock('motion/react')
+      }
+    })
+  })
+
+  async function mountAppAt(search: string) {
+    const invoke = vi.fn().mockResolvedValue({})
+    const notifyReady = vi.fn()
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+    vi.doMock('motion/react', () => ({
+      AnimatePresence: ({ children }: { children: unknown }) => children,
+      motion: {
+        div: ({ children, initial: _initial, animate: _animate, exit: _exit, transition: _transition, ...props }: React.HTMLAttributes<HTMLDivElement> & Record<string, unknown>) => <div {...props}>{children}</div>,
+        section: ({ children, initial: _initial, animate: _animate, exit: _exit, transition: _transition, ...props }: React.HTMLAttributes<HTMLElement> & Record<string, unknown>) => <section {...props}>{children}</section>,
+        button: 'button',
+      },
+      useReducedMotion: () => false,
+    }))
+    history.replaceState({}, '', search)
+    const container = document.createElement('div')
+    document.body.append(container)
+    const root = createRoot(container)
+    mounted = { container, root }
+    const { App } = await import('./App')
+    await act(async () => { root.render(<App />) })
+    return { container, root, invoke, notifyReady }
+  }
+
+  const sidebarButton = (container: HTMLDivElement, label: string) => [...container.querySelectorAll<HTMLButtonElement>('.sidebar button')]
+    .find(button => button.textContent?.trim() === label)!
+
+  it.each([
+    ['navigation:production-message', ' first '],
+    ['navigation:daily-weld', 'first'],
+    ['navigation:database-viewer', 'first'],
+    ['navigation:plan-pdf', 'first'],
+    ['navigation:production-meeting', 'first'],
+    ['navigation:report-center', 'first'],
+    ['navigation:daily-report', 'first'],
+    ['navigation:unknown', 'first'],
+    ['navigation:', 'first'],
+    ['navigation: ', 'first'],
+    ['navigation:PRODUCTION-MESSAGE', 'first'],
+  ] as const)('preserves the host ready route and token for legacy input %s', async (route, navigation) => {
+    const { notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
+
+    expect(notifyReady.mock.calls).toEqual([[route, navigation]])
+  })
+
+  it.each([
+    ['production-message', '生产消息 Teable 入库'],
+    ['daily-weld', '每日焊接数据模拟'],
+    ['database-viewer', '数据库查看'],
+    ['plan-pdf', '挂网计划 PDF 导出'],
+    ['production-meeting', '生产会资料拆分'],
+    ['report-center', '文件统计汇总'],
+    ['daily-report', '自动化任务'],
+  ] as const)('sends exactly one unchanged host request for sidebar tag %s from a legacy URL', async (tag, label) => {
+    const { container, invoke } = await mountAppAt(`?route=${encodeURIComponent('navigation:production-message')}&navigation=first`)
+
+    await act(async () => { sidebarButton(container, label).click() })
+
+    const navigationCalls = invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')
+    expect(navigationCalls).toEqual([['app.navigateNative', { tag }]])
+  })
+})
