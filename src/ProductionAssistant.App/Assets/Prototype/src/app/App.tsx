@@ -1,10 +1,10 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useCallback, useState, type ReactNode } from 'react'
 import { RouteSkeleton } from '../components/layout/LoadingSkeleton'
 import { invoke } from '../bridge/index'
 import { navigate } from '../routes/navigation'
 import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
-import { LEGACY_NAVIGATION_PREFIX, ROUTES } from '../routes/routeTable'
+import { ROUTES } from '../routes/routeTable'
 import { OperationSidebar } from '../components/layout/OperationSidebar'
 import ProductionMessagePage from '../features/production-message/ProductionMessagePage'
 const AutomationPage = lazy(() => import('../features/daily-report/AutomationPage').then(module => ({ default: module.AutomationPage })))
@@ -28,18 +28,11 @@ class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void
 
 
 export function App() {
-  const { route, navigation } = useHostRoute()
+  const { route, navigation, displayRoute } = useHostRoute()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
 
   const goNative = (tag: string) => navigate(tag)
-  const active = route.startsWith(LEGACY_NAVIGATION_PREFIX) ? route.slice(LEGACY_NAVIGATION_PREFIX.length) : route
-  const native = route.startsWith(LEGACY_NAVIGATION_PREFIX)
-
-  useEffect(() => {
-    document.body.classList.toggle('settings-over-native', native && settingsOpen)
-    return () => document.body.classList.remove('settings-over-native')
-  }, [native, settingsOpen])
 
   const closeSettings = useCallback(() => {
     setSettingsOpen(false)
@@ -47,25 +40,24 @@ export function App() {
     invoke('settings.close').catch(() => undefined)
   }, [])
 
-  return <div className={`desktop-shell ${native && settingsOpen ? 'settings-over-native' : ''}`}>
+  return <div className="desktop-shell">
     <div className="production-message-demo desktop-shell-navigation">
-      <OperationSidebar active={active} navigate={goNative} openSettings={() => setSettingsOpen(true)} />
+      <OperationSidebar active={displayRoute} navigate={goNative} openSettings={() => setSettingsOpen(true)} />
     </div>
-    <div className={`desktop-shell-content ${native ? 'desktop-shell-content-native' : ''}`}>
-      {native ? <><div className="native-content-slot" aria-hidden="true" /><RouteReady route={route} navigation={navigation} /></>
-        : <div
-              key={route}
-              className={route === ROUTES.productionMessage || route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}
-              data-page-route={route}
-            >
-              <LoadBoundary key={navigation}>
-                <Suspense fallback={<RouteSkeleton route={route} />}>
-                  <RouteReady route={route} navigation={navigation} />
-                  {route === ROUTES.productionMessage ? <ProductionMessagePage /> : route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : route === ROUTES.planPdf ? <PlanPdfPage /> : route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : route === ROUTES.dailyReport ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+    <div className="desktop-shell-content">
+      <div
+        key={route}
+        className={displayRoute === ROUTES.productionMessage || displayRoute === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}
+        data-page-route={displayRoute}
+      >
+        <LoadBoundary key={navigation}>
+          <Suspense fallback={<RouteSkeleton route={displayRoute} />}>
+            <RouteReady route={route} navigation={navigation} />
+            {displayRoute === ROUTES.productionMessage ? <ProductionMessagePage /> : displayRoute === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{displayRoute === ROUTES.productionMeeting ? <ProductionMeetingPage /> : displayRoute === ROUTES.planPdf ? <PlanPdfPage /> : displayRoute === ROUTES.databaseViewer ? <DatabaseViewerPage /> : displayRoute === ROUTES.dailyReport ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
 
-                </Suspense>
-              </LoadBoundary>
-            </div>}
+          </Suspense>
+        </LoadBoundary>
+      </div>
     </div>
     {settingsOpen && <LoadBoundary onClose={closeSettings}><SettingsModal open onClose={closeSettings} /></LoadBoundary>}
   </div>
