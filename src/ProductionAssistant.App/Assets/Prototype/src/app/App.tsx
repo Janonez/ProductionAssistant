@@ -1,7 +1,7 @@
 import { Component, lazy, Suspense, useCallback, useState, type ReactNode } from 'react'
 import { RouteSkeleton } from '../components/layout/LoadingSkeleton'
 import { invoke } from '../bridge/index'
-import { navigate } from '../routes/navigation'
+import { navigateInDocument } from '../routes/navigation'
 import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
 import { ROUTES } from '../routes/routeTable'
@@ -32,7 +32,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
 
-  const goNative = (tag: string) => navigate(tag)
+  const goTo = (tag: string) => { navigateInDocument(tag) }
 
   const closeSettings = useCallback(() => {
     setSettingsOpen(false)
@@ -42,7 +42,7 @@ export function App() {
 
   return <div className="desktop-shell">
     <div className="production-message-demo desktop-shell-navigation">
-      <OperationSidebar active={displayRoute} navigate={goNative} openSettings={() => setSettingsOpen(true)} />
+      <OperationSidebar active={displayRoute} navigate={goTo} openSettings={() => setSettingsOpen(true)} />
     </div>
     <div className="desktop-shell-content">
       <div
@@ -50,7 +50,7 @@ export function App() {
         className={displayRoute === ROUTES.productionMessage || displayRoute === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}
         data-page-route={displayRoute}
       >
-        <LoadBoundary key={navigation}>
+        <LoadBoundary>
           <Suspense fallback={<RouteSkeleton route={displayRoute} />}>
             <RouteReady route={route} navigation={navigation} />
             {displayRoute === ROUTES.productionMessage ? <ProductionMessagePage /> : displayRoute === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{displayRoute === ROUTES.productionMeeting ? <ProductionMeetingPage /> : displayRoute === ROUTES.planPdf ? <PlanPdfPage /> : displayRoute === ROUTES.databaseViewer ? <DatabaseViewerPage /> : displayRoute === ROUTES.dailyReport ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
