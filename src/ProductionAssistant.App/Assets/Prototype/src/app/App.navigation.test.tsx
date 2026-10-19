@@ -445,20 +445,53 @@ describe('legacy navigation prefix host contract', () => {
   })
 
   it.each([
-    ['production-message', '生产消息 Teable 入库'],
     ['daily-weld', '每日焊接数据模拟'],
     ['database-viewer', '数据库查看'],
     ['plan-pdf', '挂网计划 PDF 导出'],
     ['production-meeting', '生产会资料拆分'],
     ['report-center', '文件统计汇总'],
     ['daily-report', '自动化任务'],
-  ] as const)('sends exactly one unchanged host request for sidebar tag %s from a legacy URL', async (tag, label) => {
+  ] as const)('[nav-switch] switches to sidebar tag %s from a legacy URL without a host request', async (tag, label) => {
+    // 旧契约要求宿主导航；文档内切页只更新 route 并保留 navigation。
     const { container, invoke } = await mountAppAt(`?route=${encodeURIComponent('navigation:production-message')}&navigation=first`)
+    const replaceState = vi.spyOn(window.history, 'replaceState')
 
-    await act(async () => { sidebarButton(container, label).click() })
+    try {
+      await act(async () => { sidebarButton(container, label).click() })
+      await act(async () => { await vi.dynamicImportSettled() })
 
-    const navigationCalls = invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')
-    expect(navigationCalls).toEqual([['app.navigateNative', { tag }]])
+      const params = new URLSearchParams(window.location.search)
+      expect(replaceState).toHaveBeenCalledTimes(1)
+      expect(params.get('route')).toBe(tag)
+      expect(params.get('navigation')).toBe('first')
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe(tag)
+      expect(sidebarButton(container, label).getAttribute('aria-current')).toBe('page')
+      const navigationCalls = invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')
+      expect(navigationCalls).toEqual([])
+    } finally {
+      replaceState.mockRestore()
+    }
+  })
+
+  it('[nav-switch] ignores the sidebar tag already displayed from a legacy URL', async () => {
+    // 旧契约会请求宿主；文档内导航对当前显示页保持 URL 不变。
+    const initialSearch = `?route=${encodeURIComponent('navigation:production-message')}&navigation=first`
+    const { container, invoke } = await mountAppAt(initialSearch)
+    const replaceState = vi.spyOn(window.history, 'replaceState')
+
+    try {
+      await act(async () => { sidebarButton(container, '生产消息 Teable 入库').click() })
+      await act(async () => { await vi.dynamicImportSettled() })
+
+      expect(replaceState).not.toHaveBeenCalled()
+      expect(window.location.search).toBe(initialSearch)
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
+      expect(sidebarButton(container, '生产消息 Teable 入库').getAttribute('aria-current')).toBe('page')
+      const navigationCalls = invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')
+      expect(navigationCalls).toEqual([])
+    } finally {
+      replaceState.mockRestore()
+    }
   })
 
   it.each([
