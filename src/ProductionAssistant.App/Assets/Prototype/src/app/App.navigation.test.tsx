@@ -2,7 +2,6 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
-import type { Draft } from '../lib/types'
 
 const { invoke, notifyReady } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn() }))
 vi.mock('../bridge/index', () => ({ invoke, notifyReady }))
@@ -15,6 +14,24 @@ vi.mock('motion/react', () => ({
   },
   useReducedMotion: () => false,
 }))
+
+function defaultOperationResult(operation: string): Promise<unknown> {
+  if (operation === 'production.getBindings') return Promise.resolve({
+    configured: true,
+    cutting: { bound: false, name: '', path: '' },
+    towerDaily: { bound: false, name: '', path: '' },
+    towerMonthly: { bound: false, name: '', path: '' },
+    towerYearly: { bound: false, name: '', path: '' },
+    sources: [],
+    selected: { towerDaily: 'daily', towerMonthly: 'monthly', towerYearly: 'yearly' },
+    usesBusinessSections: false, businessSections: [],
+  })
+  if (operation === 'automation.list') return Promise.resolve({ tasks: [] })
+  if (operation === 'database.getState') return Promise.resolve({
+    provider: '', usesBusinessSections: false, businessSections: [], sources: [],
+  })
+  return Promise.resolve({})
+}
 
 describe('App host navigation compatibility', () => {
   let container: HTMLDivElement
@@ -51,50 +68,66 @@ describe('App host navigation compatibility', () => {
     container.remove()
   })
 
-  it('immediately sends a request for every consecutive click', async () => {
+  it('[nav-switch] switches once for consecutive clicks to the same module', async () => {
+    // Every click used to request host navigation; document navigation now ignores repeated clicks on the displayed route.
     const button = sidebarButton('自动化任务')
+    const replaceState = vi.spyOn(window.history, 'replaceState')
 
-    await act(async () => {
-      button.click()
-      expect(navigationCalls()).toHaveLength(1)
-      button.click()
-      expect(navigationCalls()).toHaveLength(2)
-      button.click()
-      expect(navigationCalls()).toEqual([
-        ['app.navigateNative', { tag: 'daily-report' }],
-        ['app.navigateNative', { tag: 'daily-report' }],
-        ['app.navigateNative', { tag: 'daily-report' }],
-      ])
-    })
-    expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
-    expect(window.location.search).toBe('?route=production-message&navigation=initial')
+    try {
+      await act(async () => {
+        button.click()
+        button.click()
+        button.click()
+      })
+      await act(async () => { await vi.dynamicImportSettled() })
+
+      const params = new URLSearchParams(window.location.search)
+      expect(replaceState).toHaveBeenCalledTimes(1)
+      expect(params.get('route')).toBe('daily-report')
+      expect(params.get('navigation')).toBe('initial')
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
+      expect(sidebarButton('自动化任务').getAttribute('aria-current')).toBe('page')
+      expect(navigationCalls()).toEqual([])
+    } finally {
+      replaceState.mockRestore()
+    }
   })
 
-  it('immediately sends a request when the current module is clicked', async () => {
-    await act(async () => {
-      sidebarButton('生产消息 Teable 入库').click()
-      expect(navigationCalls()).toEqual([['app.navigateNative', { tag: 'production-message' }]])
-    })
+  it('[nav-switch] ignores a click on the current module', async () => {
+    // Clicking the current module used to request the host; document navigation now leaves the displayed route unchanged.
+    const replaceState = vi.spyOn(window.history, 'replaceState')
+
+    try {
+      await act(async () => { sidebarButton('生产消息 Teable 入库').click() })
+
+      expect(replaceState).not.toHaveBeenCalled()
+      expect(window.location.search).toBe('?route=production-message&navigation=initial')
+      expect(navigationCalls()).toEqual([])
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
+    } finally {
+      replaceState.mockRestore()
+    }
   })
 
-  it('immediately sends every request while a previous navigation is pending', async () => {
-    let finish!: (value: unknown) => void
-    const pending = new Promise(resolve => { finish = resolve })
-    invoke.mockImplementation((operation: string) => operation === 'app.navigateNative' ? pending : Promise.resolve({}))
+  it('[nav-switch] switches locally and ignores the repeated current target', async () => {
+    // Host navigation used to remain pending; document navigation now switches synchronously and skips the current target.
+    const replaceState = vi.spyOn(window.history, 'replaceState')
 
-    await act(async () => {
-      sidebarButton('自动化任务').click()
-      expect(navigationCalls()).toHaveLength(1)
-      sidebarButton('自动化任务').click()
-      expect(navigationCalls()).toHaveLength(2)
-      sidebarButton('生产消息 Teable 入库').click()
-      expect(navigationCalls()).toEqual([
-        ['app.navigateNative', { tag: 'daily-report' }],
-        ['app.navigateNative', { tag: 'daily-report' }],
-        ['app.navigateNative', { tag: 'production-message' }],
-      ])
-      finish(undefined)
-    })
+    try {
+      await act(async () => {
+        sidebarButton('自动化任务').click()
+        sidebarButton('自动化任务').click()
+        sidebarButton('生产消息 Teable 入库').click()
+      })
+      await act(async () => { await vi.dynamicImportSettled() })
+
+      expect(replaceState).toHaveBeenCalledTimes(2)
+      expect(window.location.search).toBe('?route=production-message&navigation=initial')
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
+      expect(navigationCalls()).toEqual([])
+    } finally {
+      replaceState.mockRestore()
+    }
   })
 
   it('updates the displayed route on popstate without sending navigation back', async () => {
@@ -136,66 +169,61 @@ describe('App host navigation compatibility', () => {
 })
 
 describe('App host navigation contracts', () => {
-  it('renders the Debug navigation taxonomy in the Demo sidebar and routes through the host', async () => {
+  it('[nav-switch] renders the Debug navigation taxonomy in the Demo sidebar and switches in document', async () => {
+    // The sidebar used to request the host; document navigation now changes route locally while preserving the token.
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
 
-    const draft: Draft = {
-      index: 1, originalText: '8.13下料2吨', parserVersion: 'test', kind: 'MaterialCutting',
-      businessDate: '2026-08-13', typeDisplay: '下料日报数据库', fields: { weight: '2吨' },
-      previewFields: [
-        { key: 'weight', label: '重量', value: '2' },
-        { key: 'raw_message', label: '原始消息', value: '8.13下料2吨' },
-        { key: 'unit', label: '单位', value: '' },
-      ], statusText: '待检查', warningText: '', canWrite: true
-    }
-    const readyFields = [{ key: 'weight', name: '重量', propertyType: 'number', parsedValue: '2吨', databaseValue: '', status: 'new', message: '' }]
-
     ;(await import("../features/daily-report/dailyFieldCache")).clearDailyFieldCache();
     localStorage.clear();
     history.replaceState({}, '', '?route=production-message')
     const container = document.createElement('div')
     document.body.append(container)
-    invoke.mockReset().mockImplementation((operation: string) => {
-      if (operation === 'app.getOverview') return Promise.resolve({})
-      if (operation === 'production.getBindings') return Promise.resolve({ configured: true, cutting: { bound: false, name: '', path: '' }, towerDaily: { bound: false, name: '', path: '' }, towerMonthly: { bound: false, name: '', path: '' }, towerYearly: { bound: false, name: '', path: '' }, sources: [], selected: { towerDaily: 'daily', towerMonthly: 'monthly', towerYearly: 'yearly' } })
-      if (operation === 'production.parse') return Promise.resolve([draft])
-      if (operation === 'production.check') return Promise.resolve({ succeeded: true, message: '可以写入', items: [{ index: 1, businessDate: '2026-08-13', status: 'ready', message: '', fields: readyFields }], requiredMonths: [] })
-      return Promise.resolve({})
-    })
+    invoke.mockReset().mockImplementation(defaultOperationResult)
     const { App } = await import('./App')
     const root = createRoot(container)
-    await act(async () => { root.render(<App />) })
 
-    await act(async () => {
-      history.replaceState({}, '', '?route=navigation:production-message&navigation=sidebar')
-      window.dispatchEvent(new PopStateEvent('popstate'))
-    })
-    expect(container.textContent).toContain('数据文件处理')
-    expect(container.textContent).toContain('挂网计划 PDF 导出')
-    expect(container.textContent).toContain('生产会资料拆分')
-    expect(container.textContent).toContain('数据同步')
-    expect(container.textContent).toContain('每日焊接数据模拟')
-    expect(container.textContent).toContain('生产消息 Teable 入库')
-    expect(container.textContent).toContain('自动化任务')
-    expect(container.textContent).toContain('文件统计汇总')
-    expect(container.textContent).toContain('自动化任务')
-    expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
-    expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
-    const dailyReport = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('自动化任务')) as HTMLButtonElement
-    await act(async () => { dailyReport.click(); await Promise.resolve() })
-    expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'daily-report' })
+    try {
+      await act(async () => { root.render(<App />) })
 
-    await act(async () => root.unmount())
-    vi.useRealTimers()
-    container.remove()
+      await act(async () => {
+        history.replaceState({}, '', '?route=navigation:production-message&navigation=sidebar')
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      })
+      expect(container.textContent).toContain('数据文件处理')
+      expect(container.textContent).toContain('挂网计划 PDF 导出')
+      expect(container.textContent).toContain('生产会资料拆分')
+      expect(container.textContent).toContain('数据同步')
+      expect(container.textContent).toContain('每日焊接数据模拟')
+      expect(container.textContent).toContain('生产消息 Teable 入库')
+      expect(container.textContent).toContain('自动化任务')
+      expect(container.textContent).toContain('文件统计汇总')
+      expect(container.textContent).toContain('自动化任务')
+      expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
+      expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
+      const dailyReport = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('自动化任务')) as HTMLButtonElement
+      await act(async () => { dailyReport.click(); await Promise.resolve() })
+      await act(async () => { await vi.dynamicImportSettled() })
+
+      const params = new URLSearchParams(window.location.search)
+      expect(params.get('route')).toBe('daily-report')
+      expect(params.get('navigation')).toBe('sidebar')
+      expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
+    } finally {
+      await act(async () => root.unmount())
+      vi.useRealTimers()
+      container.remove()
+    }
   })
 
-  it('shows only the module taxonomy, has no homepage, and routes through the host', async () => {
+  it('[nav-switch] shows only the module taxonomy, has no homepage, and switches in document', async () => {
+    // The sidebar used to request the host; document navigation now preserves the token and updates the displayed module locally.
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const invoke = vi.fn()
     const notifyReady = vi.fn()
@@ -205,70 +233,92 @@ describe('App host navigation contracts', () => {
     history.replaceState({}, '', '?route=navigation:production-message&navigation=sidebar')
     const container = document.createElement('div')
     document.body.append(container)
-    invoke.mockReset().mockResolvedValue({})
+    invoke.mockReset().mockImplementation(defaultOperationResult)
     const { App } = await import('./App')
     const root = createRoot(container)
 
-    await act(async () => { root.render(<App />) })
-    await act(async () => { await vi.dynamicImportSettled() })
+    try {
+      await act(async () => { root.render(<App />) })
+      await act(async () => { await vi.dynamicImportSettled() })
 
-    expect(container.textContent).toContain('数据文件处理')
-    expect(container.textContent).toContain('挂网计划 PDF 导出')
-    expect(container.textContent).toContain('生产会资料拆分')
-    expect(container.textContent).toContain('数据同步')
-    expect(container.textContent).toContain('每日焊接数据模拟')
-    expect(container.textContent).toContain('生产消息 Teable 入库')
-    expect(container.textContent).toContain('自动化任务')
-    expect(container.textContent).toContain('文件统计汇总')
-    expect(container.textContent).toContain('自动化任务')
-    expect(container.textContent).not.toContain('首页')
-    expect(container.textContent).not.toContain('概览')
-    expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
-    expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
+      expect(container.textContent).toContain('数据文件处理')
+      expect(container.textContent).toContain('挂网计划 PDF 导出')
+      expect(container.textContent).toContain('生产会资料拆分')
+      expect(container.textContent).toContain('数据同步')
+      expect(container.textContent).toContain('每日焊接数据模拟')
+      expect(container.textContent).toContain('生产消息 Teable 入库')
+      expect(container.textContent).toContain('自动化任务')
+      expect(container.textContent).toContain('文件统计汇总')
+      expect(container.textContent).toContain('自动化任务')
+      expect(container.textContent).not.toContain('首页')
+      expect(container.textContent).not.toContain('概览')
+      expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
+      expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
 
-    const dailyReport = [...container.querySelectorAll('button')]
-      .find(button => button.textContent?.includes('自动化任务')) as HTMLButtonElement
-    await act(async () => { dailyReport.click(); await Promise.resolve() })
-    expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'daily-report' })
+      const dailyReport = [...container.querySelectorAll('button')]
+        .find(button => button.textContent?.includes('自动化任务')) as HTMLButtonElement
+      await act(async () => { dailyReport.click(); await Promise.resolve() })
+      await act(async () => { await vi.dynamicImportSettled() })
 
-    await act(async () => { root.unmount() })
-    container.remove()
+      const params = new URLSearchParams(window.location.search)
+      expect(params.get('route')).toBe('daily-report')
+      expect(params.get('navigation')).toBe('sidebar')
+      expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
   })
 
-  it('reports each host navigation after React renders the requested route', async () => {
+  it('[nav-switch] reports readiness once per document across in-document navigation', async () => {
+    // Local switching replaces the host round trip; popstate fallback stays in the existing App test and token-change resends in webview.test.ts.
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    const invoke = vi.fn()
+    const invoke = vi.fn().mockImplementation(defaultOperationResult)
     const notifyReady = vi.fn()
     vi.resetModules()
+    const { notifyReady: sendReady } = await import('../bridge/webview')
+    const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
+    const postMessage = vi.fn()
+    Object.assign(window, { chrome: { webview: { postMessage, addEventListener: () => undefined } } })
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+    notifyReady.mockImplementation(sendReady)
+    const readyMessages = () => postMessage.mock.calls.filter(([message]) => message.type === 'app.ready')
 
     history.replaceState({}, '', '?route=navigation:plan-pdf&navigation=first')
     const container = document.createElement('div')
     document.body.append(container)
-    invoke.mockReset().mockImplementation((operation: string) =>
-      operation === 'automation.list' ? Promise.resolve({ tasks: [] }) : Promise.resolve({}))
-    notifyReady.mockReset()
-    const { App } = await import('./App')
     const root = createRoot(container)
-    await act(async () => { root.render(<App />) })
-    await act(async () => { await vi.dynamicImportSettled() })
-    expect(notifyReady).toHaveBeenLastCalledWith('navigation:plan-pdf', 'first')
-    const openProduction = [...container.querySelectorAll('button')]
-      .find(button => button.textContent?.includes('生产消息 Teable 入库')) as HTMLButtonElement
-    await act(async () => { openProduction.click() })
-    expect(invoke).toHaveBeenCalledWith('app.navigateNative', { tag: 'production-message' })
 
-    await act(async () => {
-      history.replaceState({}, '', '?route=daily-report&navigation=second')
-      window.dispatchEvent(new PopStateEvent('popstate'))
-    })
-    await act(async () => { await vi.dynamicImportSettled() })
-    expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'second')
-    expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
-    await act(async () => root.unmount())
-    container.remove()
+    try {
+      const { App } = await import('./App')
+      await act(async () => { root.render(<App />) })
+      await act(async () => { await vi.dynamicImportSettled() })
+      expect(notifyReady).toHaveBeenLastCalledWith('navigation:plan-pdf', 'first')
+      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'navigation:plan-pdf', navigation: 'first' })]])
+
+      const openProduction = [...container.querySelectorAll('button')]
+        .find(button => button.textContent?.includes('生产消息 Teable 入库')) as HTMLButtonElement
+      await act(async () => { openProduction.click() })
+      await act(async () => { await vi.dynamicImportSettled() })
+
+      const params = new URLSearchParams(window.location.search)
+      expect(params.get('route')).toBe('production-message')
+      expect(params.get('navigation')).toBe('first')
+      expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
+      expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
+      expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
+      expect(notifyReady.mock.calls).toEqual([['navigation:plan-pdf', 'first'], ['production-message', 'first']])
+      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'navigation:plan-pdf', navigation: 'first' })]])
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+      if (previousChrome) Object.defineProperty(window, 'chrome', previousChrome)
+      else Reflect.deleteProperty(window, 'chrome')
+    }
   })
 
   it('opens and closes settings over the current module', async () => {
