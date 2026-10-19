@@ -10,7 +10,7 @@ export function subscribeRoute(listener: () => void): () => void {
 
 // 文档内导航只改 URL 的 route 参数并通知订阅者，不经宿主。
 export function navigateInDocument(tag: string): boolean {
-  if (!isRouteKey(tag) || resolveHostRoute(window.location.search).displayRoute === tag) return false
+  if (!isRouteKey(tag) || resolveHostRoute(window.location.search).route === tag) return false
 
   const params = new URLSearchParams(window.location.search)
   params.set('route', tag)

@@ -28,7 +28,7 @@ class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void
 
 
 export function App() {
-  const { route, navigation, displayRoute } = useHostRoute()
+  const { route, navigation } = useHostRoute()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
 
@@ -42,18 +42,18 @@ export function App() {
 
   return <div className="desktop-shell">
     <div className="production-message-demo desktop-shell-navigation">
-      <OperationSidebar active={displayRoute} navigate={goTo} openSettings={() => setSettingsOpen(true)} />
+      <OperationSidebar active={route} navigate={goTo} openSettings={() => setSettingsOpen(true)} />
     </div>
     <div className="desktop-shell-content">
       <div
         key={route}
-        className={displayRoute === ROUTES.productionMessage || displayRoute === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}
-        data-page-route={displayRoute}
+        className={route === ROUTES.productionMessage || route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}
+        data-page-route={route}
       >
         <LoadBoundary>
-          <Suspense fallback={<RouteSkeleton route={displayRoute} />}>
+          <Suspense fallback={<RouteSkeleton route={route} />}>
             <RouteReady route={route} navigation={navigation} />
-            {displayRoute === ROUTES.productionMessage ? <ProductionMessagePage /> : displayRoute === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{displayRoute === ROUTES.productionMeeting ? <ProductionMeetingPage /> : displayRoute === ROUTES.planPdf ? <PlanPdfPage /> : displayRoute === ROUTES.databaseViewer ? <DatabaseViewerPage /> : displayRoute === ROUTES.dailyReport ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+            {route === ROUTES.productionMessage ? <ProductionMessagePage /> : route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : route === ROUTES.planPdf ? <PlanPdfPage /> : route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : route === ROUTES.dailyReport ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
 
           </Suspense>
         </LoadBoundary>
