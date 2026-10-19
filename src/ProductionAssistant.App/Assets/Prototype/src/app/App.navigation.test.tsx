@@ -274,7 +274,7 @@ describe('App host navigation contracts', () => {
   })
 
   it('[nav-switch] reports readiness once per document across in-document navigation', async () => {
-    // Local switching replaces the host round trip; popstate fallback stays in the existing App test and token-change resends in webview.test.ts.
+    // 旧 ready 上报带前缀 route；nav-switch 改报归一值，同一令牌的真实传输仍只发送一次。
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const invoke = vi.fn().mockImplementation(defaultOperationResult)
     const notifyReady = vi.fn()
@@ -296,8 +296,8 @@ describe('App host navigation contracts', () => {
       const { App } = await import('./App')
       await act(async () => { root.render(<App />) })
       await act(async () => { await vi.dynamicImportSettled() })
-      expect(notifyReady).toHaveBeenLastCalledWith('navigation:plan-pdf', 'first')
-      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'navigation:plan-pdf', navigation: 'first' })]])
+      expect(notifyReady).toHaveBeenLastCalledWith('plan-pdf', 'first')
+      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' })]])
 
       const openProduction = [...container.querySelectorAll('button')]
         .find(button => button.textContent?.includes('生产消息 Teable 入库')) as HTMLButtonElement
@@ -311,8 +311,8 @@ describe('App host navigation contracts', () => {
       expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
       expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
       expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
-      expect(notifyReady.mock.calls).toEqual([['navigation:plan-pdf', 'first'], ['production-message', 'first']])
-      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'navigation:plan-pdf', navigation: 'first' })]])
+      expect(notifyReady.mock.calls).toEqual([['plan-pdf', 'first'], ['production-message', 'first']])
+      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' })]])
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -426,22 +426,23 @@ describe('legacy navigation prefix host contract', () => {
   const sidebarButton = (container: HTMLDivElement, label: string) => [...container.querySelectorAll<HTMLButtonElement>('.sidebar button')]
     .find(button => button.textContent?.trim() === label)!
 
+  // 旧 ready 原样上报带前缀 route；nav-switch 上报归一页面路由，令牌仍原样保留。
   it.each([
-    ['navigation:production-message', ' first '],
-    ['navigation:daily-weld', 'first'],
-    ['navigation:database-viewer', 'first'],
-    ['navigation:plan-pdf', 'first'],
-    ['navigation:production-meeting', 'first'],
-    ['navigation:report-center', 'first'],
-    ['navigation:daily-report', 'first'],
-    ['navigation:unknown', 'first'],
-    ['navigation:', 'first'],
-    ['navigation: ', 'first'],
-    ['navigation:PRODUCTION-MESSAGE', 'first'],
-  ] as const)('preserves the host ready route and token for legacy input %s', async (route, navigation) => {
+    ['navigation:production-message', ' first ', 'production-message'],
+    ['navigation:daily-weld', 'first', 'daily-weld'],
+    ['navigation:database-viewer', 'first', 'database-viewer'],
+    ['navigation:plan-pdf', 'first', 'plan-pdf'],
+    ['navigation:production-meeting', 'first', 'production-meeting'],
+    ['navigation:report-center', 'first', 'report-center'],
+    ['navigation:daily-report', 'first', 'daily-report'],
+    ['navigation:unknown', 'first', 'production-message'],
+    ['navigation:', 'first', 'production-message'],
+    ['navigation: ', 'first', 'production-message'],
+    ['navigation:PRODUCTION-MESSAGE', 'first', 'production-message'],
+  ] as const)('[nav-switch] reports the normalized route and the unchanged token for legacy input %s', async (route, navigation, expectedRoute) => {
     const { notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
 
-    expect(notifyReady.mock.calls).toEqual([[route, navigation]])
+    expect(notifyReady.mock.calls).toEqual([[expectedRoute, navigation]])
   })
 
   it.each([
@@ -494,6 +495,7 @@ describe('legacy navigation prefix host contract', () => {
     }
   })
 
+  // 旧 ready 保留带前缀 route；nav-switch 将已知后缀直接作为 ready 的页面路由。
   it.each([
     ['production-message', '生产消息 Teable 入库'],
     ['daily-weld', '每日焊接数据模拟'],
@@ -502,31 +504,33 @@ describe('legacy navigation prefix host contract', () => {
     ['production-meeting', '生产会资料拆分'],
     ['report-center', '文件统计汇总'],
     ['daily-report', '自动化任务'],
-  ] as const)('[legacy-prefix:display] renders the known legacy suffix %s', async (tag, label) => {
+  ] as const)('[nav-switch][legacy-prefix:display] renders the known legacy suffix %s', async (tag, label) => {
     const route = `navigation:${tag}`
     const navigation = 'first'
     const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
 
     expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe(tag)
     expect(sidebarButton(container, label).getAttribute('aria-current')).toBe('page')
-    expect(notifyReady.mock.calls).toEqual([[route, navigation]])
+    expect(notifyReady.mock.calls).toEqual([[tag, navigation]])
   })
 
+  // 旧 ready 保留未知旧路由；nav-switch 对无效旧路由上报默认页面路由。
   it.each([
     'navigation:unknown', 'navigation:', 'navigation: ', 'navigation:PRODUCTION-MESSAGE',
-  ])('[legacy-prefix:display] renders the default page for %s', async route => {
+  ])('[nav-switch][legacy-prefix:display] renders the default page for %s', async route => {
     const navigation = 'first'
     const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
 
     expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
     expect(sidebarButton(container, '生产消息 Teable 入库').getAttribute('aria-current')).toBe('page')
-    expect(notifyReady.mock.calls).toEqual([[route, navigation]])
+    expect(notifyReady.mock.calls).toEqual([['production-message', navigation]])
   })
 
+  // 旧 ready 使用原始路由；nav-switch 使用归一值，真实传输仍按令牌只发送一次。
   it.each([
-    ['plain to legacy', 'production-message', 'navigation:plan-pdf', 'plan-pdf', '挂网计划 PDF 导出'],
-    ['legacy to plain', 'navigation:plan-pdf', 'production-message', 'production-message', '生产消息 Teable 入库'],
-  ] as const)('[legacy-prefix:display] updates on popstate from %s without sending another ready for the same token', async (_direction, firstRoute, nextRoute, displayRoute, label) => {
+    ['plain to legacy', 'production-message', 'navigation:plan-pdf', 'plan-pdf', '挂网计划 PDF 导出', 'production-message', 'plan-pdf'],
+    ['legacy to plain', 'navigation:plan-pdf', 'production-message', 'production-message', '生产消息 Teable 入库', 'plan-pdf', 'production-message'],
+  ] as const)('[nav-switch][legacy-prefix:display] updates on popstate from %s with one ready per token', async (_direction, firstRoute, nextRoute, displayRoute, label, firstReadyRoute, nextReadyRoute) => {
     const navigation = 'first'
     const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
     const postMessage = vi.fn()
@@ -538,8 +542,8 @@ describe('legacy navigation prefix host contract', () => {
       // Forward the captured initial ready and later updates through the real token deduplication.
       for (const [route, token] of notifyReady.mock.calls) sendReady(route, token)
       notifyReady.mockImplementation(sendReady)
-      expect(notifyReady.mock.calls).toEqual([[firstRoute, navigation]])
-      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation })]])
+      expect(notifyReady.mock.calls).toEqual([[firstReadyRoute, navigation]])
+      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstReadyRoute, navigation })]])
 
       await act(async () => {
         history.replaceState({}, '', `?route=${encodeURIComponent(nextRoute)}&navigation=${encodeURIComponent(navigation)}`)
@@ -549,8 +553,8 @@ describe('legacy navigation prefix host contract', () => {
 
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe(displayRoute)
       expect(sidebarButton(container, label).getAttribute('aria-current')).toBe('page')
-      expect(notifyReady.mock.calls).toEqual([[firstRoute, navigation], [nextRoute, navigation]])
-      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation })]])
+      expect(notifyReady.mock.calls).toEqual([[firstReadyRoute, navigation], [nextReadyRoute, navigation]])
+      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstReadyRoute, navigation })]])
     } finally {
       if (previousChrome) Object.defineProperty(window, 'chrome', previousChrome)
       else Reflect.deleteProperty(window, 'chrome')
