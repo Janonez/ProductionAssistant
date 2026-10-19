@@ -1,10 +1,5 @@
-import { invoke } from '../bridge/index'
 import { resolveHostRoute } from './index'
 import { isRouteKey } from './routeTable'
-
-export function navigate(tag: string) {
-  return invoke('app.navigateNative', { tag }).catch(() => undefined)
-}
 
 const routeListeners = new Set<() => void>()
 
@@ -13,6 +8,7 @@ export function subscribeRoute(listener: () => void): () => void {
   return () => { routeListeners.delete(listener) }
 }
 
+// 文档内导航只改 URL 的 route 参数并通知订阅者，不经宿主。
 export function navigateInDocument(tag: string): boolean {
   if (!isRouteKey(tag) || resolveHostRoute(window.location.search).displayRoute === tag) return false
 
