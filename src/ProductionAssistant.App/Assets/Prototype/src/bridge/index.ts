@@ -4,6 +4,7 @@ const hasWebView = () => Boolean((window as typeof window & { chrome?: { webview
 
 type ProgressListener = (value: unknown) => void
 const progressListeners = new Map<string, Set<ProgressListener>>()
+const readyNavigations = new Set<string>()
 
 export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 30000, progress?: ProgressListener): Promise<T> {
   if (import.meta.env.DEV && !hasWebView())
@@ -26,7 +27,10 @@ export function onProgress(operation: string, listener: ProgressListener): () =>
   }
 }
 
+// ready 对同一文档加载代次（navigation 令牌）幂等，由适配层保证，各传输实现不需要各自去重；空令牌不去重；令牌不裁剪，不比较 route。
 export function notifyReady(route: string, navigation: string): void {
+  if (navigation && readyNavigations.has(navigation)) return
+  if (navigation) readyNavigations.add(navigation)
   if (import.meta.env.DEV && !hasWebView()) {
     void import('./mock').then(mock => mock.ready(route, navigation))
     return

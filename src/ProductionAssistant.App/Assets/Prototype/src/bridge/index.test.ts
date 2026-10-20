@@ -69,6 +69,18 @@ describe('WebView2 bridge adapter', () => {
     })
   })
 
+  it('[nav-switch] deduplicates ready by navigation token across routes through the adapter', async () => {
+    const { bridge } = await import('./index')
+    bridge.ready('plan-pdf', ' first ')
+    bridge.ready('production-message', ' first ')
+    bridge.ready('plan-pdf', 'first')
+    expect(postMessage).toHaveBeenCalledTimes(2)
+    expect(postMessage.mock.calls).toEqual([
+      [expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: ' first ' })],
+      [expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' })],
+    ])
+  })
+
   it('propagates host errors and rejects calls without a desktop host', async () => {
     const { bridge } = await import('./index')
     const pending = bridge.invoke('database.inspect')
