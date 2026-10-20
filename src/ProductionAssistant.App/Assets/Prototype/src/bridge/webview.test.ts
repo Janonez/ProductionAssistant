@@ -45,7 +45,7 @@ describe('desktop bridge', () => {
     await expect(result).resolves.toEqual({ done: true })
   })
 
-  it('reports React readiness with the current navigation token', async () => {
+  it('[nav-switch] reports React readiness with the navigation token', async () => {
     let sent: unknown
     const postMessage = vi.fn((value: unknown) => { sent = value })
     Object.assign(window, { chrome: { webview: {
@@ -54,20 +54,16 @@ describe('desktop bridge', () => {
     } } })
     const { notifyReady } = await import('./webview')
     notifyReady('daily-report', 'navigation-2')
-    notifyReady('daily-report', 'navigation-2')
     expect(sent).toEqual({ type: 'app.ready', route: 'daily-report', navigation: 'navigation-2', moduleEntryMs: expect.any(Number), readyMs: expect.any(Number) })
     expect(postMessage).toHaveBeenCalledTimes(1)
   })
 })
 
-describe('legacy route ready deduplication', () => {
+// 去重已移至适配层，这里只验证传输层每次调用都发送。
+describe('[nav-switch] webview ready transport', () => {
   let previousChrome: PropertyDescriptor | undefined
   let messages: { type: string; route: string; navigation: string }[]
   const readyMessages = () => messages.filter(message => message.type === 'app.ready')
-  const routeOrders = [
-    ['legacy', 'navigation:plan-pdf', 'plan-pdf'],
-    ['plain', 'plan-pdf', 'navigation:plan-pdf'],
-  ] as const
 
   beforeEach(() => {
     vi.resetModules()
@@ -84,31 +80,6 @@ describe('legacy route ready deduplication', () => {
     else Reflect.deleteProperty(window, 'chrome')
   })
 
-  it.each(routeOrders)('sends one ready for the same token (%s first)', async (_first, firstRoute, secondRoute) => {
-    const { notifyReady } = await import('./webview')
-    const navigation = ' first '
-
-    notifyReady(firstRoute, navigation)
-    notifyReady(secondRoute, navigation)
-
-    expect(readyMessages()).toEqual([
-      expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation }),
-    ])
-  })
-
-  it.each(routeOrders)('sends a second ready when the token changes without trimming (%s first)', async (_first, firstRoute, secondRoute) => {
-    const { notifyReady } = await import('./webview')
-
-    notifyReady(firstRoute, ' first ')
-    notifyReady(secondRoute, ' first ')
-    notifyReady(secondRoute, 'first')
-
-    expect(readyMessages()).toEqual([
-      expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation: ' first ' }),
-      expect.objectContaining({ type: 'app.ready', route: secondRoute, navigation: 'first' }),
-    ])
-  })
-
   it.each(['navigation:plan-pdf', 'plan-pdf'])('sends every ready with an empty token for route %s', async route => {
     const { notifyReady } = await import('./webview')
 
@@ -118,6 +89,20 @@ describe('legacy route ready deduplication', () => {
     expect(readyMessages()).toEqual([
       expect.objectContaining({ type: 'app.ready', route, navigation: '' }),
       expect.objectContaining({ type: 'app.ready', route, navigation: '' }),
+    ])
+  })
+
+  it('[nav-switch] transport posts every ready; idempotency belongs to the adapter', async () => {
+    const { notifyReady } = await import('./webview')
+    notifyReady('plan-pdf', ' first ')
+    notifyReady('production-message', ' first ')
+    notifyReady('plan-pdf', 'first')
+    notifyReady('plan-pdf', 'first')
+    expect(readyMessages()).toEqual([
+      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: ' first ' }),
+      expect.objectContaining({ type: 'app.ready', route: 'production-message', navigation: ' first ' }),
+      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' }),
+      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' }),
     ])
   })
 })
