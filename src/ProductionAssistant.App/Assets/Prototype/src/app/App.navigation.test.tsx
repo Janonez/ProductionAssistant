@@ -279,7 +279,8 @@ describe('App host navigation contracts', () => {
     const invoke = vi.fn().mockImplementation(defaultOperationResult)
     const notifyReady = vi.fn()
     vi.resetModules()
-    const { notifyReady: sendReady } = await import('../bridge/webview')
+    // 改为经真实适配层转发，去重属于适配层，不依赖 webview 传输内部实现。
+    const { notifyReady: sendReady } = await vi.importActual<typeof import('../bridge/index')>('../bridge/index')
     const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
     const postMessage = vi.fn()
     Object.assign(window, { chrome: { webview: { postMessage, addEventListener: () => undefined } } })
@@ -538,7 +539,8 @@ describe('legacy navigation prefix host contract', () => {
 
     try {
       const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(firstRoute)}&navigation=${encodeURIComponent(navigation)}`)
-      const { notifyReady: sendReady } = await import('../bridge/webview')
+      // 改为经真实适配层转发，去重属于适配层，不依赖 webview 传输内部实现。
+      const { notifyReady: sendReady } = await vi.importActual<typeof import('../bridge/index')>('../bridge/index')
       // Forward the captured initial ready and later updates through the real token deduplication.
       for (const [route, token] of notifyReady.mock.calls) sendReady(route, token)
       notifyReady.mockImplementation(sendReady)

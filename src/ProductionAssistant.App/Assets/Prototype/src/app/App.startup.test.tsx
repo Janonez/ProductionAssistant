@@ -49,7 +49,8 @@ it('[nav-switch] keeps readiness stable while a delayed route module loads', asy
   const invoke = vi.fn().mockResolvedValue({})
   const delayed = { resolve: undefined as undefined | ((value: { DailyWeldPage: () => React.ReactNode }) => void) }
   vi.resetModules()
-  const { notifyReady: sendReady } = await import('../bridge/webview')
+  // 改为经真实适配层转发，去重属于适配层，不依赖 webview 传输内部实现。
+  const { notifyReady: sendReady } = await vi.importActual<typeof import('../bridge/index')>('../bridge/index')
   const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
   const postMessage = vi.fn()
   Object.assign(window, { chrome: { webview: { postMessage, addEventListener: () => undefined } } })

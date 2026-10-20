@@ -81,6 +81,45 @@ describe('WebView2 bridge adapter', () => {
     ])
   })
 
+  const routeOrders = [
+    ['legacy', 'navigation:plan-pdf', 'plan-pdf'],
+    ['plain', 'plan-pdf', 'navigation:plan-pdf'],
+  ] as const
+
+  it.each(routeOrders)('[nav-switch] adapter: sends one ready for the same token (%s first)', async (_first, firstRoute, secondRoute) => {
+    const { bridge } = await import('./index')
+    const navigation = ' first '
+    bridge.ready(firstRoute, navigation)
+    bridge.ready(secondRoute, navigation)
+    expect(postMessage).toHaveBeenCalledTimes(1)
+    expect(postMessage.mock.calls).toEqual([
+      [expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation })],
+    ])
+  })
+
+  it.each(routeOrders)('[nav-switch] adapter: sends a second ready when the token changes without trimming (%s first)', async (_first, firstRoute, secondRoute) => {
+    const { bridge } = await import('./index')
+    bridge.ready(firstRoute, ' first ')
+    bridge.ready(secondRoute, ' first ')
+    bridge.ready(secondRoute, 'first')
+    expect(postMessage).toHaveBeenCalledTimes(2)
+    expect(postMessage.mock.calls).toEqual([
+      [expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation: ' first ' })],
+      [expect.objectContaining({ type: 'app.ready', route: secondRoute, navigation: 'first' })],
+    ])
+  })
+
+  it.each(['navigation:plan-pdf', 'plan-pdf'])('[nav-switch] adapter: sends every ready with an empty token for route %s', async route => {
+    const { bridge } = await import('./index')
+    bridge.ready(route, '')
+    bridge.ready(route, '')
+    expect(postMessage).toHaveBeenCalledTimes(2)
+    expect(postMessage.mock.calls).toEqual([
+      [expect.objectContaining({ type: 'app.ready', route, navigation: '' })],
+      [expect.objectContaining({ type: 'app.ready', route, navigation: '' })],
+    ])
+  })
+
   it('propagates host errors and rejects calls without a desktop host', async () => {
     const { bridge } = await import('./index')
     const pending = bridge.invoke('database.inspect')
