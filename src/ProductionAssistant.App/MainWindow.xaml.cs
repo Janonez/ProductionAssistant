@@ -9,8 +9,6 @@ namespace ProductionAssistant;
 
 public sealed partial class MainWindow : Window
 {
-    private string _currentTag = string.Empty;
-
     public MainWindow()
     {
         InitializeComponent();
@@ -34,35 +32,7 @@ public sealed partial class MainWindow : Window
             presenter.PreferredMinimumHeight = 700;
         }
 
-        ShellFrame.Navigate(typeof(PrototypePage), "production-message");
-        NavigateTo("production-message");
-    }
-
-    internal void NavigateTo(string tag)
-    {
-        if (_currentTag == tag)
-            return;
-
-        _currentTag = tag;
-        var pageType = tag switch
-        {
-            "daily-weld" => typeof(PrototypePage),
-            "production-message" => typeof(PrototypePage),
-            "database-viewer" => typeof(PrototypePage),
-            "plan-pdf" => typeof(PrototypePage),
-            "production-meeting" => typeof(PrototypePage),
-            "daily-report" => typeof(PrototypePage),
-            "report-center" => typeof(PrototypePage),
-            _ => typeof(PlanPdfExportPage)
-        };
-
-        var reactRoute = pageType == typeof(PrototypePage);
-        if (ShellFrame.Content is PrototypePage shellPage)
-            shellPage.NavigateToRoute(reactRoute ? tag : $"navigation:{tag}");
-
-        ContentFrame.Visibility = reactRoute ? Visibility.Collapsed : Visibility.Visible;
-        if (!reactRoute)
-            ContentFrame.Navigate(pageType, tag);
+        ShellFrame.Navigate(typeof(PrototypePage));
     }
 
     internal void SetSettingsModalOpen(bool open) =>

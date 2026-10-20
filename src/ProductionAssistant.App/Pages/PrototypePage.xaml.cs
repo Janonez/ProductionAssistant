@@ -10,11 +10,10 @@ public sealed partial class PrototypePage : Page
 {
     private const string PrototypeHost = "prototype.production-assistant.local";
     private PrototypeBridge? _bridge;
-    private string _route = "production-message";
-    private string _navigationId = string.Empty;
+    private string _loadId = Guid.NewGuid().ToString("N");
     private bool _initialized;
     private bool _reactVisible;
-    private long _routeStarted;
+    private long _loadStarted;
     private CancellationTokenSource? _readyTimeout;
 
     public PrototypePage()
@@ -22,31 +21,6 @@ public sealed partial class PrototypePage : Page
         InitializeComponent();
         NavigationCacheMode = NavigationCacheMode.Required;
         Loaded += PrototypePage_Loaded;
-    }
-
-    protected override void OnNavigatedTo(NavigationEventArgs e)
-    {
-        base.OnNavigatedTo(e);
-        NavigateToRoute(e.Parameter as string);
-    }
-
-    internal void NavigateToRoute(string? route)
-    {
-        _route = route switch
-        {
-            { } navigationRoute when navigationRoute.StartsWith("navigation:", StringComparison.Ordinal) => navigationRoute,
-            "daily-weld" => "daily-weld",
-            "production-message" => "production-message",
-            "database-viewer" => "database-viewer",
-            "daily-report" => "daily-report",
-            "report-center" => "report-center",
-            "plan-pdf" => "plan-pdf",
-            "production-meeting" => "production-meeting",
-            _ => "production-message"
-        };
-        _navigationId = Guid.NewGuid().ToString("N");
-        if (_initialized)
-            _ = NavigateRouteSafelyAsync();
     }
 
     private async void PrototypePage_Loaded(object sender, RoutedEventArgs e)
@@ -87,9 +61,9 @@ public sealed partial class PrototypePage : Page
                 PrototypeHost,
                 assetFolder,
                 Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.DenyCors);
-            _bridge = new PrototypeBridge(PrototypeWebView, tag => App.MainWindow.NavigateTo(tag), OnReactReady);
+            _bridge = new PrototypeBridge(PrototypeWebView, OnReactReady);
             _initialized = true;
-            await NavigateRouteAsync(initial: true);
+            await LoadDocumentAsync(reuseCurrentSource: false);
         }
         catch (Exception ex)
         {
@@ -108,23 +82,16 @@ public sealed partial class PrototypePage : Page
             PrototypeWebViewRuntime.Mark("navigation-completed");
     }
 
-    private async Task NavigateRouteAsync(bool initial = false)
+    private async Task LoadDocumentAsync(bool reuseCurrentSource)
     {
         _readyTimeout?.Cancel();
         using var readyTimeout = new CancellationTokenSource();
         _readyTimeout = readyTimeout;
-        _routeStarted = System.Diagnostics.Stopwatch.GetTimestamp();
-        PrototypeWebViewRuntime.Mark($"route-start-{_route}");
+        _loadStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        PrototypeWebViewRuntime.Mark("document-load-start");
         if (!_reactVisible) ShowLoading();
-        var query = $"route={Uri.EscapeDataString(_route)}&navigation={_navigationId}";
-        if (initial)
-        {
-            PrototypeWebViewRuntime.Mark("navigation-start");
-            PrototypeWebView.Source = new Uri($"https://{PrototypeHost}/index.html?{query}");
-        }
-        else
-            await PrototypeWebView.CoreWebView2.ExecuteScriptAsync(
-                $"history.replaceState(null,'','?{query}');window.dispatchEvent(new PopStateEvent('popstate'));" );
+        var currentSource = reuseCurrentSource ? PrototypeWebView.CoreWebView2.Source : null;
+        PrototypeWebView.Source = new Uri(PrototypeBridgeProtocol.BuildDocumentUrl(currentSource, _loadId));
 
         try
         {
@@ -142,26 +109,26 @@ public sealed partial class PrototypePage : Page
         }
     }
 
-    private async Task NavigateRouteSafelyAsync(bool initial = false)
+    private async Task LoadDocumentSafelyAsync(bool reuseCurrentSource)
     {
         try
         {
-            await NavigateRouteAsync(initial);
+            await LoadDocumentAsync(reuseCurrentSource);
         }
         catch (Exception ex)
         {
-            PrototypeWebViewRuntime.Mark($"route-failed-{ex.GetType().Name}");
-            ShowLoadError("页面切换失败。请重试加载。");
+            PrototypeWebViewRuntime.Mark($"load-failed-{ex.GetType().Name}");
+            ShowLoadError("页面加载失败。请重试加载。");
         }
     }
 
     private void OnReactReady(string route, string navigation)
     {
-        if (!PrototypeBridgeProtocol.IsCurrentNavigation(route, navigation, _route, _navigationId))
+        if (!PrototypeBridgeProtocol.IsCurrentLoad(navigation, _loadId))
             return;
         _readyTimeout?.Cancel();
         PrototypeWebViewRuntime.Mark("react-ready");
-        PrototypeWebViewRuntime.Mark($"route-ready-{_route}-wait={System.Diagnostics.Stopwatch.GetElapsedTime(_routeStarted).TotalMilliseconds:F0}ms");
+        PrototypeWebViewRuntime.Mark($"document-ready-wait={System.Diagnostics.Stopwatch.GetElapsedTime(_loadStarted).TotalMilliseconds:F0}ms-route={route}");
         _reactVisible = true;
         LoadingLayer.Visibility = Visibility.Collapsed;
         LoadError.Visibility = Visibility.Collapsed;
@@ -170,9 +137,9 @@ public sealed partial class PrototypePage : Page
 
     private async void Retry_Click(object sender, RoutedEventArgs e)
     {
-        _navigationId = Guid.NewGuid().ToString("N");
+        _loadId = Guid.NewGuid().ToString("N");
         if (_initialized)
-            await NavigateRouteSafelyAsync(initial: true);
+            await LoadDocumentSafelyAsync(reuseCurrentSource: true);
         else
             await InitializeAsync();
     }
