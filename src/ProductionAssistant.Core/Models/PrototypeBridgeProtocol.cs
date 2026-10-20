@@ -2,9 +2,10 @@ namespace ProductionAssistant.Models;
 
 public static class PrototypeBridgeProtocol
 {
+    private const string DocumentUrl = "https://prototype.production-assistant.local/index.html";
+
     public static readonly IReadOnlySet<string> AllowedOperations = new HashSet<string>(StringComparer.Ordinal)
     {
-        "app.navigateNative",
         "settings.open",
         "settings.close",
         "settings.saveConnection",
@@ -62,22 +63,8 @@ public static class PrototypeBridgeProtocol
         "plan.pickFolder", "plan.audit", "plan.repair", "plan.export", "plan.openOutput"
     };
 
-    public static readonly IReadOnlySet<string> AllowedNavigationTags = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "plan-pdf",
-        "production-meeting",
-        "daily-weld",
-        "database-viewer",
-        "production-message",
-        "daily-report",
-        "report-center"
-    };
-
     public static bool IsAllowed(string? operation) =>
         !string.IsNullOrWhiteSpace(operation) && AllowedOperations.Contains(operation);
-
-    public static bool IsNavigationAllowed(string? tag) =>
-        !string.IsNullOrWhiteSpace(tag) && AllowedNavigationTags.Contains(tag);
 
     public static bool IsTrustedPrototypeSource(string? source) =>
         Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
@@ -86,14 +73,50 @@ public static class PrototypeBridgeProtocol
         uri.Host == "prototype.production-assistant.local" &&
         uri.AbsolutePath == "/index.html";
 
-    public static bool IsCurrentNavigation(
-        string? route,
-        string? navigation,
-        string expectedRoute,
-        string expectedNavigation) =>
-        !string.IsNullOrWhiteSpace(navigation) &&
-        string.Equals(route, expectedRoute, StringComparison.Ordinal) &&
-        string.Equals(navigation, expectedNavigation, StringComparison.Ordinal);
+    public static bool IsCurrentLoad(string? loadId, string expectedLoadId) =>
+        !string.IsNullOrWhiteSpace(loadId) &&
+        string.Equals(loadId, expectedLoadId, StringComparison.Ordinal);
+
+    public static string BuildDocumentUrl(string? currentSource, string loadId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(loadId);
+
+        var navigation = "navigation=" + Uri.EscapeDataString(loadId);
+        if (!IsTrustedPrototypeSource(currentSource))
+            return DocumentUrl + "?" + navigation;
+
+        var source = currentSource!;
+        var fragmentIndex = source.IndexOf('#');
+        if (fragmentIndex >= 0)
+            source = source[..fragmentIndex];
+
+        var queryIndex = source.IndexOf('?');
+        var query = queryIndex >= 0 ? source[(queryIndex + 1)..] : string.Empty;
+        var parts = new List<string>();
+        var replaced = false;
+        foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var equalsIndex = part.IndexOf('=');
+            var key = equalsIndex >= 0 ? part[..equalsIndex] : part;
+            if (string.Equals(Uri.UnescapeDataString(key), "navigation", StringComparison.Ordinal))
+            {
+                if (!replaced)
+                {
+                    parts.Add(navigation);
+                    replaced = true;
+                }
+            }
+            else
+            {
+                parts.Add(part);
+            }
+        }
+
+        if (!replaced)
+            parts.Add(navigation);
+
+        return DocumentUrl + "?" + string.Join("&", parts);
+    }
 
     public static string SafeError(Exception exception)
     {
