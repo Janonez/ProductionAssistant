@@ -351,7 +351,7 @@ internal sealed partial class PrototypeBridge
             (property.Name.Contains("日期", StringComparison.Ordinal) || property.Name.Contains("时间", StringComparison.Ordinal)))
             ?? schema.Properties.FirstOrDefault(property => property.Type == "date");
         if (title is null || date is null) throw new InvalidOperationException($"{source.Name} 缺少标题或日期字段。");
-        var mapping = ProductionMessagePage.AutoMap(schema.Properties, kind);
+        var mapping = ProductionMessageMapping.AutoMap(schema.Properties, kind);
         AddDynamicPropertyMappings(mapping, schema.Properties, title.Name, date?.Name);
         if (kind == ProductionMessageKind.MaterialCutting)
         {
