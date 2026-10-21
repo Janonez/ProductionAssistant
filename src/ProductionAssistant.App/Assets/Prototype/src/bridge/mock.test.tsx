@@ -57,4 +57,30 @@ describe('browser mock transport', () => {
       moduleEntryMs: expect.any(Number), readyMs: expect.any(Number)
     })
   })
+
+  it('[nav-switch] calls the mock ready once per navigation token', async () => {
+    const mock = await import('./mock')
+    const ready = vi.spyOn(mock, 'ready')
+    const { bridge } = await import('./index')
+    bridge.ready('plan-pdf', 't1')
+    bridge.ready('production-message', 't1')
+    bridge.ready('plan-pdf', 't2')
+    bridge.ready('plan-pdf', ' t2 ')
+    await vi.dynamicImportSettled()
+    expect(ready.mock.calls).toEqual([
+      ['plan-pdf', 't1'],
+      ['plan-pdf', 't2'],
+      ['plan-pdf', ' t2 '],
+    ])
+  })
+
+  it('[nav-switch] does not deduplicate an empty navigation token', async () => {
+    const mock = await import('./mock')
+    const ready = vi.spyOn(mock, 'ready')
+    const { bridge } = await import('./index')
+    bridge.ready('plan-pdf', '')
+    bridge.ready('plan-pdf', '')
+    await vi.dynamicImportSettled()
+    expect(ready).toHaveBeenCalledTimes(2)
+  })
 })

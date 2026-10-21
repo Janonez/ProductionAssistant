@@ -14,14 +14,12 @@ internal sealed partial class PrototypeBridge
         Converters = { new JsonStringEnumConverter() }
     };
     private readonly WebView2 _webView;
-    private readonly Action<string> _navigate;
     private readonly Action<string, string> _ready;
     private CancellationTokenSource? _activeOperation;
 
-    internal PrototypeBridge(WebView2 webView, Action<string> navigate, Action<string, string> ready)
+    internal PrototypeBridge(WebView2 webView, Action<string, string> ready)
     {
         _webView = webView;
-        _navigate = navigate;
         _ready = ready;
         _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
     }
@@ -84,7 +82,6 @@ internal sealed partial class PrototypeBridge
     private async Task<object?> DispatchAsync(string id, string operation, JsonElement payload, CancellationToken cancellationToken) =>
         operation switch
         {
-            "app.navigateNative" => Navigate(payload),
             "settings.open" => OpenSettings(),
             "settings.close" => CloseSettings(),
             "settings.saveConnection" => await SaveSettingsConnectionAsync(payload, refresh: false, cancellationToken),
@@ -183,15 +180,6 @@ internal sealed partial class PrototypeBridge
             throw new InvalidOperationException("请选择有效的开始日期和结束日期。");
         var progress = new Progress<ReportRunProgress>(value => Post(new { id, type = "progress", data = value }));
         return await AppServices.ReportCenter.RunAsync(startDate, endDate, progress, cancellationToken);
-    }
-
-    private object Navigate(JsonElement payload)
-    {
-        var tag = ReadString(payload, "tag");
-        if (!PrototypeBridgeProtocol.IsNavigationAllowed(tag))
-            throw new InvalidOperationException("不允许导航到该页面。");
-        _navigate(tag);
-        return new { navigated = true };
     }
 
     private static async Task<object> ParseAsync(JsonElement payload, CancellationToken cancellationToken)

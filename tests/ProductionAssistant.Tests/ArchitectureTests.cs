@@ -124,7 +124,7 @@ public sealed class ArchitectureTests
         Assert.True(PrototypeBridgeProtocol.IsAllowed("production.parse"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("weld.generate"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("weld.write"));
-        Assert.True(PrototypeBridgeProtocol.IsAllowed("app.navigateNative"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("app.navigateNative"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("automation.list"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.backgroundTest"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.close"));
@@ -147,11 +147,6 @@ public sealed class ArchitectureTests
         Assert.True(PrototypeBridgeProtocol.IsAllowed("settings.saveNotification"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed("filesystem.read"));
         Assert.False(PrototypeBridgeProtocol.IsAllowed(string.Empty));
-        Assert.True(PrototypeBridgeProtocol.IsNavigationAllowed("production-message"));
-        Assert.True(PrototypeBridgeProtocol.IsNavigationAllowed("daily-report"));
-        Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("settings"));
-        Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("filesystem"));
-        Assert.False(PrototypeBridgeProtocol.IsNavigationAllowed("home"));
         Assert.True(PrototypeBridgeProtocol.IsTrustedPrototypeSource(
             "https://prototype.production-assistant.local/index.html?route=daily-weld"));
         Assert.False(PrototypeBridgeProtocol.IsTrustedPrototypeSource(
@@ -163,14 +158,22 @@ public sealed class ArchitectureTests
     }
 
     [Fact]
-    public void Prototype_ready_message_only_matches_the_current_navigation()
+    public void Prototype_ready_message_only_matches_the_current_load()
     {
-        Assert.True(PrototypeBridgeProtocol.IsCurrentNavigation(
-            "daily-report", "current", "daily-report", "current"));
-        Assert.False(PrototypeBridgeProtocol.IsCurrentNavigation(
-            "production-message", "old", "daily-report", "current"));
-        Assert.False(PrototypeBridgeProtocol.IsCurrentNavigation(
-            "daily-report", string.Empty, "daily-report", string.Empty));
+        Assert.True(PrototypeBridgeProtocol.IsCurrentLoad("current", "current"));
+        Assert.False(PrototypeBridgeProtocol.IsCurrentLoad("old", "current"));
+        Assert.False(PrototypeBridgeProtocol.IsCurrentLoad("Current", "current"));
+        Assert.False(PrototypeBridgeProtocol.IsCurrentLoad(null, "current"));
+        Assert.False(PrototypeBridgeProtocol.IsCurrentLoad("", "current"));
+        Assert.False(PrototypeBridgeProtocol.IsCurrentLoad("   ", "current"));
+        Assert.False(PrototypeBridgeProtocol.IsCurrentLoad("", ""));
+    }
+
+    [Fact]
+    public void Prototype_bridge_allowlist_no_longer_contains_native_navigation()
+    {
+        Assert.DoesNotContain("app.navigateNative", PrototypeBridgeProtocol.AllowedOperations);
+        Assert.Equal(82, PrototypeBridgeProtocol.AllowedOperations.Count);
     }
 
     [Fact]

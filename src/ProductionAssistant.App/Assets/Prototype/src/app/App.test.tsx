@@ -569,7 +569,8 @@ describe('shared operation sidebar', () => {
     container.remove()
   })
 
-  it('keeps the legacy settings host contract across two open-close cycles', async () => {
+  it('[nav-switch] keeps the legacy settings host contract across two open-close cycles', async () => {
+    // 旧 ready 上报原始带前缀 route；nav-switch 上报归一页面路由，设置打开/关闭流程（settings.open、settings.close 及顺序）的断言保持不变。
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
@@ -599,7 +600,7 @@ describe('shared operation sidebar', () => {
       for (let cycle = 0; cycle < 2; cycle++) {
         await act(async () => { settings.click() })
         expect(window.location.search).toBe(search)
-        expect(notifyReady.mock.calls.map(([readyRoute]) => readyRoute)).toEqual([route])
+        expect(notifyReady.mock.calls.map(([readyRoute]) => readyRoute)).toEqual(['production-message'])
         await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
       }
 
