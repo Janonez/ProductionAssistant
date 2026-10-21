@@ -14,7 +14,6 @@
         </Grid.ColumnDefinitions>
 
         <Frame x:Name="ShellFrame" Grid.RowSpan="2" Grid.ColumnSpan="2" />
-        <Frame x:Name="ContentFrame" Grid.Row="1" Grid.Column="1" Visibility="Collapsed" />
         <Grid x:Name="AppTitleBar" Grid.Column="1" Margin="0,0,140,0" Canvas.ZIndex="20">
             <Border
                 x:Name="DevelopmentEnvironmentMarker"
