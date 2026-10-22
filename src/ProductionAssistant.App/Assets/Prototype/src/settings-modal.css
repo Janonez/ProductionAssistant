@@ -1,11 +1,3 @@
-body.settings-over-native,
-body.settings-over-native #root,
-.desktop-shell.settings-over-native,
-.desktop-shell.settings-over-native .desktop-shell-content,
-.desktop-shell.settings-over-native .native-content-slot {
-  background: transparent !important;
-}
-
 .settings-overlay {
   position: fixed;
   inset: 0;

@@ -69,19 +69,10 @@ body:has(.desktop-shell) {
   background: var(--bg-page, #fafaf9);
 }
 
-.desktop-shell-content-native {
-  overflow: hidden;
-}
-
-.native-content-slot,
 .desktop-shell-content > .app-shell,
 .desktop-shell-content .production-message-content,
 .desktop-shell-content .production-message-content > .app-shell {
   min-height: calc(100vh - 48px);
-}
-
-.native-content-slot {
-  background: var(--bg-page, #fafaf9);
 }
 
 .production-message-content > .app-shell > .sidebar {

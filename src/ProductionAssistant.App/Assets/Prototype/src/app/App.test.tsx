@@ -434,7 +434,6 @@ describe('shared operation sidebar', () => {
 
     expect(container.querySelector('.production-message-content h1')?.textContent).toBe('每日焊接数据模拟')
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('每日焊接数据模拟')
-    expect(container.querySelector('.native-content-slot')).toBeNull()
 
     await act(async () => { root.unmount() })
     container.remove()
