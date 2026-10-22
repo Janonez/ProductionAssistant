@@ -563,14 +563,14 @@ describe('shared operation sidebar', () => {
 
     const close = container.querySelector('[aria-label="关闭设置"]') as HTMLButtonElement
     await act(async () => { close.click(); await Promise.resolve() })
-    expect(invoke).toHaveBeenCalledWith('settings.close')
+    expect(invoke).not.toHaveBeenCalledWith('settings.close')
 
     await act(async () => { root.unmount() })
     container.remove()
   })
 
-  it('[nav-switch] keeps the legacy settings host contract across two open-close cycles', async () => {
-    // 旧 ready 上报原始带前缀 route；nav-switch 上报归一页面路由，设置打开/关闭流程（settings.open、settings.close 及顺序）的断言保持不变。
+  it('[nav-switch] keeps the settings host contract across two open-close cycles', async () => {
+    // 关闭设置不再通知宿主；settings.open 保留，仍派发 production-settings-updated，settings.close 不得再被调用。
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
@@ -578,7 +578,6 @@ describe('shared operation sidebar', () => {
 
     const order: string[] = []
     invoke.mockImplementation((operation: string) => {
-      if (operation === 'settings.close') order.push('settings.close')
       return Promise.resolve(operation === 'settings.open' ? settingsState : {})
     })
     const route = 'navigation:production-message'
@@ -606,11 +605,11 @@ describe('shared operation sidebar', () => {
 
       const settingsCalls = invoke.mock.calls.filter(([operation]) => operation === 'settings.open' || operation === 'settings.close')
       expect(settingsCalls).toEqual([
-        ['settings.open'], ['settings.close'], ['settings.open'], ['settings.close'],
+        ['settings.open'], ['settings.open'],
       ])
       expect(order).toEqual([
-        'production-settings-updated', 'settings.close',
-        'production-settings-updated', 'settings.close',
+        'production-settings-updated',
+        'production-settings-updated',
       ])
       expect(invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')).toEqual([])
     } finally {

@@ -7,7 +7,6 @@ public static class PrototypeBridgeProtocol
     public static readonly IReadOnlySet<string> AllowedOperations = new HashSet<string>(StringComparer.Ordinal)
     {
         "settings.open",
-        "settings.close",
         "settings.saveConnection",
         "settings.refreshDataSources",
         "settings.saveNotification",

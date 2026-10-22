@@ -1,6 +1,5 @@
 import { Component, lazy, Suspense, useCallback, useState, type ReactNode } from 'react'
 import { RouteSkeleton } from '../components/layout/LoadingSkeleton'
-import { invoke } from '../bridge/index'
 import { navigateInDocument } from '../routes/navigation'
 import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
@@ -37,7 +36,6 @@ export function App() {
   const closeSettings = useCallback(() => {
     setSettingsOpen(false)
     window.dispatchEvent(new Event('production-settings-updated'))
-    invoke('settings.close').catch(() => undefined)
   }, [])
 
   return <div className="desktop-shell">

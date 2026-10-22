@@ -1,6 +1,5 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using ProductionAssistant.Pages;
 using ProductionAssistant.Services;
@@ -34,7 +33,4 @@ public sealed partial class MainWindow : Window
 
         ShellFrame.Navigate(typeof(PrototypePage));
     }
-
-    internal void SetSettingsModalOpen(bool open) =>
-        Canvas.SetZIndex(ShellFrame, open ? 10 : 0);
 }
