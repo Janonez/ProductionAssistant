@@ -9,18 +9,6 @@ internal sealed partial class PrototypeBridge
 {
     private static readonly NotificationService SettingsNotifications = new();
 
-    private static object OpenSettings()
-    {
-        App.MainWindow.SetSettingsModalOpen(true);
-        return GetSettingsState();
-    }
-
-    private static object CloseSettings()
-    {
-        App.MainWindow.SetSettingsModalOpen(false);
-        return new { closed = true };
-    }
-
     private static async Task<object> SaveSettingsConnectionAsync(
         JsonElement payload,
         bool refresh,

@@ -17,7 +17,7 @@
 | 兼容段：测试契约拆分与补测 | 已完成 | #45–#48；`app/App.navigation.test.tsx`、`routes/hostRoute.contract.test.ts`、`components/layout/OperationSidebar.test.tsx`、`bridge/webview.test.ts`、`bridge/index.test.ts`、`bridge/mock.test.tsx`、`app/App.database-preview.business.test.tsx` 分担导航、解析、侧栏、transport、mock 与集成契约；#48 补测旧前缀宿主契约 |
 | 兼容段：旧前缀归一 | 已完成 | #49；`routes/index.ts` 返回 `{ route, navigation, displayRoute }`，`app/App.tsx` 保留原始 route/navigation 握手并按 displayRoute 展示；已移除前端原生占位分支与 settings-over-native 逻辑；仅有自动化测试验证，真实桌面未验证 |
 | 切换段 | 已实现并通过测试版桌面验收，待合并（分支 codex/nav-switch，基于 673b441） | 前端 `routes/navigation.ts` 导出 `subscribeRoute` 与 `navigateInDocument`，`resolveHostRoute` 只返回 `{ route, navigation }`，ready 在 `bridge/index.ts` 幂等；协议白名单 83 变 82，新增 `IsCurrentLoad` 与 `BuildDocumentUrl`；`PrototypePage` 改为整文档加载与代次校验，`MainWindow` 去掉 `_currentTag` 与 `NavigateTo`；dist 已重建；详见 5.2.1 |
-| 删除段 | 进行中（2026-10-21） | 已完成：#52 迁出 AutoMap 与 MappingAliases 到 `ProductionMessageMapping`；D2 删除三个旧页面、FileWorkflowShell 与 MainWindow.xaml 的 ContentFrame。未完成：`app/App.tsx` 的 settings.close 调用、`MainWindow.xaml.cs` 的 SetSettingsModalOpen 层级切换、`PrototypeBridge.Settings.cs` 的层级操作与 C# settings.close 操作、CSS 死样式（settings-modal.css、operation-sidebar.css）、App.test.tsx 中 native-content-slot 的断言 |
+| 删除段 | 进行中（2026-10-21） | 已完成：#52 迁出 AutoMap 与 MappingAliases 到 `ProductionMessageMapping`；D2 删除三个旧页面、FileWorkflowShell 与 MainWindow.xaml 的 ContentFrame；D3（2026-10-22）去掉 `app/App.tsx` 的 settings.close 调用、`MainWindow.xaml.cs` 的 SetSettingsModalOpen 层级切换与 C# settings.close 操作（白名单 82 变 81）。未完成：CSS 死样式（settings-modal.css、operation-sidebar.css）、App.test.tsx 中 native-content-slot 的断言（均留给 D4） |
 
 兼容段各行描述的是 #43–#49 合并时的状态，其中 app.navigateNative 委托与 displayRoute 已由切换段取消（见切换段行与 5.2.1）。删除段行中，MainWindow.xaml.cs 的 NavigateTo 及其对 ContentFrame、PlanPdfExportPage 的引用已在切换段删除；MainWindow.xaml 中的 ContentFrame 与 PlanPdfExportPage 文件本身仍在，留给删除段。【2026-10-21 更新：该段所说的 MainWindow.xaml 中的 ContentFrame 与 PlanPdfExportPage 文件本身已在 D2 删除。】
 
@@ -116,8 +116,8 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 
 ### 3.4 设置、来源和独立协议
 
-- settings.open 当前既返回设置数据，也抬高 ShellFrame；settings.close 仅降低层级。依据：`src/ProductionAssistant.App/PrototypeBridge.Settings.cs:12-21`；`src/ProductionAssistant.App/MainWindow.xaml.cs:68-69`。
-- 前端仅在原生占位且设置打开时增加 settings-over-native；关闭时隐藏弹窗、派发 production-settings-updated，再通知 settings.close。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:34-45,48-53`；透明背景见 `src/ProductionAssistant.App/Assets/Prototype/src/settings-modal.css:1-7`。以上为 `285476f` 基线事实；兼容段状态：前端原生占位分支与 settings-over-native 逻辑已在 #49 删除，样式残留待删除段清理。
+- settings.open 当前既返回设置数据，也抬高 ShellFrame；settings.close 仅降低层级。依据：`src/ProductionAssistant.App/PrototypeBridge.Settings.cs:12-21`；`src/ProductionAssistant.App/MainWindow.xaml.cs:68-69`。【2026-10-22：D3 已删除 settings.close 与设置弹窗层级抬高，settings.open 现只返回设置数据；上述 PrototypeBridge.Settings.cs 与 MainWindow.xaml.cs 的行号引用已失效。】
+- 前端仅在原生占位且设置打开时增加 settings-over-native；关闭时隐藏弹窗、派发 production-settings-updated，再通知 settings.close。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:34-45,48-53`；透明背景见 `src/ProductionAssistant.App/Assets/Prototype/src/settings-modal.css:1-7`。以上为 `285476f` 基线事实；兼容段状态：前端原生占位分支与 settings-over-native 逻辑已在 #49 删除，样式残留待删除段清理。【2026-10-22：D3 起前端关闭设置不再通知宿主，改为只隐藏弹窗并派发 production-settings-updated；上述 App.tsx 与 settings-modal.css 的行号引用已失效。】
 - settings.open 数据读取、Escape、焦点恢复和连接刷新后的字段缓存失效属于设置行为，不依赖原生内容覆盖。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/SettingsModal.tsx:51-68,77-85`。
 - 来源检查限定 HTTPS、默认端口、指定虚拟主机及 `/index.html`；消息和顶层导航均使用检查。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87`；`src/ProductionAssistant.App/PrototypeBridge.cs:33`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:80-84`。
 - ReportEditor 有独立 WebView2 消息协议，不经 Prototype 的 bridge/index.ts。依据：`src/ProductionAssistant.App/Assets/ReportEditor/editor-source.js:5,67,156,170`。
@@ -199,7 +199,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 
 ### 4.5 设置弹窗、原生能力与发布边界
 
-- 前端侧 native-content-slot 渲染与 settings-over-native 切换已移除；删除段剩余项为 CSS 死样式、App.tsx 的 settings.close 调用、C# 侧层级切换与 settings.close 操作、透明背景；仍然不删除整个设置样式文件。
+- 前端侧 native-content-slot 渲染与 settings-over-native 切换已移除；删除段剩余项为 CSS 死样式、App.tsx 的 settings.close 调用、C# 侧层级切换与 settings.close 操作、透明背景；仍然不删除整个设置样式文件。【2026-10-22：D3 已完成其中 App.tsx 的 settings.close 调用、C# 侧层级切换与 settings.close 操作；剩余为 CSS 死样式与透明背景，留给 D4。】
 - settings.open 的数据返回能力保留，去掉层级副作用；前端遮罩、Escape、焦点恢复、production-settings-updated 和字段缓存失效保持。现状依据见 3.4。
 - WinUI 过渡宿主仍需维护标题栏、环境标记与当前尺寸；业务 XAML 退役不等于这些窗口能力已经由 Electron 实现。依据：`src/ProductionAssistant.App/MainWindow.xaml:7-20`；`src/ProductionAssistant.App/MainWindow.xaml.cs:17-22`。
 - operation 白名单、消息来源检查、请求/响应/进度、业务结果 ID 与文件选择 Task.Yield 保护保留；切换段只撤掉导航权，不能顺带放开文件系统、凭据或任意 operation。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:5-87`；`src/ProductionAssistant.App/PrototypeBridge.cs:33,48-70`。
@@ -274,7 +274,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 - `BuildDocumentUrl` 规则：`loadId` 为空白抛 `ArgumentException`；来源不可信（非 https、非默认端口、host 或路径不符、为空或无法解析）时返回首次加载地址 `https://prototype.production-assistant.local/index.html?navigation=<转义后的 loadId>`；来源可信时用字符串操作取原始 query（丢弃 fragment），按 `&` 切片并跳过空片段，仅对键做解码后与 `navigation` 做 Ordinal 比较，第一个匹配片段原位替换为新令牌、后续重复项删除，没有则追加在末尾，其余片段原样保留（不解码、不重编码、顺序不变）。
 - 宿主：`navigation` URL 参数现在只标识本次文档加载代次（C# 内部 `_loadId`，Guid 的 N 格式），首次加载与每次重试时生成，业务切页不改它。首次加载地址为 `BuildDocumentUrl(null, loadId)`，不带 `route`，默认页由前端选择。
 - 宿主：`PrototypePage` 的 `LoadDocumentAsync(reuseCurrentSource)` 只保留“文档启动超时”（15 秒，收到匹配 ready 即取消，超时显示错误层）；业务切页没有宿主等待和加载层。`OnReactReady` 只校验来源可信与 `IsCurrentLoad`，`route` 只写日志。重试 `Retry_Click`：先换新 `_loadId`；已初始化时读取 `CoreWebView2.Source`，经 `BuildDocumentUrl` 重建地址并整页导航；未初始化则走 `InitializeAsync`。
-- 宿主：`MainWindow` 不再有 `_currentTag` 与 `NavigateTo`，构造函数只导航到 `PrototypePage`；`PrototypeBridge` 构造函数变为 `(WebView2, Action<string, string> ready)`，不再有 `_navigate` 与 `Navigate()`。`settings.close`、`SetSettingsModalOpen`、`ContentFrame`（XAML）、`PlanPdfExportPage` 文件本身保留给删除段。【2026-10-21：其中 ContentFrame（XAML）与 PlanPdfExportPage 已在 D2 删除。】
+- 宿主：`MainWindow` 不再有 `_currentTag` 与 `NavigateTo`，构造函数只导航到 `PrototypePage`；`PrototypeBridge` 构造函数变为 `(WebView2, Action<string, string> ready)`，不再有 `_navigate` 与 `Navigate()`。`settings.close`、`SetSettingsModalOpen`、`ContentFrame`（XAML）、`PlanPdfExportPage` 文件本身保留给删除段。【2026-10-21：其中 ContentFrame（XAML）与 PlanPdfExportPage 已在 D2 删除。】【2026-10-22：其中 settings.close 与 SetSettingsModalOpen 已在 D3 删除。】
 - 日志与文案变化：`route-start-*`、`route-ready-*`、`navigation-start` 改为 `document-load-start`、`document-ready-wait=…ms-route=…`、`load-failed-*`；宿主错误文案“页面切换失败”改为“页面加载失败。请重试加载。”。
 - F5 与 ready：F5 重载文档不经过 `LoadDocumentAsync`，URL 中的 `navigation` 仍等于当前代次，因此重载后的 ready 被接受；每次 F5 产生一次 ready，不会重置启动超时。
 
@@ -309,7 +309,7 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 
 1. AutoMap 与 MappingAliases 从旧页面迁出至 Core 或 Infrastructure，具体归属待确认；作为独立任务、独立 C# 授权，先迁出并验证调用，再删除页面；不得直接删除现存映射。依据：`src/ProductionAssistant.App/PrototypeBridge.cs:366`；`src/ProductionAssistant.App/Pages/ProductionMessagePage.xaml.cs:11-29,470-492`。【2026-10-21：已完成，迁至 `src/ProductionAssistant.Infrastructure/Services/ProductionMessageMapping.cs`，#52，附 6 个直接测试。】
 2. 删除已证实无页面入口的三个旧业务 XAML 及其 UI 代码；复核后再清理仅被旧页面使用的 FileWorkflowShell。页面清单与引用依据见 3.3。【2026-10-21：三个旧页面、FileWorkflowShell 已在 D2 删除；SkeletonShape 与 PrototypePage 保留。】
-3. 去掉 ContentFrame、未知标签原生兜底、原生占位及跨内容覆盖；同步去掉 settings.close、层级回调和透明背景，保留 settings.open 数据与前端设置行为。位置：`src/ProductionAssistant.App/MainWindow.xaml:16-18`；`MainWindow.xaml.cs:56-69`；`PrototypeBridge.Settings.cs:12-21`（后二者同属该 App 目录）；`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:34-53`、`operation-sidebar.css:72-84`、`settings-modal.css:1-7`。
+3. 去掉 ContentFrame、未知标签原生兜底、原生占位及跨内容覆盖；同步去掉 settings.close、层级回调和透明背景，保留 settings.open 数据与前端设置行为。位置：`src/ProductionAssistant.App/MainWindow.xaml:16-18`；`MainWindow.xaml.cs:56-69`；`PrototypeBridge.Settings.cs:12-21`（后二者同属该 App 目录）；`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:34-53`、`operation-sidebar.css:72-84`、`settings-modal.css:1-7`。【2026-10-22：其中 settings.close、层级回调（SetSettingsModalOpen）已在 D3 删除，settings.open 数据与前端设置行为保留；上述 C# 与 App.tsx 位置引用已因 D3 失效。透明背景（settings-modal.css 第 1-7 行）与 operation-sidebar.css 旧选择器留给 D4。】
 4. 清理旧导航声明、无引用回调与已被替换的测试/文档说明；保留旧 URL 的前端归一能力，不因清理移除已承诺兼容。
 
 不做：删除活跃 PrototypePage、原生文件选择能力、业务 ID 校验或设置数据接口。PrototypePage 的整个退役属于 Electron 实际接管后的独立范围。
@@ -359,7 +359,7 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 ### 7.3 删除段
 
 - 把原生生产消息页面整体删掉，破坏仍使用的 AutoMap/MappingAliases。依据：`src/ProductionAssistant.App/PrototypeBridge.cs:366`；`src/ProductionAssistant.App/Pages/ProductionMessagePage.xaml.cs:11-29,470-492`。【2026-10-21：AutoMap 已迁出（#52），旧页面已删除，此项风险已消除。】
-- 删除 C# 侧 Frame 或 settings.close 时误删设置数据读取；清理 CSS 时误删整个设置样式文件。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:45,52-53`；`src/ProductionAssistant.App/PrototypeBridge.Settings.cs:12-21`。
+- 删除 C# 侧 Frame 或 settings.close 时误删设置数据读取；清理 CSS 时误删整个设置样式文件。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:45,52-53`；`src/ProductionAssistant.App/PrototypeBridge.Settings.cs:12-21`。【2026-10-22：D3 已删除 C# 的 settings.close 操作，并去掉 App.tsx 的 settings.close 调用；settings.open 的数据读取保留。设置样式文件未删除。依据中的 PrototypeBridge.Settings.cs 行号已因 D3 失效。】
 - 删除页面时顺带删文件选择 Task.Yield、业务结果 ID 或操作级锁，可能引入选择器重入、无效结果访问和并发问题。依据：`src/ProductionAssistant.App/PrototypeBridge.cs:54-56`；`PrototypeBridge.PlanPdf.cs:18-19,37-38,75`、`PrototypeBridge.Meeting.cs:15-16,32-37`（同一 App 目录）。
 - 把 PrototypePage 当旧业务页删除，提前移除仍在工作的 WinUI 装载与错误层。依据：`src/ProductionAssistant.App/MainWindow.xaml.cs:37`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml:7-12,90-99`。
 

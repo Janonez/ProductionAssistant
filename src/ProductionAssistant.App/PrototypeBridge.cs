@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 using Microsoft.UI.Xaml.Controls;
 using ProductionAssistant.Models;
 using ProductionAssistant.Services;
-using ProductionAssistant.Pages;
 
 namespace ProductionAssistant;
 
@@ -82,8 +81,7 @@ internal sealed partial class PrototypeBridge
     private async Task<object?> DispatchAsync(string id, string operation, JsonElement payload, CancellationToken cancellationToken) =>
         operation switch
         {
-            "settings.open" => OpenSettings(),
-            "settings.close" => CloseSettings(),
+            "settings.open" => GetSettingsState(),
             "settings.saveConnection" => await SaveSettingsConnectionAsync(payload, refresh: false, cancellationToken),
             "settings.refreshDataSources" => await SaveSettingsConnectionAsync(payload, refresh: true, cancellationToken),
             "settings.saveNotification" => SaveSettingsNotification(payload),

@@ -144,22 +144,19 @@ describe('App host navigation compatibility', () => {
     expect(navigationCalls()).toEqual([])
   })
 
-  it('dispatches production-settings-updated before requesting settings.close', async () => {
+  it('dispatches production-settings-updated and no longer requests settings.close', async () => {
     const order: string[] = []
     const updated = () => { order.push('production-settings-updated') }
     window.addEventListener('production-settings-updated', updated)
     try {
       await act(async () => { sidebarButton('设置').click() })
       expect(container.querySelector('[role="dialog"]')).not.toBeNull()
-      invoke.mockImplementation((operation: string) => {
-        if (operation === 'settings.close') order.push('settings.close')
-        return Promise.resolve({})
-      })
+      invoke.mockImplementation(() => Promise.resolve({}))
 
       await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
 
-      expect(order).toEqual(['production-settings-updated', 'settings.close'])
-      expect(invoke.mock.calls.filter(([operation]) => operation === 'settings.close')).toEqual([['settings.close']])
+      expect(order).toEqual(['production-settings-updated'])
+      expect(invoke.mock.calls.filter(([operation]) => operation === 'settings.close')).toEqual([])
       expect(container.querySelector('[role="dialog"]')).toBeNull()
       expect(navigationCalls()).toEqual([])
     } finally {
