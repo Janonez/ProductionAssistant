@@ -16,8 +16,8 @@
 | 兼容段：导航入口集中 | 已完成 | #44；`routes/navigation.ts` 提供统一入口，`app/App.tsx` 委托该入口，仍调用 app.navigateNative |
 | 兼容段：测试契约拆分与补测 | 已完成 | #45–#48；`app/App.navigation.test.tsx`、`routes/hostRoute.contract.test.ts`、`components/layout/OperationSidebar.test.tsx`、`bridge/webview.test.ts`、`bridge/index.test.ts`、`bridge/mock.test.tsx`、`app/App.database-preview.business.test.tsx` 分担导航、解析、侧栏、transport、mock 与集成契约；#48 补测旧前缀宿主契约 |
 | 兼容段：旧前缀归一 | 已完成 | #49；`routes/index.ts` 返回 `{ route, navigation, displayRoute }`，`app/App.tsx` 保留原始 route/navigation 握手并按 displayRoute 展示；已移除前端原生占位分支与 settings-over-native 逻辑；仅有自动化测试验证，真实桌面未验证 |
-| 切换段 | 已实现并通过测试版桌面验收，待合并（分支 codex/nav-switch，基于 673b441） | 前端 `routes/navigation.ts` 导出 `subscribeRoute` 与 `navigateInDocument`，`resolveHostRoute` 只返回 `{ route, navigation }`，ready 在 `bridge/index.ts` 幂等；协议白名单 83 变 82，新增 `IsCurrentLoad` 与 `BuildDocumentUrl`；`PrototypePage` 改为整文档加载与代次校验，`MainWindow` 去掉 `_currentTag` 与 `NavigateTo`；dist 已重建；详见 5.2.1 |
-| 删除段 | 进行中（2026-10-21） | 已完成：#52 迁出 AutoMap 与 MappingAliases 到 `ProductionMessageMapping`；D2 删除三个旧页面、FileWorkflowShell 与 MainWindow.xaml 的 ContentFrame；D3（2026-10-22）去掉 `app/App.tsx` 的 settings.close 调用、`MainWindow.xaml.cs` 的 SetSettingsModalOpen 层级切换与 C# settings.close 操作（白名单 82 变 81）。D4（2026-10-23）清理 settings-modal.css 与 operation-sidebar.css 的旧覆盖样式，并删除 App.test.tsx 中 native-content-slot 的不存在断言，dist 已重建。未完成：D 系列计划项已全部完成；第 5.3 节第 4 项（旧导航声明、无引用回调、被替换的测试与文档说明）是否仍有残留，待核实 |
+| 切换段 | 已实现并通过测试版桌面验收，待合并（分支 codex/nav-switch，基于 673b441） | 前端 `routes/navigation.ts` 导出 `subscribeRoute` 与 `navigateInDocument`，`resolveHostRoute` 只返回 `{ route, navigation }`，ready 在 `bridge/index.ts` 幂等；协议白名单 83 变 82，新增 `IsCurrentLoad` 与 `BuildDocumentUrl`；`PrototypePage` 改为整文档加载与代次校验，`MainWindow` 去掉 `_currentTag` 与 `NavigateTo`；dist 已重建；详见 5.2.1。【2026-10-23：该切换段已合并（#51，main = e89ea52），上列状态“待合并”为当时状态。】 |
+| 删除段 | 进行中（2026-10-21） | 已完成：#52 迁出 AutoMap 与 MappingAliases 到 `ProductionMessageMapping`；D2 删除三个旧页面、FileWorkflowShell 与 MainWindow.xaml 的 ContentFrame；D3（2026-10-22）去掉 `app/App.tsx` 的 settings.close 调用、`MainWindow.xaml.cs` 的 SetSettingsModalOpen 层级切换与 C# settings.close 操作（白名单 82 变 81）。D4（2026-10-23）清理 settings-modal.css 与 operation-sidebar.css 的旧覆盖样式，并删除 App.test.tsx 中 native-content-slot 的不存在断言，dist 已重建。5.3 节第 4 项于 2026-10-23 只读核实：在检索范围内（旧导航声明、无引用回调、被替换的测试与文档说明相关关键字）未发现可清理残留，命中的 navigateNative、settings.close 负向断言与旧前缀兼容测试按设计保留。未完成：删除段前半 D1–D4 已无待办；PrototypePage 与 WinUI 的整体退役属 Electron 接管之后的独立范围 |
 
 兼容段各行描述的是 #43–#49 合并时的状态，其中 app.navigateNative 委托与 displayRoute 已由切换段取消（见切换段行与 5.2.1）。删除段行中，MainWindow.xaml.cs 的 NavigateTo 及其对 ContentFrame、PlanPdfExportPage 的引用已在切换段删除；MainWindow.xaml 中的 ContentFrame 与 PlanPdfExportPage 文件本身仍在，留给删除段。【2026-10-21 更新：该段所说的 MainWindow.xaml 中的 ContentFrame 与 PlanPdfExportPage 文件本身已在 D2 删除。】
 
@@ -263,7 +263,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 
 ### 5.2.1 切换段实施结果（2026-10-20，分支 codex/nav-switch，基于 673b441）
 
-本小节记录实现后的事实，其余设计正文不改。行号不再逐项列出，以分支代码为准；状态为已实现并通过测试版桌面验收，待合并。
+本小节记录实现后的事实，其余设计正文不改。行号不再逐项列出，以分支代码为准；状态为已实现并通过测试版桌面验收，待合并。【2026-10-23：该切换段已合并（#51，main = e89ea52），上文“待合并”为当时状态。】
 
 协议最终形状：
 
