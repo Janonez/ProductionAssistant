@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace ProductionAssistant.Services;
 
@@ -43,6 +44,7 @@ public sealed class TencentSheetService
                 message += " 已提交：" + string.Join("、", completed.EnumerateArray().Select(row => row.GetProperty("address").GetString()));
             if (root.TryGetProperty("uncertainAddress", out var uncertain) && uncertain.ValueKind == JsonValueKind.String)
                 message += "；结果待确认：" + uncertain.GetString();
+            message += BuildDiagnosticSuffix(root);
             if (root.TryGetProperty("phase", out var phase) && phase.GetString() == "check" &&
                 root.TryGetProperty("completed", out var submitted) && submitted.GetArrayLength() == 0 &&
                 root.TryGetProperty("uncertainAddress", out var pending) && pending.ValueKind == JsonValueKind.Null)
@@ -50,6 +52,24 @@ public sealed class TencentSheetService
             throw new InvalidOperationException(message);
         }
         return root.GetProperty("data").Clone();
+    }
+
+    private static string BuildDiagnosticSuffix(JsonElement root)
+    {
+        var code = root.TryGetProperty("code", out var codeValue) && codeValue.ValueKind == JsonValueKind.String
+            ? codeValue.GetString() : null;
+        code = string.IsNullOrWhiteSpace(code) ? null : code[..Math.Min(code.Length, 64)];
+        var details = root.TryGetProperty("details", out var detailsValue) && detailsValue.ValueKind == JsonValueKind.String
+            ? detailsValue.GetString() : null;
+        if (!string.IsNullOrWhiteSpace(details))
+        {
+            details = Regex.Replace(details, @"https?://\S+", "[网址已省略]");
+            details = Regex.Replace(details, @"\s+", " ").Trim();
+        }
+        details = string.IsNullOrWhiteSpace(details) ? null : details[..Math.Min(details.Length, 200)];
+        if (code is not null && details is not null) return $"（代码：{code}；详情：{details}）";
+        if (code is not null) return $"（代码：{code}）";
+        return details is null ? "" : $"（详情：{details}）";
     }
 
     private static FileStream AcquireOperationLease()
