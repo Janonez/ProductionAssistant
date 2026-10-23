@@ -25,6 +25,57 @@ public sealed class TencentSheetTests
     }
 
     [Fact]
+    public void Worker_error_preserves_code_and_redacts_details_urls()
+    {
+        var response = new JsonObject { ["ok"] = false, ["error"] = "failure", ["code"] = "SaveConfirmationPending",
+            ["details"] = "确认失败 https://example.com/doc?token=SECRET\r\n  等待回读" };
+        using var json = System.Text.Json.JsonDocument.Parse(response.ToJsonString());
+        var error = Assert.Throws<InvalidOperationException>(() => TencentSheetService.ReadResponse(json.RootElement));
+        Assert.Contains("SaveConfirmationPending", error.Message);
+        Assert.Contains("详情：确认失败 [网址已省略] 等待回读", error.Message);
+        Assert.DoesNotContain("SECRET", error.Message);
+        Assert.DoesNotContain("https://", error.Message);
+    }
+
+    [Fact]
+    public void Worker_error_details_are_limited_to_200_characters()
+    {
+        var response = new JsonObject { ["ok"] = false, ["error"] = "failure", ["details"] = new string('x', 500) };
+        using var json = System.Text.Json.JsonDocument.Parse(response.ToJsonString());
+        var error = Assert.Throws<InvalidOperationException>(() => TencentSheetService.ReadResponse(json.RootElement));
+        Assert.Contains("详情：", error.Message);
+        Assert.InRange(error.Message.Length, 1, "failure".Length + "（详情：）".Length + 200);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Worker_error_without_diagnostics_preserves_original_message(bool includeNullProperties)
+    {
+        var response = new JsonObject { ["ok"] = false, ["error"] = "failure" };
+        if (includeNullProperties)
+        {
+            response["code"] = null;
+            response["details"] = null;
+        }
+        using var json = System.Text.Json.JsonDocument.Parse(response.ToJsonString());
+        var error = Assert.Throws<InvalidOperationException>(() => TencentSheetService.ReadResponse(json.RootElement));
+        Assert.Equal("failure", error.Message);
+        Assert.DoesNotContain("代码：", error.Message);
+    }
+
+    [Fact]
+    public void Worker_diagnostics_preserve_preflight_exception_classification()
+    {
+        var response = new JsonObject { ["ok"] = false, ["error"] = "failure", ["phase"] = "check",
+            ["completed"] = new JsonArray(), ["uncertainAddress"] = null,
+            ["code"] = "AnchorContentPending", ["details"] = "日期表头尚未就绪" };
+        using var json = System.Text.Json.JsonDocument.Parse(response.ToJsonString());
+        var error = Assert.Throws<TencentSheetPreflightException>(() => TencentSheetService.ReadResponse(json.RootElement));
+        Assert.Contains("代码：AnchorContentPending", error.Message);
+    }
+
+    [Fact]
     public void Task_storage_isolates_controls_rejects_stale_changes_and_preserves_history()
     {
         var folder = Path.Combine(Path.GetTempPath(), "tencent-storage-test-" + Guid.NewGuid().ToString("N"));
