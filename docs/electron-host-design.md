@@ -1,0 +1,67 @@
+# Electron 宿主设计
+
+本文记录 Electron 宿主的设计决策与实测依据。导航契约见 `navigation-contract-design.md`，本文只记录 Electron 阶段的决定，不授权任何实现、删除或发布；每项决定实施前仍须各自授权。
+
+决策编号用 EHD-，与导航契约文档的 ADR- 互不重叠。待决项按字母分为 A 至 F：A 文档来源（本文已决）、B 能力 transport、C 业务会话是否长驻、D localStorage 迁移、E ReportEditor 独立协议、F navigation 参数改名。B 至 F 尚未决定，不在本文范围内，只在第 2 节记录与 A 相关的约束。
+
+## 1. 决策记录（待决项 A：文档来源）
+
+| 编号 | 已定决策 | 理由 | 被否决的替代方案 |
+|---|---|---|---|
+| EHD-01 | 前端文档通过自定义协议 pa 提供，内容来自应用目录内打包的前端文件；不开监听端口，不使用 file:// | 来源固定，可严格比较；不暴露端口；Electron 官方安全文档建议避免 file:// 并优先自定义协议；原型验证通过，见第 3 节 | 本机回环 HTTP 服务（需开监听端口，且容易诱使能力通道共用该端口）；file://（来源不确定，Web Storage 归属不确定） |
+| EHD-02 | 协议权限只开 standard、secure、supportFetchAPI；其余保持默认关闭，新增权限须逐项记录理由 | 原型验证中这三项足够加载页面、模块脚本、样式和字体；权限越少，页面能做的事越少 | 一次性开启全部权限项 |
+| EHD-03 | 来源检查：IPC 事件的 senderFrame 为 null 一律拒绝；页面地址的协议、主机、路径必须与目标页面严格相等才接受，查询串忽略；另要求发送者为顶层框架，所用属性实现时按所选版本文档核对，未核对前不得声称已校验 | 沿用现有 WebView2 来源检查的严格度；官方安全文档建议校验所有 IPC 消息的发送者；senderFrame 在框架已跳转或销毁后可能为 null | 只校验主机；senderFrame 为 null 时放行；把校验放在页面一侧 |
+| EHD-04 | 页面只能通过预加载暴露的窄接口通信：仅 postMessage 与 addEventListener 两个方法；全局名不得使用 chrome；contextIsolation 与 sandbox 显式开启，不依赖默认值；不暴露 ipcRenderer | 页面里已存在 window.chrome，绑定同名对象会失败（原型日志已出现）；官方安全文档建议不要把 IPC 整体暴露给页面；前端只在 bridge/webview.ts 一处依赖宿主对象，适配点集中 | 沿用 chrome.webview 名字；暴露 ipcRenderer；关闭上下文隔离 |
+| EHD-05 | 文件服务：请求路径解析为绝对路径后必须位于对应根目录之内，再用真实路径复查符号链接；越界返回 403，文件不存在返回 404 | 防止页面读取应用目录之外的文件；原型已实现，越界请求未做运行测试，见第 3 节未覆盖部分 | 只做字符串前缀检查 |
+
+## 2. 与待决项 A 相关的待定事项
+
+- 内容安全策略：现有 dist/index.html 没有内容安全策略，Electron 控制台警告指出没有策略或策略不安全。宿主可在协议响应中补充，具体策略待设计，须用真实页面验证，不能凭推测写。
+- 应用菜单：原型没有设置菜单。原型未设置菜单时，本机观察到 Ctrl+R 可重新加载、F5 不能（默认菜单的定义未核对）；是否保留重新加载、是否绑定 F5 待定。
+- 存储位置：Electron 与 WebView2 的存储目录是两个独立位置，现有 localStorage 内容不会自动带到新宿主；是否迁移属待决项 D。现有生产代码只有两处使用 localStorage：日报字段缓存和消息模板的最近使用与自定义字段；sessionStorage 与 indexedDB 没有使用（2026-10-26 只读检索）。
+- 能力通道：原型只证明消息能从真实页面送达主进程并通过校验，没有证明真实前端能通信。真实前端目前只识别 window.chrome.webview，须在前端 bridge 增加 Electron 传输实现；属待决项 B。
+- 打包与分发：Electron 自 42 起不再在安装脚本中下载二进制，首次运行或手动执行 install-electron 才下载。打包与发布流程须明确二进制来源，不能依赖安装时自动带上。
+
+## 3. 原型验证记录（2026-10-26）
+
+原型位于本机仓库内被 .gitignore 排除的目录，不随仓库提交；本节为结论摘要。验证环境：Electron 45.0.0，Node v24.19.0，npm 12.0.2，一台机器。被加载的前端是提交 aa4d203 的 Assets/Prototype/dist 的拷贝，共 123 个文件，index.html 的 SHA256 为 30CCA028AA0CB8B1A2CC228F4E8DFB7020E1F4965276A6DE562CDDD9B9ADCABE。
+
+通过与放弃标准在运行前先写下，再按标准验证。结果如下。
+
+| 项 | 结果 | 依据 |
+|---|---|---|
+| A1 加载 | 通过 | 页面、样式、模块脚本、字体以及六个模块的按需加载块均返回 200，无失败请求记录；权限仅 standard、secure、supportFetchAPI |
+| A2 iframe.srcdoc 与存储 | 通过，有一处未解释 | 探针连续两次运行，第二次读到第一次写入的值，父页面读到 iframe 写入的值；iframe 内 location.origin 显示为 null，原因未解释；真实模板页把父页面的 localStorage 作为参数传入脚本，预计影响很小，未实测真实模板页 |
+| A4 无监听端口 | 通过 | 启动前后监听端口列表均为 45 行，逐行对比无差异 |
+| A5 发送者校验 | 三种情形通过 | pa://app/index.html 被接受；pa://test/other.html 因来源不符被拒绝；pa://app/__probe.html 因路径不符被拒绝 |
+| A3 F5 与焦点 | 见第 4 节 | 人工观察，只记录，不影响选型 |
+
+未覆盖的部分：
+
+- 被接受的 app.ready 由自测脚本在真实页面内注入，不是真实前端发出，真实前端与宿主的通信未验证。
+- senderFrame 为 null 的拒绝分支在代码中存在，但没有被触发过。
+- 子框架冒充顶层页面的情形没有检查，也没有测试。
+- 文件服务的越界请求（路径穿越、符号链接）没有做运行测试。
+- 只在一台机器上运行了一轮，没有打包，打包后的行为未测试。
+
+## 4. F5 与焦点现象的对照
+
+WebView2 桌面验收中观察到的现象，在 Electron 原型中做了人工对照。原型未设置菜单，重新加载用 Ctrl+R；F5 在原型中不可用，与默认菜单把重新加载绑在 Ctrl+R 的推测一致，但未核对官方定义。
+
+| WebView2 现象 | Electron 原型 | 判断 |
+|---|---|---|
+| 启动后直接重新加载不生效，点一下页面才生效 | 同样出现 | 不是 WebView2 特有；推断为页面没有获得初始键盘焦点，未验证 |
+| 切换模块后焦点环停在侧栏按钮 | 同样出现，点一下空白处消失 | 推断为浏览器的正常焦点行为，未验证 |
+| 重新加载首次较慢，之后变快 | 未出现，始终很快 | 只在 WebView2 出现 |
+| 默认模块重新加载没有骨架，只有进度圆圈序号变化 | 同样没有骨架 | 前端自身行为，换宿主不会消失 |
+
+结论：第 1、2、4 行预计在换宿主后仍然存在，登记为 Electron 阶段的验收项，由前端处理；第 3 行预计随宿主消失，须在真实宿主上确认。以上基于一台机器上的人工观察，不是系统测试。
+
+## 5. 依据
+
+- Electron 安全文档：https://electronjs.org/docs/latest/tutorial/security （发送者校验、避免 file://、不直接暴露 IPC 等建议）。该页为 latest，内容可能变化，实现时按所选版本核对。
+- Electron v45.0.0 文档：protocol（registerSchemesAsPrivileged 须在应用就绪前调用且只能调用一次，handle 在就绪后注册）https://github.com/electron/electron/blob/v45.0.0/docs/api/protocol.md ；IpcMainEvent 的 senderFrame（可能为 null）https://github.com/electron/electron/blob/v45.0.0/docs/api/structures/ipc-main-event.md ；WebFrameMain 的 url https://github.com/electron/electron/blob/v45.0.0/docs/api/web-frame-main.md
+- Electron 42 发布说明：https://electronjs.org/zh/blog/electron-42-0 （二进制不再由安装脚本下载）。
+- 本仓库事实：来源检查见 `src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs`，页面加载见 `src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs`，前端传输见 `src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts`；行号以代码为准。
+
+本轮只写入决定，不修改代码；原型代码不进仓库。
