@@ -305,7 +305,13 @@ public sealed class TeableBusinessStore
                 : field?.Type == "relation" && cell.Value is JsonArray links && actual[cell.Key] is JsonArray actualLinks
                     ? links.Select(link => link!["id"]!.GetValue<string>()).Order().SequenceEqual(actualLinks.Select(link => link!["id"]!.GetValue<string>()).Order())
                     : JsonNode.DeepEquals(cell.Value, actual[cell.Key]);
-            if (!same) throw new InvalidOperationException("写入回读不一致，请核对目标记录后再操作。");
+            if (!same)
+            {
+                var present = actual.TryGetPropertyValue(cell.Key, out var readback);
+                throw new InvalidOperationException(
+                    $"写入回读不一致，字段“{field?.Name ?? cell.Key}”：预期 {cell.Value?.ToJsonString() ?? "null"}（{cell.Value?.GetValueKind() ?? JsonValueKind.Null}），" +
+                    $"回读 {readback?.ToJsonString() ?? (present ? "null" : "<缺字段>")}（{(present ? (readback?.GetValueKind() ?? JsonValueKind.Null).ToString() : "Missing")}）。请核对目标记录后再操作。");
+            }
         }
     }
 
