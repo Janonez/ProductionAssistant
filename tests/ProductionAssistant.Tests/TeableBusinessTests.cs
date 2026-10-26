@@ -115,6 +115,42 @@ public sealed class TeableBusinessTests
         Assert.Equal(1, fixture.Posts);
     }
 
+    [Theory]
+    [InlineData("224.380", "224.38", "Number")]
+    [InlineData("224.380", "\"224.380\"", "String")]
+    [InlineData("224.380", null, "Missing")]
+    [InlineData("224.380", "null", "Null")]
+    [InlineData("224", "224.000", "Number")]
+    [InlineData("0", "0.000", "Number")]
+    public async Task Material_inbound_readback_reports_only_the_mismatching_field(
+        string expectedJson, string? readbackJson, string readbackType)
+    {
+        using var fixture = new Fixture();
+        var weight = decimal.Parse(expectedJson, System.Globalization.CultureInfo.InvariantCulture);
+        var expected = JsonSerializer.SerializeToNode(weight)!;
+        var readback = readbackJson is null ? null : JsonNode.Parse(readbackJson);
+        // .NET 8 DeepEquals treats numeric JSON with different decimal places as unequal.
+        Assert.False(JsonNode.DeepEquals(expected, readback));
+        Assert.Equal(expectedJson, expected.ToJsonString());
+        fixture.ReadbackFields = fields =>
+        {
+            if (readbackJson is null) fields.Remove("fldPlateMaterial");
+            else fields["fldPlateMaterial"] = readback?.DeepClone();
+        };
+        var service = new MaterialInboundNotionFillService(new HttpClient(new Handler(_ => throw new Exception("No Notion calls"))),
+            fixture.Service, () => new NotionSettings { UsesTeable = true }, fixture.Store);
+        var preview = new NotionFillPreview(new(new(2026, 10, 9), weight, 987.654m), false, "test");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateAsync(new NotionFillJob { TargetDataSourceId = "material" }, preview));
+
+        Assert.Equal($"写入回读不一致，字段“板材”：预期 {expectedJson}（Number），回读 {readbackJson ?? "<缺字段>"}（{readbackType}）。请核对目标记录后再操作。", error.Message);
+        Assert.DoesNotContain("987.654", error.Message);
+        Assert.DoesNotContain("2026-10-09", error.Message);
+        Assert.DoesNotContain("tblMaterial", error.Message);
+        Assert.Equal(1, fixture.Posts);
+    }
+
     [Fact]
     public async Task Uncertain_create_is_persistently_blocked_and_stale_updates_are_rejected()
     {
@@ -147,6 +183,7 @@ public sealed class TeableBusinessTests
         public int Posts, Patches;
         public bool FailPost;
         public bool RelationDrift;
+        public Action<JsonObject>? ReadbackFields;
         public JsonObject? LastFields;
         public TeableBusinessStore Store { get; }
         public NotionImportService Service { get; }
@@ -185,8 +222,11 @@ public sealed class TeableBusinessTests
                     ["options"] = field.Type != "relation" ? null : new JsonObject { ["foreignTableId"] = RelationDrift ? "tblUnexpected" :
                         _mapping.Sources.Single(source => source.Id == field.RelationSourceId).TableId } }).ToArray());
             else if (request.Method == HttpMethod.Get)
+            {
                 result = parts.Length == 5 ? Records[table].Single(record => record["id"]!.GetValue<string>() == parts[4]).DeepClone()
                     : new JsonObject { ["records"] = new JsonArray(Records[table].Select(record => record.DeepClone()).ToArray()) };
+                if (parts.Length == 5) ReadbackFields?.Invoke(result["fields"]!.AsObject());
+            }
             else
             {
                 var body = JsonNode.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult())!;
