@@ -329,7 +329,7 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 |---|---|---|---|
 | ADR-01 | 兼容段只集中路由表、导航入口、拆测试契约及归一旧前缀，仍由 app.navigateNative 驱动；正常七入口行为零变化。前端写 URL 与宿主退出每页握手在切换段同一 PR 原子完成 | 旧校验强制比较 route/navigation；半套切换会使 ready 无效并触发整页隐藏。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:131-133,187-193` | 前端先切页、C# 以后再改；双端同时写 URL；为兼容而放松旧 ready 校验。旧前缀修正的零变化边界见 4.2 |
 | ADR-02 | 模块切换继续 replaceState，不新增返回/前进历史；变化及时写回 URL，完整重载/重试恢复模块 | 保持已有历史行为，同时使 URL 能承载重载状态。现状依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:119-127`；现有完整重载入口：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:21` | pushState 新增模块历史；只改内存 route；让 C# 默认模块覆盖当前 URL |
-| ADR-03 | 过渡期保持 `/index.html?route=…`，navigation 不再决定业务页；Electron 来源/localStorage 留到后续 | 当前来源检查限定 /index.html，不能把装载协议变化混入导航权切换。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87` | 直接改 pathname；在此选择 Electron scheme 或清空/搬迁浏览器存储 |
+| ADR-03 | 过渡期保持 `/index.html?route=…`，navigation 不再决定业务页；Electron 来源/localStorage 留到后续 | 当前来源检查限定 /index.html，不能把装载协议变化混入导航权切换。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87` | 直接改 pathname；在此选择 Electron scheme 或清空/搬迁浏览器存储【2026-10-26：Electron 文档来源已决（自定义协议），见 electron-host-design.md 的 EHD-01；localStorage 迁移仍待决。】 |
 | ADR-04 | 保留按文档加载 ID 的启动确认，可沿用 app.ready；业务路由就绪交前端，route 仅日志；启动标准为外壳和首路由可呈现，不等业务查询/iframe | 分开宿主装载与业务切页，仍防旧文档误显示；保持当前 mounted 路由边界。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:59-64`；`routes/RouteReady.tsx:4-7`（同一 src 目录）；旧文档保护现状见 `src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96` | 删除全部启动确认；只用文档加载事件；等待业务查询/iframe 才显示；继续要求 C# 当前 route 一致 |
 | ADR-05 | 忙碌时切页/关窗保持现状，切页不主动取消已发操作、不新增守卫；守卫独立登记 | 当前没有统一导航/关窗业务拦截，后端忙碌锁按操作释放；不顺带改变业务执行。依据：`src/ProductionAssistant.App/MainWindow.xaml.cs:41-65`；`PrototypeBridge.PlanPdf.cs:18-19,75`、`PrototypeBridge.Meeting.cs:15-16,37`（同一 App 目录） | 本迁移中禁止切页/关窗；离页清锁或强制取消。此决策不保证关窗或进程退出后任务还能继续完成，该能力未确认 |
 | ADR-06 | 页面卸载即重置，不恢复；明确记录前端重置而后端 auditId/resultId 保留；Electron 再确定业务会话长驻 | 保持现有状态边界，不扩展成恢复系统。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:55`；`src/ProductionAssistant.App/PrototypeBridge.PlanPdf.cs:10-75`；`src/ProductionAssistant.App/PrototypeBridge.Meeting.cs:9-37` | 常驻所有页面；新增恢复接口；离页把后端结果一起清空；默认后端可逐请求重建 |
@@ -351,7 +351,7 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 - 半套前端/宿主部署，旧 ready 校验或 15 秒等待仍运行，导致整个 WebView 隐藏。依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:131-133,158-193`。
 - 去掉 navigation 参数却保留非空检查，或业务切页复用旧 navigation 去重机制。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:94`；`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:23-25`。
 - 宿主重试仍从旧 `_route` 构造 URL，丢失前端当前模块。现状依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:119-127,171-177`。
-- 改 pathname 使受信路径不再匹配，或把 Electron 的新文档来源误当当前来源可直接替代。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87`；未来 Electron 来源未确认。
+- 改 pathname 使受信路径不再匹配，或把 Electron 的新文档来源误当当前来源可直接替代。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87`；未来 Electron 来源未确认。【2026-10-26：Electron 来源已定为自定义协议 pa，来源检查须按 electron-host-design.md 的 EHD-03 改写并有测试。】
 - 删除 navigation key 而没有替代错误边界重置，同路由失败后无法恢复。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:16-22,59`。
 - 切页后前端结果丢失、后端仍忙，返回页面重试时遭拒；重发写入是否产生业务重复取决于对应幂等规则，不能靠导航层保证。依据：`src/ProductionAssistant.App/Assets/Prototype/src/features/plan-pdf/PlanPdfPage.tsx:30-32,52-68`；`src/ProductionAssistant.App/PrototypeBridge.PlanPdf.cs:18-19`。
 - 直接换宿主但没有原生能力 transport，生产调用报未连接桌面宿主。依据：`src/ProductionAssistant.App/Assets/Prototype/src/bridge/index.ts:8-14`；`bridge/webview.ts:31-41`（同一 src 目录）。
@@ -398,7 +398,7 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 
 1. 独立协议文档的实际路径与维护归属；当前被跟踪文件中未发现独立 PrototypeBridge 协议文档，不能捏造路径或把协议代码当作文档。已有本地相关说明及跟踪状态见第 8 节。
 2. 仓库外旧 navigation:* 地址的真实来源、是否携带旧宿主令牌；不能以测试构造地址推定实际外部兼容已完成。测试依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.test.tsx:349,457,492,549`。以上仍未确认；#49 仅有自动化测试，真实桌面未验证，不得视为通过。【切换段之后宿主不再产生 navigation: 前缀地址，前端仍保留归一能力；外部来源未确认的状态不变。】
-3. Electron 文档来源、能力 transport、localStorage 迁移及后端业务会话是否长驻；不能假设当前 WebView 通道直接可用。依据：`src/ProductionAssistant.App/Assets/Prototype/src/bridge/index.ts:3-14`；`bridge/webview.ts:31-41`（同一 src 目录）。
+3. Electron 文档来源、能力 transport、localStorage 迁移及后端业务会话是否长驻；不能假设当前 WebView 通道直接可用。依据：`src/ProductionAssistant.App/Assets/Prototype/src/bridge/index.ts:3-14`；`bridge/webview.ts:31-41`（同一 src 目录）。【2026-10-26：其中文档来源已决，见 electron-host-design.md 的 EHD-01 至 EHD-05 与第 3 节原型验证；能力 transport、localStorage 迁移、后端业务会话是否长驻仍未确认。】
 4. 文档加载 ID 的最终字段命名、启动计时边界和前端同路由重试的具体接口；语义已由 4.2-4.3 固定，实现形状在对应 PR 评审，不重新开放七项决策。未确认的设计张力：4.3 与 5.2 同时要求“宿主重试基于重载当前文档”和“重试更换文档加载代次”；若加载代次通过 URL 的 navigation 字段承载，直接重载当前文档会带回旧代次，两项要求无法同时满足。切换段实现设计需要在候选方案中二选一或另定方案，例如：代次不放在 URL、由宿主通过其他通道传递；或将重试改为受控的整文档导航，并明确当前 route 与其他参数的保留及加载代次更新规则。这里只记录张力和待决事项，不预选方案，不重新开放七条已定决策。【2026-10-20 已决：选用整页导航方案，见 5.2.1。URL 参数名仍为 navigation，C# 内部变量为 _loadId，线上参数改名留到 Electron 阶段。】
 5. 实际桌面加载、超时/晚到 ready、系统对话框和关窗期间业务结果的运行表现；本轮只读抽查，没有执行构建、测试或桌面验收，不能标记通过。【2026-10-20 切换段测试版桌面验收已覆盖：启动、七模块切换、F5、设置、文件选择器打开与取消、启动超时与重试；未覆盖：关窗期间业务结果、晚到 ready 的人工复现、正式版，见 5.2.1。】
 6. WebView2 的 Source 是否反映 history.replaceState 后的 URL，以及“重载当前文档”是否保留该 URL：均未确认，必须在真实桌面验证，并作为 5.2 切换段验收前置项；不能由当前重新设置 Source 的重试代码或浏览器/DOM 测试推定通过。【2026-10-20 已确认：Source 反映 replaceState 后的 URL；重载当前文档保留该 URL；结论与实测范围见 5.2.1。】
