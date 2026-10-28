@@ -421,7 +421,7 @@ describe('shared operation sidebar', () => {
     vi.resetModules()
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
 
-    history.replaceState({}, '', '?route=daily-weld&navigation=weld')
+    history.replaceState({}, '', '?route=daily-weld&loadId=weld')
     const container = document.createElement('div')
     document.body.append(container)
     invoke.mockReset().mockResolvedValue({})
@@ -439,13 +439,13 @@ describe('shared operation sidebar', () => {
     container.remove()
   })
 
-  it('reports daily weld readiness with the host route and navigation token', async () => {
+  it('reports daily weld readiness with the host route and loadId token', async () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
 
-    history.replaceState({}, '', '?route=daily-weld&navigation=weld')
+    history.replaceState({}, '', '?route=daily-weld&loadId=weld')
     const container = document.createElement('div')
     document.body.append(container)
     invoke.mockReset().mockResolvedValue({})
@@ -468,7 +468,7 @@ describe('shared operation sidebar', () => {
     vi.resetModules()
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
 
-    history.replaceState({}, '', '?route=navigation:production-message&navigation=settings-modal')
+    history.replaceState({}, '', '?route=navigation:production-message&loadId=settings-modal')
     const container = document.createElement('div')
     document.body.append(container)
     let finishRefresh!: (value: unknown) => void
@@ -526,7 +526,7 @@ describe('shared operation sidebar', () => {
     vi.resetModules()
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
 
-    history.replaceState({}, '', '?route=navigation:production-message&navigation=settings-modal')
+    history.replaceState({}, '', '?route=navigation:production-message&loadId=settings-modal')
     const container = document.createElement('div')
     document.body.append(container)
     let finishRefresh!: (value: unknown) => void
@@ -580,8 +580,8 @@ describe('shared operation sidebar', () => {
       return Promise.resolve(operation === 'settings.open' ? settingsState : {})
     })
     const route = 'navigation:production-message'
-    const navigation = 'first'
-    const search = `?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`
+    const loadId = 'first'
+    const search = `?route=${encodeURIComponent(route)}&loadId=${encodeURIComponent(loadId)}`
     history.replaceState({}, '', search)
     const container = document.createElement('div')
     document.body.append(container)
