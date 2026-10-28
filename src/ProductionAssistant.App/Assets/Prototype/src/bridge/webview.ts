@@ -19,9 +19,9 @@ export function receive(response: BridgeResponse) {
 
 webview()?.addEventListener('message', event => receive(event.data as BridgeResponse))
 
-// 传输层只负责发送 app.ready；同一文档加载代次的幂等（按 navigation 令牌去重）由 bridge/index.ts 适配层保证。
-export function notifyReady(route: string, navigation: string) {
-  webview()?.postMessage({ type: 'app.ready', route, navigation,
+// 传输层只负责发送 app.ready；同一文档加载代次的幂等（按 loadId 令牌去重）由 bridge/index.ts 适配层保证。
+export function notifyReady(route: string, loadId: string) {
+  webview()?.postMessage({ type: 'app.ready', route, loadId,
     moduleEntryMs: Math.round(performance.getEntriesByName('module-entry')[0]?.startTime || 0),
     readyMs: Math.round(performance.now()) })
 }

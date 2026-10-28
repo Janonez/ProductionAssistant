@@ -34,8 +34,8 @@ export async function invoke<T>(operation: string, _payload?: unknown): Promise<
 }
 
 // A browser has no native host to notify; consume the same readiness message.
-export function ready(route: string, navigation: string) {
-  return { type: 'app.ready', route, navigation,
+export function ready(route: string, loadId: string) {
+  return { type: 'app.ready', route, loadId,
     moduleEntryMs: Math.round(performance.getEntriesByName('module-entry')[0]?.startTime || 0),
     readyMs: Math.round(performance.now()) }
 }
