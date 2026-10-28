@@ -122,9 +122,9 @@ public sealed partial class PrototypePage : Page
         }
     }
 
-    private void OnReactReady(string route, string navigation)
+    private void OnReactReady(string route, string loadId)
     {
-        if (!PrototypeBridgeProtocol.IsCurrentLoad(navigation, _loadId))
+        if (!PrototypeBridgeProtocol.IsCurrentLoad(loadId, _loadId))
             return;
         _readyTimeout?.Cancel();
         PrototypeWebViewRuntime.Mark("react-ready");

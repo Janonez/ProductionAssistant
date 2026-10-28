@@ -36,7 +36,7 @@ internal sealed partial class PrototypeBridge
             var root = document.RootElement;
             if (ReadString(root, "type") == "app.ready")
             {
-                _ready(ReadString(root, "route"), ReadString(root, "navigation"));
+                _ready(ReadString(root, "route"), ReadString(root, "loadId"));
                 if (root.TryGetProperty("moduleEntryMs", out var entry) && entry.TryGetInt32(out var entryMs) && entryMs >= 0 &&
                     root.TryGetProperty("readyMs", out var ready) && ready.TryGetInt32(out var readyMs) && readyMs >= entryMs)
                     PrototypeWebViewRuntime.Mark($"frontend-timing-entry={entryMs}ms-ready={readyMs}ms");
