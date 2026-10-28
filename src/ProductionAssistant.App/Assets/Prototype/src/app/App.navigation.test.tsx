@@ -42,7 +42,7 @@ describe('App host navigation compatibility', () => {
 
   beforeEach(async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    history.replaceState({}, '', '?route=production-message&navigation=initial')
+    history.replaceState({}, '', '?route=production-message&loadId=initial')
     invoke.mockReset().mockImplementation((operation: string) => {
       if (operation === 'production.getBindings') return Promise.resolve({
         configured: true, cutting: { bound: false }, towerDaily: { bound: false },
@@ -84,7 +84,7 @@ describe('App host navigation compatibility', () => {
       const params = new URLSearchParams(window.location.search)
       expect(replaceState).toHaveBeenCalledTimes(1)
       expect(params.get('route')).toBe('daily-report')
-      expect(params.get('navigation')).toBe('initial')
+      expect(params.get('loadId')).toBe('initial')
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
       expect(sidebarButton('自动化任务').getAttribute('aria-current')).toBe('page')
       expect(navigationCalls()).toEqual([])
@@ -101,7 +101,7 @@ describe('App host navigation compatibility', () => {
       await act(async () => { sidebarButton('生产消息 Teable 入库').click() })
 
       expect(replaceState).not.toHaveBeenCalled()
-      expect(window.location.search).toBe('?route=production-message&navigation=initial')
+      expect(window.location.search).toBe('?route=production-message&loadId=initial')
       expect(navigationCalls()).toEqual([])
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
     } finally {
@@ -122,7 +122,7 @@ describe('App host navigation compatibility', () => {
       await act(async () => { await vi.dynamicImportSettled() })
 
       expect(replaceState).toHaveBeenCalledTimes(2)
-      expect(window.location.search).toBe('?route=production-message&navigation=initial')
+      expect(window.location.search).toBe('?route=production-message&loadId=initial')
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
       expect(navigationCalls()).toEqual([])
     } finally {
@@ -133,7 +133,7 @@ describe('App host navigation compatibility', () => {
   it('updates the displayed route on popstate without sending navigation back', async () => {
     expect(navigationCalls()).toEqual([])
     await act(async () => {
-      history.replaceState({}, '', '?route=daily-report&navigation=host-update')
+      history.replaceState({}, '', '?route=daily-report&loadId=host-update')
       window.dispatchEvent(new PopStateEvent('popstate'))
       await vi.dynamicImportSettled()
     })
@@ -187,7 +187,7 @@ describe('App host navigation contracts', () => {
       await act(async () => { root.render(<App />) })
 
       await act(async () => {
-        history.replaceState({}, '', '?route=navigation:production-message&navigation=sidebar')
+        history.replaceState({}, '', '?route=navigation:production-message&loadId=sidebar')
         window.dispatchEvent(new PopStateEvent('popstate'))
       })
       expect(container.textContent).toContain('数据文件处理')
@@ -208,7 +208,7 @@ describe('App host navigation contracts', () => {
 
       const params = new URLSearchParams(window.location.search)
       expect(params.get('route')).toBe('daily-report')
-      expect(params.get('navigation')).toBe('sidebar')
+      expect(params.get('loadId')).toBe('sidebar')
       expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
       expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
@@ -227,7 +227,7 @@ describe('App host navigation contracts', () => {
     vi.resetModules()
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
 
-    history.replaceState({}, '', '?route=navigation:production-message&navigation=sidebar')
+    history.replaceState({}, '', '?route=navigation:production-message&loadId=sidebar')
     const container = document.createElement('div')
     document.body.append(container)
     invoke.mockReset().mockImplementation(defaultOperationResult)
@@ -260,7 +260,7 @@ describe('App host navigation contracts', () => {
 
       const params = new URLSearchParams(window.location.search)
       expect(params.get('route')).toBe('daily-report')
-      expect(params.get('navigation')).toBe('sidebar')
+      expect(params.get('loadId')).toBe('sidebar')
       expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
       expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
@@ -285,7 +285,7 @@ describe('App host navigation contracts', () => {
     notifyReady.mockImplementation(sendReady)
     const readyMessages = () => postMessage.mock.calls.filter(([message]) => message.type === 'app.ready')
 
-    history.replaceState({}, '', '?route=navigation:plan-pdf&navigation=first')
+    history.replaceState({}, '', '?route=navigation:plan-pdf&loadId=first')
     const container = document.createElement('div')
     document.body.append(container)
     const root = createRoot(container)
@@ -295,7 +295,7 @@ describe('App host navigation contracts', () => {
       await act(async () => { root.render(<App />) })
       await act(async () => { await vi.dynamicImportSettled() })
       expect(notifyReady).toHaveBeenLastCalledWith('plan-pdf', 'first')
-      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' })]])
+      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: 'first' })]])
 
       const openProduction = [...container.querySelectorAll('button')]
         .find(button => button.textContent?.includes('生产消息 Teable 入库')) as HTMLButtonElement
@@ -304,13 +304,13 @@ describe('App host navigation contracts', () => {
 
       const params = new URLSearchParams(window.location.search)
       expect(params.get('route')).toBe('production-message')
-      expect(params.get('navigation')).toBe('first')
+      expect(params.get('loadId')).toBe('first')
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
       expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
       expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
       expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
       expect(notifyReady.mock.calls).toEqual([['plan-pdf', 'first'], ['production-message', 'first']])
-      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' })]])
+      expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: 'first' })]])
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -326,7 +326,7 @@ describe('App host navigation contracts', () => {
     vi.resetModules()
     vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
 
-    history.replaceState({}, '', '?route=production-message&navigation=initial')
+    history.replaceState({}, '', '?route=production-message&loadId=initial')
     invoke.mockReset().mockImplementation((operation: string) => {
       if (operation === 'production.getBindings') return Promise.resolve({
         configured: true, cutting: { bound: false }, towerDaily: { bound: false },
@@ -437,10 +437,10 @@ describe('legacy navigation prefix host contract', () => {
     ['navigation:', 'first', 'production-message'],
     ['navigation: ', 'first', 'production-message'],
     ['navigation:PRODUCTION-MESSAGE', 'first', 'production-message'],
-  ] as const)('[nav-switch] reports the normalized route and the unchanged token for legacy input %s', async (route, navigation, expectedRoute) => {
-    const { notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
+  ] as const)('[nav-switch] reports the normalized route and the unchanged token for legacy input %s', async (route, loadId, expectedRoute) => {
+    const { notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&loadId=${encodeURIComponent(loadId)}`)
 
-    expect(notifyReady.mock.calls).toEqual([[expectedRoute, navigation]])
+    expect(notifyReady.mock.calls).toEqual([[expectedRoute, loadId]])
   })
 
   it.each([
@@ -451,8 +451,8 @@ describe('legacy navigation prefix host contract', () => {
     ['report-center', '文件统计汇总'],
     ['daily-report', '自动化任务'],
   ] as const)('[nav-switch] switches to sidebar tag %s from a legacy URL without a host request', async (tag, label) => {
-    // 旧契约要求宿主导航；文档内切页只更新 route 并保留 navigation。
-    const { container, invoke } = await mountAppAt(`?route=${encodeURIComponent('navigation:production-message')}&navigation=first`)
+    // 旧契约要求宿主导航；文档内切页只更新 route 并保留 loadId。
+    const { container, invoke } = await mountAppAt(`?route=${encodeURIComponent('navigation:production-message')}&loadId=first`)
     const replaceState = vi.spyOn(window.history, 'replaceState')
 
     try {
@@ -462,7 +462,7 @@ describe('legacy navigation prefix host contract', () => {
       const params = new URLSearchParams(window.location.search)
       expect(replaceState).toHaveBeenCalledTimes(1)
       expect(params.get('route')).toBe(tag)
-      expect(params.get('navigation')).toBe('first')
+      expect(params.get('loadId')).toBe('first')
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe(tag)
       expect(sidebarButton(container, label).getAttribute('aria-current')).toBe('page')
       const navigationCalls = invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')
@@ -474,7 +474,7 @@ describe('legacy navigation prefix host contract', () => {
 
   it('[nav-switch] ignores the sidebar tag already displayed from a legacy URL', async () => {
     // 旧契约会请求宿主；文档内导航对当前显示页保持 URL 不变。
-    const initialSearch = `?route=${encodeURIComponent('navigation:production-message')}&navigation=first`
+    const initialSearch = `?route=${encodeURIComponent('navigation:production-message')}&loadId=first`
     const { container, invoke } = await mountAppAt(initialSearch)
     const replaceState = vi.spyOn(window.history, 'replaceState')
 
@@ -504,24 +504,24 @@ describe('legacy navigation prefix host contract', () => {
     ['daily-report', '自动化任务'],
   ] as const)('[nav-switch][legacy-prefix:display] renders the known legacy suffix %s', async (tag, label) => {
     const route = `navigation:${tag}`
-    const navigation = 'first'
-    const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
+    const loadId = 'first'
+    const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&loadId=${encodeURIComponent(loadId)}`)
 
     expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe(tag)
     expect(sidebarButton(container, label).getAttribute('aria-current')).toBe('page')
-    expect(notifyReady.mock.calls).toEqual([[tag, navigation]])
+    expect(notifyReady.mock.calls).toEqual([[tag, loadId]])
   })
 
   // 旧 ready 保留未知旧路由；nav-switch 对无效旧路由上报默认页面路由。
   it.each([
     'navigation:unknown', 'navigation:', 'navigation: ', 'navigation:PRODUCTION-MESSAGE',
   ])('[nav-switch][legacy-prefix:display] renders the default page for %s', async route => {
-    const navigation = 'first'
-    const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&navigation=${encodeURIComponent(navigation)}`)
+    const loadId = 'first'
+    const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&loadId=${encodeURIComponent(loadId)}`)
 
     expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
     expect(sidebarButton(container, '生产消息 Teable 入库').getAttribute('aria-current')).toBe('page')
-    expect(notifyReady.mock.calls).toEqual([['production-message', navigation]])
+    expect(notifyReady.mock.calls).toEqual([['production-message', loadId]])
   })
 
   // 旧 ready 使用原始路由；nav-switch 使用归一值，真实传输仍按令牌只发送一次。
@@ -529,31 +529,31 @@ describe('legacy navigation prefix host contract', () => {
     ['plain to legacy', 'production-message', 'navigation:plan-pdf', 'plan-pdf', '挂网计划 PDF 导出', 'production-message', 'plan-pdf'],
     ['legacy to plain', 'navigation:plan-pdf', 'production-message', 'production-message', '生产消息 Teable 入库', 'plan-pdf', 'production-message'],
   ] as const)('[nav-switch][legacy-prefix:display] updates on popstate from %s with one ready per token', async (_direction, firstRoute, nextRoute, displayRoute, label, firstReadyRoute, nextReadyRoute) => {
-    const navigation = 'first'
+    const loadId = 'first'
     const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
     const postMessage = vi.fn()
     Object.assign(window, { chrome: { webview: { postMessage, addEventListener: () => undefined } } })
 
     try {
-      const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(firstRoute)}&navigation=${encodeURIComponent(navigation)}`)
+      const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(firstRoute)}&loadId=${encodeURIComponent(loadId)}`)
       // 改为经真实适配层转发，去重属于适配层，不依赖 webview 传输内部实现。
       const { notifyReady: sendReady } = await vi.importActual<typeof import('../bridge/index')>('../bridge/index')
       // Forward the captured initial ready and later updates through the real token deduplication.
       for (const [route, token] of notifyReady.mock.calls) sendReady(route, token)
       notifyReady.mockImplementation(sendReady)
-      expect(notifyReady.mock.calls).toEqual([[firstReadyRoute, navigation]])
-      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstReadyRoute, navigation })]])
+      expect(notifyReady.mock.calls).toEqual([[firstReadyRoute, loadId]])
+      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstReadyRoute, loadId })]])
 
       await act(async () => {
-        history.replaceState({}, '', `?route=${encodeURIComponent(nextRoute)}&navigation=${encodeURIComponent(navigation)}`)
+        history.replaceState({}, '', `?route=${encodeURIComponent(nextRoute)}&loadId=${encodeURIComponent(loadId)}`)
         window.dispatchEvent(new PopStateEvent('popstate'))
       })
       await act(async () => { await vi.dynamicImportSettled() })
 
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe(displayRoute)
       expect(sidebarButton(container, label).getAttribute('aria-current')).toBe('page')
-      expect(notifyReady.mock.calls).toEqual([[firstReadyRoute, navigation], [nextReadyRoute, navigation]])
-      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstReadyRoute, navigation })]])
+      expect(notifyReady.mock.calls).toEqual([[firstReadyRoute, loadId], [nextReadyRoute, loadId]])
+      expect(postMessage.mock.calls).toEqual([[expect.objectContaining({ type: 'app.ready', route: firstReadyRoute, loadId })]])
     } finally {
       if (previousChrome) Object.defineProperty(window, 'chrome', previousChrome)
       else Reflect.deleteProperty(window, 'chrome')
