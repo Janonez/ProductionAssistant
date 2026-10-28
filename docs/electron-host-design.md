@@ -2,7 +2,7 @@
 
 本文记录 Electron 宿主的设计决策与实测依据。导航契约见 `navigation-contract-design.md`，本文只记录 Electron 阶段的决定，不授权任何实现、删除或发布；每项决定实施前仍须各自授权。
 
-决策编号用 EHD-，与导航契约文档的 ADR- 互不重叠。待决项按字母分为 A 至 F：A 文档来源（本文已决）、B 能力通道（本文已决）、C 业务会话是否长驻（本文已决）、D localStorage 迁移（本文已决）、E ReportEditor 独立协议、F navigation 参数改名。E、F 尚未决定，不在本文范围内，只在第 2 节记录与 A 相关的约束。
+决策编号用 EHD-，与导航契约文档的 ADR- 互不重叠。待决项按字母分为 A 至 F：A 文档来源（本文已决）、B 能力通道（本文已决）、C 业务会话是否长驻（本文已决）、D localStorage 迁移（本文已决）、E ReportEditor 独立协议（本文已决）、F navigation 参数改名（本文已决）。A 至 F 均已决定；第 2 节另外记录与 A 相关的待定事项。
 
 ## 1. 决策记录（待决项 A：文档来源）
 
@@ -128,4 +128,21 @@ WebView2 桌面验收中观察到的现象，在 Electron 原型中做了人工�
 - 自定义协议 pa 下 localStorage 跨启动保留的情况，A 的原型没有测，列为第一阶段验收项（见 EHD-13）。
 - 以上结论只来自读源码与测试，没有读取真实浏览器存储中的内容。
 
-本轮只写入决定，不修改代码；原型代码不进仓库。【2026-10-27：本文新增待决项 B 的决定（第 6 至 8 节）、待决项 C 的决定（第 9、10 节）与待决项 D 的决定（第 11、12 节）；E、F 仍待决。】
+## 13. 决策记录（待决项 E、F）
+
+| 编号 | 已定决策 | 理由 | 被否决的替代方案 |
+|---|---|---|---|
+| EHD-14 | （待决项 F）URL 参数与 app.ready 消息中的加载编号字段统一由 navigation 改名为 loadId，前端与宿主一次改完，不保留旧名字的兼容；实际改名放在 Electron 外壳之前，作为单独的实施 PR，改前先做逐行清单，C# 文件逐个授权 | 前端与宿主同包发布，可以同时改；等到 Electron 外壳阶段再改，并行期间两个宿主要说同一套协议，要么前端同时认两个名字，要么旧宿主也得改，前者就是兼容分支长期共存；C# 内部变量早已叫 loadId，前端没有占用该名字（src 内搜索，前端 0 命中）；Electron 宿主从一开始就使用新名字 | 保持 navigation 不改；前端同时认新旧两个名字 |
+| EHD-15 | （待决项 F）Electron 宿主沿用现有的加载编号语义：编号为非空字符串，页面发出的 app.ready 中的值与当前编号完全相等（逐字符比较，不裁剪）才接受，不相等直接丢弃；route 只用于诊断日志，不参与比较；每次重试加载生成新编号 | 现有宿主就是这样比对的（读自 PrototypeBridgeProtocol 与 PrototypePage）；写进文档可避免 Electron 实现时遗漏；这是保持现有行为，不是新设计 | 不校验编号；用 route 参与比较 |
+| EHD-16 | （待决项 E）ReportEditor 退役：Electron 阶段不迁移、不适配；真正删除另开清理 PR，不在本文授权 | 在 C# 与前端代码中搜索没有发现加载它的位置，对它的引用只出现在 csproj、verify.ps1、AGENTS.md、文档及它自己的目录里；仓库中含 WebView2 的 C# 文件只有 PrototypePage 相关的三个，加载的都是 Prototype 的构建产物；它自初始提交就存在，最近一次改动是 1.5.4 的编辑器重构；它使用旧 chrome.webview 协议，Electron 中没有对应通道；消息模板由 Prototype 中的 message-template 承担（推断，未逐项对照功能） | 为它在 Electron 中另设计一套通信协议；暂不决定 |
+
+## 14. 已登记事项（待决项 E、F，第一阶段不处理）
+
+- ReportEditor 清理 PR 的前置核对：找出加载它的页面是在哪个提交被删除的（git log -S ReportEditor 共 10 条候选，内容未读）；读 verify.ps1 对它做了什么；读 AGENTS.md 中提到它的位置；处理 csproj 中两个 Content 项、编辑器目录下的 package.json 与 report-serializer.test.mjs。涉及 csproj 与 verify.ps1 的改动必须逐文件授权，且会改变 verify 的行为。
+- ReportEditor 页面使用旧的 chrome.webview 协议（页面发出 ready、update、state，接收 init、getState、insertField、insertToday），退役后不需要为它设计 Electron 通道。
+- loadId 改名的范围（读自代码）：生产代码中把 navigation 当作加载编号使用的有 9 个文件，C# 三个（PrototypeBridgeProtocol、PrototypeBridge、PrototypePage），前端六个（routes 下的 index 与 RouteReady，app 下的 App，bridge 下的 index、webview、mock）。另有四处只是名字巧合，不能改：operation-sidebar.css 的样式类名、routes 下 routeTable 中的旧路由前缀 navigation:、hooks 下 useHostRoute 的模块路径、腾讯 site-adapter 的注释。旧的 navigation: 前缀地址的归一处理不在改名范围内。
+- 测试文件中有 9 个文件、162 行包含 navigation，其中多少属于加载编号、多少属于路由导航，没有逐行核对，改名前须先做逐行清单。
+- 普通浏览器重新加载时是否重新生成加载编号，没有验证（源码中只在字段初始化与点击重试时生成）。
+- 改名是协议改动，前端与宿主必须同一个 PR 完成，不保留旧名字。
+
+本轮只写入决定，不修改代码；原型代码不进仓库。【2026-10-27：本文新增待决项 B 的决定（第 6 至 8 节）、待决项 C 的决定（第 9、10 节）与待决项 D 的决定（第 11、12 节）；E、F 仍待决。】【2026-10-28：本文新增待决项 E、F 的决定（第 13、14 节）；A 至 F 均已决定。】
