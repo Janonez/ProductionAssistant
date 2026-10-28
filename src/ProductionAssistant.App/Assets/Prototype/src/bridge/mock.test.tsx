@@ -45,20 +45,20 @@ describe('browser mock transport', () => {
     await expect(bridge.invoke('toString')).rejects.toThrow('mock 未实现: toString')
   })
 
-  it('handles the ready handshake with its route and navigation token', async () => {
+  it('handles the ready handshake with its route and loadId token', async () => {
     const mock = await import('./mock')
     const ready = vi.spyOn(mock, 'ready')
     const { bridge } = await import('./index')
-    bridge.ready('database-viewer', 'browser-navigation')
+    bridge.ready('database-viewer', 'browser-load-id')
     await vi.dynamicImportSettled()
-    expect(ready).toHaveBeenCalledWith('database-viewer', 'browser-navigation')
+    expect(ready).toHaveBeenCalledWith('database-viewer', 'browser-load-id')
     expect(ready.mock.results[0].value).toEqual({
-      type: 'app.ready', route: 'database-viewer', navigation: 'browser-navigation',
+      type: 'app.ready', route: 'database-viewer', loadId: 'browser-load-id',
       moduleEntryMs: expect.any(Number), readyMs: expect.any(Number)
     })
   })
 
-  it('[nav-switch] calls the mock ready once per navigation token', async () => {
+  it('[nav-switch] calls the mock ready once per loadId token', async () => {
     const mock = await import('./mock')
     const ready = vi.spyOn(mock, 'ready')
     const { bridge } = await import('./index')
@@ -74,7 +74,7 @@ describe('browser mock transport', () => {
     ])
   })
 
-  it('[nav-switch] does not deduplicate an empty navigation token', async () => {
+  it('[nav-switch] does not deduplicate an empty loadId token', async () => {
     const mock = await import('./mock')
     const ready = vi.spyOn(mock, 'ready')
     const { bridge } = await import('./index')

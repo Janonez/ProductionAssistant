@@ -27,7 +27,7 @@ class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void
 
 
 export function App() {
-  const { route, navigation } = useHostRoute()
+  const { route, loadId } = useHostRoute()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
 
@@ -50,7 +50,7 @@ export function App() {
       >
         <LoadBoundary>
           <Suspense fallback={<RouteSkeleton route={route} />}>
-            <RouteReady route={route} navigation={navigation} />
+            <RouteReady route={route} loadId={loadId} />
             {route === ROUTES.productionMessage ? <ProductionMessagePage /> : route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : route === ROUTES.planPdf ? <PlanPdfPage /> : route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : route === ROUTES.dailyReport ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
 
           </Suspense>

@@ -45,7 +45,7 @@ describe('desktop bridge', () => {
     await expect(result).resolves.toEqual({ done: true })
   })
 
-  it('[nav-switch] reports React readiness with the navigation token', async () => {
+  it('[nav-switch] reports React readiness with the loadId token', async () => {
     let sent: unknown
     const postMessage = vi.fn((value: unknown) => { sent = value })
     Object.assign(window, { chrome: { webview: {
@@ -53,8 +53,8 @@ describe('desktop bridge', () => {
       addEventListener: () => undefined
     } } })
     const { notifyReady } = await import('./webview')
-    notifyReady('daily-report', 'navigation-2')
-    expect(sent).toEqual({ type: 'app.ready', route: 'daily-report', navigation: 'navigation-2', moduleEntryMs: expect.any(Number), readyMs: expect.any(Number) })
+    notifyReady('daily-report', 'load-id-2')
+    expect(sent).toEqual({ type: 'app.ready', route: 'daily-report', loadId: 'load-id-2', moduleEntryMs: expect.any(Number), readyMs: expect.any(Number) })
     expect(postMessage).toHaveBeenCalledTimes(1)
   })
 })
@@ -62,7 +62,7 @@ describe('desktop bridge', () => {
 // 去重已移至适配层，这里只验证传输层每次调用都发送。
 describe('[nav-switch] webview ready transport', () => {
   let previousChrome: PropertyDescriptor | undefined
-  let messages: { type: string; route: string; navigation: string }[]
+  let messages: { type: string; route: string; loadId: string }[]
   const readyMessages = () => messages.filter(message => message.type === 'app.ready')
 
   beforeEach(() => {
@@ -70,7 +70,7 @@ describe('[nav-switch] webview ready transport', () => {
     messages = []
     previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
     Object.assign(window, { chrome: { webview: {
-      postMessage: vi.fn((message: { type: string; route: string; navigation: string }) => { messages.push(message) }),
+      postMessage: vi.fn((message: { type: string; route: string; loadId: string }) => { messages.push(message) }),
       addEventListener: () => undefined,
     } } })
   })
@@ -87,8 +87,8 @@ describe('[nav-switch] webview ready transport', () => {
     notifyReady(route, '')
 
     expect(readyMessages()).toEqual([
-      expect.objectContaining({ type: 'app.ready', route, navigation: '' }),
-      expect.objectContaining({ type: 'app.ready', route, navigation: '' }),
+      expect.objectContaining({ type: 'app.ready', route, loadId: '' }),
+      expect.objectContaining({ type: 'app.ready', route, loadId: '' }),
     ])
   })
 
@@ -99,10 +99,10 @@ describe('[nav-switch] webview ready transport', () => {
     notifyReady('plan-pdf', 'first')
     notifyReady('plan-pdf', 'first')
     expect(readyMessages()).toEqual([
-      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: ' first ' }),
-      expect.objectContaining({ type: 'app.ready', route: 'production-message', navigation: ' first ' }),
-      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' }),
-      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' }),
+      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: ' first ' }),
+      expect.objectContaining({ type: 'app.ready', route: 'production-message', loadId: ' first ' }),
+      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: 'first' }),
+      expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: 'first' }),
     ])
   })
 })

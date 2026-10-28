@@ -80,9 +80,9 @@ public static class PrototypeBridgeProtocol
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(loadId);
 
-        var navigation = "navigation=" + Uri.EscapeDataString(loadId);
+        var loadIdQuery = "loadId=" + Uri.EscapeDataString(loadId);
         if (!IsTrustedPrototypeSource(currentSource))
-            return DocumentUrl + "?" + navigation;
+            return DocumentUrl + "?" + loadIdQuery;
 
         var source = currentSource!;
         var fragmentIndex = source.IndexOf('#');
@@ -97,11 +97,11 @@ public static class PrototypeBridgeProtocol
         {
             var equalsIndex = part.IndexOf('=');
             var key = equalsIndex >= 0 ? part[..equalsIndex] : part;
-            if (string.Equals(Uri.UnescapeDataString(key), "navigation", StringComparison.Ordinal))
+            if (string.Equals(Uri.UnescapeDataString(key), "loadId", StringComparison.Ordinal))
             {
                 if (!replaced)
                 {
-                    parts.Add(navigation);
+                    parts.Add(loadIdQuery);
                     replaced = true;
                 }
             }
@@ -112,7 +112,7 @@ public static class PrototypeBridgeProtocol
         }
 
         if (!replaced)
-            parts.Add(navigation);
+            parts.Add(loadIdQuery);
 
         return DocumentUrl + "?" + string.Join("&", parts);
     }

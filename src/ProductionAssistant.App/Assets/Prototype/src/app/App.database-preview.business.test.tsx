@@ -26,7 +26,7 @@ describe('browser mock transport', () => {
   it('opens the database route and queries mock records without a desktop host', async () => {
     const mock = await import('../bridge/mock')
     const invoked = vi.spyOn(mock, 'invoke')
-    history.replaceState({}, '', '?route=database-viewer&navigation=browser-preview')
+    history.replaceState({}, '', '?route=database-viewer&loadId=browser-preview')
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)

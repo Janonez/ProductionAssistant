@@ -58,26 +58,26 @@ describe('WebView2 bridge adapter', () => {
     await expect(pending).resolves.toEqual({ done: true })
   })
 
-  it('retains the navigation token and duplicate-ready guard', async () => {
+  it('retains the loadId token and duplicate-ready guard', async () => {
     const { bridge } = await import('./index')
-    bridge.ready('production-message', 'navigation-1')
-    bridge.ready('production-message', 'navigation-1')
+    bridge.ready('production-message', 'load-id-1')
+    bridge.ready('production-message', 'load-id-1')
     expect(postMessage).toHaveBeenCalledTimes(1)
     expect(postMessage).toHaveBeenCalledWith({
-      type: 'app.ready', route: 'production-message', navigation: 'navigation-1',
+      type: 'app.ready', route: 'production-message', loadId: 'load-id-1',
       moduleEntryMs: expect.any(Number), readyMs: expect.any(Number)
     })
   })
 
-  it('[nav-switch] deduplicates ready by navigation token across routes through the adapter', async () => {
+  it('[nav-switch] deduplicates ready by loadId token across routes through the adapter', async () => {
     const { bridge } = await import('./index')
     bridge.ready('plan-pdf', ' first ')
     bridge.ready('production-message', ' first ')
     bridge.ready('plan-pdf', 'first')
     expect(postMessage).toHaveBeenCalledTimes(2)
     expect(postMessage.mock.calls).toEqual([
-      [expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: ' first ' })],
-      [expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', navigation: 'first' })],
+      [expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: ' first ' })],
+      [expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: 'first' })],
     ])
   })
 
@@ -88,12 +88,12 @@ describe('WebView2 bridge adapter', () => {
 
   it.each(routeOrders)('[nav-switch] adapter: sends one ready for the same token (%s first)', async (_first, firstRoute, secondRoute) => {
     const { bridge } = await import('./index')
-    const navigation = ' first '
-    bridge.ready(firstRoute, navigation)
-    bridge.ready(secondRoute, navigation)
+    const loadId = ' first '
+    bridge.ready(firstRoute, loadId)
+    bridge.ready(secondRoute, loadId)
     expect(postMessage).toHaveBeenCalledTimes(1)
     expect(postMessage.mock.calls).toEqual([
-      [expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation })],
+      [expect.objectContaining({ type: 'app.ready', route: firstRoute, loadId })],
     ])
   })
 
@@ -104,8 +104,8 @@ describe('WebView2 bridge adapter', () => {
     bridge.ready(secondRoute, 'first')
     expect(postMessage).toHaveBeenCalledTimes(2)
     expect(postMessage.mock.calls).toEqual([
-      [expect.objectContaining({ type: 'app.ready', route: firstRoute, navigation: ' first ' })],
-      [expect.objectContaining({ type: 'app.ready', route: secondRoute, navigation: 'first' })],
+      [expect.objectContaining({ type: 'app.ready', route: firstRoute, loadId: ' first ' })],
+      [expect.objectContaining({ type: 'app.ready', route: secondRoute, loadId: 'first' })],
     ])
   })
 
@@ -115,8 +115,8 @@ describe('WebView2 bridge adapter', () => {
     bridge.ready(route, '')
     expect(postMessage).toHaveBeenCalledTimes(2)
     expect(postMessage.mock.calls).toEqual([
-      [expect.objectContaining({ type: 'app.ready', route, navigation: '' })],
-      [expect.objectContaining({ type: 'app.ready', route, navigation: '' })],
+      [expect.objectContaining({ type: 'app.ready', route, loadId: '' })],
+      [expect.objectContaining({ type: 'app.ready', route, loadId: '' })],
     ])
   })
 
@@ -149,7 +149,7 @@ describe('bridge transport selection', () => {
     const mocked = vi.spyOn(mock, 'invoke')
     const { bridge } = await import('./index')
     await expect(bridge.invoke('database.getState')).rejects.toThrow('当前页面未连接到桌面宿主')
-    bridge.ready('database-viewer', 'production-navigation')
+    bridge.ready('database-viewer', 'production-load-id')
     expect(mocked).not.toHaveBeenCalled()
   })
 
