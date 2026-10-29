@@ -43,15 +43,11 @@
     <None Update="appsettings.Development.json;appsettings.Production.json"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest" />
-    <Content Remove="Assets\TencentSheet\node_modules\**;Assets\TencentSheet\package.json;Assets\TencentSheet\package-lock.json;Assets\ReportEditor\editor-source.js;Assets\ReportEditor\package.json;Assets\ReportEditor\package-lock.json;Assets\ReportEditor\node_modules\**;Assets\Prototype\src\**;Assets\Prototype\node_modules\**;Assets\Prototype\package.json;Assets\Prototype\package-lock.json;Assets\Prototype\tsconfig*.json;Assets\Prototype\vite.config.ts;Assets\Prototype\vitest.config.ts" />
+    <Content Remove="Assets\TencentSheet\node_modules\**;Assets\TencentSheet\package.json;Assets\TencentSheet\package-lock.json;Assets\Prototype\src\**;Assets\Prototype\node_modules\**;Assets\Prototype\package.json;Assets\Prototype\package-lock.json;Assets\Prototype\tsconfig*.json;Assets\Prototype\vite.config.ts;Assets\Prototype\vitest.config.ts" />
     <Content Include="Assets\Fonts\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\production-assistant-logo.png"
              CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\production-assistant-logo.ico"
-             CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\ReportEditor\editor.html"
-             CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\ReportEditor\editor.js"
              CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Prototype\dist\**"
              Link="Assets\Prototype\%(RecursiveDir)%(Filename)%(Extension)"

@@ -6,7 +6,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$editor = Join-Path $root 'src\ProductionAssistant.App\Assets\ReportEditor'
 $prototype = Join-Path $root 'src\ProductionAssistant.App\Assets\Prototype'
 $tencent = Join-Path $root 'src\ProductionAssistant.App\Assets\TencentSheet'
 $debugPublish = Join-Path $root 'deployments\development'
@@ -26,8 +25,6 @@ try {
     pwsh -NoProfile -File scripts/test-teable-views.ps1
     Assert-NativeSuccess 'Teable view conversion checks'
     if (-not $SkipRestore) {
-        Push-Location $editor
-        try { npm.cmd ci; Assert-NativeSuccess 'ReportEditor npm ci' } finally { Pop-Location }
         Push-Location $prototype
         try { npm.cmd ci; Assert-NativeSuccess 'Prototype npm ci' } finally { Pop-Location }
         Push-Location $tencent
@@ -36,8 +33,6 @@ try {
         Assert-NativeSuccess 'dotnet restore'
     }
 
-    Push-Location $editor
-    try { npm.cmd run build; Assert-NativeSuccess 'ReportEditor build' } finally { Pop-Location }
     Push-Location $prototype
     try {
         npm.cmd run lint:font-weights
@@ -48,15 +43,6 @@ try {
         Assert-NativeSuccess 'Prototype build'
     } finally { Pop-Location }
 
-    $git = if (Test-Path 'C:\Program Files\Git\cmd\git.exe') {
-        'C:\Program Files\Git\cmd\git.exe'
-    } else {
-        'git'
-    }
-    & $git diff --exit-code -- 'src/ProductionAssistant.App/Assets/ReportEditor/editor.js'
-    if ($LASTEXITCODE -ne 0) {
-        throw 'ReportEditor bundle differs from the committed editor.js.'
-    }
 
     dotnet build ProductionAssistant.sln -c Release -p:Platform=x64 --no-restore
     Assert-NativeSuccess 'Release build'
