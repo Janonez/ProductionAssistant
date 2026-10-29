@@ -28,7 +28,7 @@
 - `useHostRoute` / `resolveHostRoute` 的命名仍体现旧宿主所有权，切换段合并后单独做纯改名小 PR。
 - `navigateInDocument` 用相对地址 `?…` 写 `replaceState`，会丢 `#` 片段；宿主地址从无片段，目前不影响。
 - `PrototypeBridgeProtocol` 里 `DocumentUrl` 常量与 `IsTrustedPrototypeSource` 的 host、路径字面量是两份，目前由测试钉住，删除段之后收敛。
-- URL 参数名 `navigation`（现在标识文档加载代次）改名登记到 Electron 阶段。
+- URL 参数名为 `loadId`（标识文档加载代次），命名决策见 Electron 文档的 EHD-14、EHD-15。
 - 前端“Vite 内存构建与 mock 标记检查”没有持久脚本（package.json、前端 scripts 目录与 scripts/verify.ps1 中均无对应入口），建议做成正式脚本并纳入 verify。
 - `favicon.ico` 的 ERR_FILE_NOT_FOUND 控制台报错无害，低优先级。
 - 切换段之前提交信息中 (#49) 出现两次，仅外观，不处理。
@@ -75,13 +75,13 @@
 | 1 | 侧栏将业务标签传给回调，App 调用 `app.navigateNative`；该回调当前吞掉导航错误 | `src/ProductionAssistant.App/Assets/Prototype/src/components/layout/OperationSidebar.tsx:18-34,42-48`；`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:33,50` |
 | 2 | bridge 检查受信来源、operation 白名单，然后把导航请求分发给 Navigate，再检查标签白名单 | `src/ProductionAssistant.App/PrototypeBridge.cs:33,48-51,87,188-194` |
 | 3 | MainWindow 对相同 `_currentTag` 返回；七个已知标签均为 PrototypePage，未知标签保留原生挂网页兜底 | `src/ProductionAssistant.App/MainWindow.xaml.cs:41-65` |
-| 4 | PrototypePage 保存 `_route`，生成 navigation ID；首次设置文档 Source，之后注入 replaceState 与 popstate | `src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:33-49,119-127` |
+| 4 | PrototypePage 保存 `_route`，生成 loadId；首次设置文档 Source，之后注入 replaceState 与 popstate | `src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:33-49,119-127` |
 | 5 | 生产前端当前只读 location.search、解析 query、监听 popstate；检查范围内未发现业务路由 URL 写入器 | `src/ProductionAssistant.App/Assets/Prototype/src/hooks/useHostRoute.ts:4-11`；`src/ProductionAssistant.App/Assets/Prototype/src/routes/index.ts:3-16`；宿主写入见上行 |
-| 6 | RouteReady 位于 Suspense 内，挂载后发送 ready；transport 按 navigation 去重 | `src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:59-64`；`src/ProductionAssistant.App/Assets/Prototype/src/routes/RouteReady.tsx:4-7`；`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:23-28` |
+| 6 | RouteReady 位于 Suspense 内，挂载后发送 ready；transport 按 loadId 去重 | `src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:59-64`；`src/ProductionAssistant.App/Assets/Prototype/src/routes/RouteReady.tsx:4-7`；`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:23-28` |
 | 7 | app.ready 是按 type 特判的单向消息，不是 AllowedOperations 中的 operation；收到后调用 `_ready` | `src/ProductionAssistant.App/PrototypeBridge.cs:38-46`；`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:5-63`；`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:26` |
-| 8 | ready 必须带非空 navigation，且 route/navigation 都与宿主当前值一致，才取消超时并显示 WebView | `src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:158-168` |
+| 8 | ready 必须带非空 loadId，且 route/loadId 都与宿主当前值一致，才取消超时并显示 WebView | `src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:158-168` |
 
-每次 NavigateRouteAsync 都有 15 秒 ready 等待，新导航取消旧等待并核对等待实例。超时显示错误层、隐藏整个 WebView；没有永久废弃该 navigation ID，迟到但仍匹配的 ready 仍可重新显示。该计时在环境初始化之后开始，不覆盖环境创建本身。依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:74-92,111-141,158-168,187-193`。
+每次 NavigateRouteAsync 都有 15 秒 ready 等待，新导航取消旧等待并核对等待实例。超时显示错误层、隐藏整个 WebView；没有永久废弃该 loadId，迟到但仍匹配的 ready 仍可重新显示。该计时在环境初始化之后开始，不覆盖环境创建本身。依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:74-92,111-141,158-168,187-193`。
 
 WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不作为显示许可。当前 RouteReady 的位置也不等待页面内部业务查询或 iframe 加载完成。依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml:7-12`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:101-108`；`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:59-64`。
 
@@ -143,9 +143,9 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 | 业务参数 | 使用 `route`；七个合法值是 `production-message`、`daily-weld`、`database-viewer`、`plan-pdf`、`production-meeting`、`report-center`、`daily-report`；区分大小写 |
 | 缺省/未知值 | 归一为 `production-message`；不产生原生空占位 |
 | 旧前缀 | `navigation:` 后为已知标签时映射到该 React 路由，否则回默认页；目录名称不参与解析。兼容段 #49 已由 resolveHostRoute 返回 `{ route, navigation, displayRoute }`，保留原始宿主握手字段，另用 displayRoute 展示归一结果；字段用途及切换后的处理见下文；切换段已取消 displayRoute，resolveHostRoute 现仅返回 { route, navigation }，见 5.2.1 |
-| 写入与历史 | 模块切换继续使用 replaceState，不新增返回/前进历史；写入和前端订阅更新由统一入口协调，不能只改地址栏而不更新页面。前端切页写 URL 时只更新 route，必须保留 query 中的其他参数，包括承载文档加载代次的 navigation 字段，不得重建整个 query |
+| 写入与历史 | 模块切换继续使用 replaceState，不新增返回/前进历史；写入和前端订阅更新由统一入口协调，不能只改地址栏而不更新页面。前端切页写 URL 时只更新 route，必须保留 query 中的其他参数，包括承载文档加载代次的 loadId 字段，不得重建整个 query |
 | 重载/重试 | 路由变化时写回 URL；切换段后 C# 不保存业务路由，宿主重试必须基于“重载当前文档”，不得用宿主自存的旧值重新设置 Source。完整重载和宿主重试从当前 URL 恢复模块；缺省入口仍由前端选择默认模块。WebView2 的 URL 保留行为未确认，见 5.2、9.2 |
-| navigation 字段 | 兼容段保留旧握手意义；切换后不决定业务页。若承载文档加载代次，仅属于装载元数据，业务切页不修改其代次 |
+| loadId 字段 | 兼容段保留旧握手意义；切换后不决定业务页。若承载文档加载代次，仅属于装载元数据，业务切页不修改其代次 |
 | Electron | 文档来源、最终传输字段和 localStorage 搬迁留到 Electron 阶段，不在此选择新 scheme 或存储迁移方案 |
 
 合法值与现状解析依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:65-80`；`src/ProductionAssistant.App/Assets/Prototype/src/routes/index.ts:3-16`。当前 replaceState 来源依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:119-127`。
@@ -168,11 +168,11 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 | 校验 | 受信来源和当前文档代次；旧代次拒绝；route 只用于日志 | 丢弃已离开路由的异步结果；前端维护当前路由一致性 |
 | 超时 | 可保留资源导航后的启动 ready 超时与错误/完整重试；环境初始化超时缺陷另列任务 | 不存在 C# 每页 15 秒等待；失败不能隐藏整个宿主内容 |
 
-可沿用 app.ready 名称及单向消息形状，但必须明确其新语义，不改成普通 invoke operation。当前的每 navigation 去重及 IsCurrentNavigation 不能原样保留：前者改按文档代次处理，后者不再比较业务 route。当前行为依据：`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:23-28`；`src/ProductionAssistant.App/PrototypeBridge.cs:40-46`；`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`。
+可沿用 app.ready 名称及单向消息形状，但必须明确其新语义，不改成普通 invoke operation。当前的每 loadId 去重及 IsCurrentNavigation 不能原样保留：前者改按文档代次处理，后者不再比较业务 route。当前行为依据：`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:23-28`；`src/ProductionAssistant.App/PrototypeBridge.cs:40-46`；`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`。
 
 启动超时后仍提供错误与重试；保持“迟到但属于当前加载代次的确认可恢复显示”，旧代次无权恢复。宿主完整重试更换加载 ID，同时保留当前业务 URL；切换段后必须基于“重载当前文档”，不得用宿主自存的旧业务路由重新设置 Source。当前重试仍按 4.2 所列路径重建 Source，目标重载流程的 URL 保留行为未确认，须按 5.2、9.2 完成真实桌面验证。初次显示和后续业务切页必须有分离的测试，不能用一次 ready 断言覆盖两者。现状显示依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:158-193`。
 
-删除 navigation 作为路由刷新信号后，前端必须另有明确的错误边界重置/重试契约，避免同路由失败后复用失败边界。当前依赖见 `src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:16-22,55-65`。
+删除 loadId 作为路由刷新信号后，前端必须另有明确的错误边界重置/重试契约，避免同路由失败后复用失败边界。当前依赖见 `src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:16-22,55-65`。
 
 ### 4.4 状态归属与清理时机
 
@@ -226,7 +226,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 
 - 七标签与大小写/默认规则一致，daily-report 不变；正常入口仍走一次宿主导航，没有第二个 URL 写入方，没有新增历史。
 - 已知旧前缀进入对应 React 页面，未知回默认；兼容修正与普通入口零变化分别验收。
-- 旧宿主 expected route/navigation 仍匹配；旧令牌拒绝、延迟模块未完成不提前 ready、加载中可以切走的原契约不被破坏。
+- 旧宿主 expected route/loadId 仍匹配；旧令牌拒绝、延迟模块未完成不提前 ready、加载中可以切走的原契约不被破坏。
 - 没有新增业务读写触发，设置仍覆盖当前模块；测试 mock 不得把未实现能力伪造为成功。
 
 失败回滚：停止该 PR，通过独立回退 PR 撤回该项集中化或归一改动，恢复上一已验收入口；协议不变，无需混配前端和宿主。不得用 force、reset 或丢弃用户改动代替回退。
@@ -252,7 +252,7 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 
 - 点击七个模块只通过前端切页；不发送 app.navigateNative，C# 不按业务标签改 URL，不产生每页加载 ID 或 15 秒等待。
 - replaceState 后页面与地址一致；完整重载、前端错误重新加载、宿主启动失败重试均恢复当前路由；缺省和旧地址符合 4.2。
-- 前端切页 replaceState 后，navigation 及其他 query 参数保持不变；只更新 route，不重建整个 query，须有测试覆盖。
+- 前端切页 replaceState 后，loadId 及其他 query 参数保持不变；只更新 route，不重建整个 query，须有测试覆盖。
 - 切换段验收前置项：必须在真实 WinUI/WebView2 桌面确认 Source 是否反映 history.replaceState 后的 URL，以及“重载当前文档”是否保留该 URL；两项目前均未确认。宿主重试必须基于当前文档，恢复前端当前模块并更换文档加载代次，不得用宿主自存旧路由重新设置 Source；自动化测试不能替代本项真实桌面验证。9.2 第 4 条所列的重试方式与文档加载代次更新之间的设计张力，须在切换段设计中解决后，才能定稿重试验收。【2026-10-20 已确认：Source 反映 replaceState 后的 URL，重试采用整页导航方案，见 5.2.1。】
 - 首次外壳及首个路由可呈现才确认；业务查询/iframe 延迟不阻塞该确认；旧文档 ready 无效，重载有新代次，业务切页不使宿主隐藏。
 - 快速 A→B→A、延迟模块切走、同路由失败重试没有重复导航或失败边界滞留。
@@ -267,21 +267,21 @@ WebView 在 XAML 中初始隐藏；NavigationCompleted 成功只记日志，不�
 
 协议最终形状：
 
-- 前端：`routes/navigation.ts` 只导出 `subscribeRoute(listener)` 与 `navigateInDocument(tag): boolean`。`navigateInDocument` 对非法标签和等于当前路由的标签返回 false；否则只把 query 中的 `route` 置为该标签，其余参数（包括 `navigation`）原样保留，用 `history.replaceState` 写回，通知订阅者并返回 true；不派发 popstate，不调用宿主。旧的 `navigate` 与 `app.navigateNative` 调用已从非测试代码中清除。
-- 前端：`resolveHostRoute` 只返回 `{ route, navigation }`，不再有 `displayRoute`；旧 `navigation:` 前缀被剥离并归一（已知后缀取后缀，未知、空、大小写不符、带空白回默认 `production-message`）；`navigation` 取自 URL 且不裁剪。
-- 前端：ready 在 `bridge/index.ts` 幂等，非空 navigation 对同一文档只通知一次，空令牌每次都发，不比较 route；`bridge/webview.ts` 只负责 postMessage；`route` 仅用于诊断日志。
+- 前端：`routes/navigation.ts` 只导出 `subscribeRoute(listener)` 与 `navigateInDocument(tag): boolean`。`navigateInDocument` 对非法标签和等于当前路由的标签返回 false；否则只把 query 中的 `route` 置为该标签，其余参数（包括 `loadId`）原样保留，用 `history.replaceState` 写回，通知订阅者并返回 true；不派发 popstate，不调用宿主。旧的 `navigate` 与 `app.navigateNative` 调用已从非测试代码中清除。
+- 前端：`resolveHostRoute` 只返回 `{ route, loadId }`，不再有 `displayRoute`；旧 `navigation:` 前缀被剥离并归一（已知后缀取后缀，未知、空、大小写不符、带空白回默认 `production-message`）；`loadId` 取自 URL 且不裁剪。
+- 前端：ready 在 `bridge/index.ts` 幂等，非空 loadId 对同一文档只通知一次，空令牌每次都发，不比较 route；`bridge/webview.ts` 只负责 postMessage；`route` 仅用于诊断日志。
 - 协议：`AllowedOperations` 去掉 `app.navigateNative`（83 项变为 82 项）；删除 `AllowedNavigationTags`、`IsNavigationAllowed`、`IsCurrentNavigation`；新增 `IsCurrentLoad(loadId, expectedLoadId)`（非空白且 Ordinal 相等）与 `BuildDocumentUrl(currentSource, loadId)`。
-- `BuildDocumentUrl` 规则：`loadId` 为空白抛 `ArgumentException`；来源不可信（非 https、非默认端口、host 或路径不符、为空或无法解析）时返回首次加载地址 `https://prototype.production-assistant.local/index.html?navigation=<转义后的 loadId>`；来源可信时用字符串操作取原始 query（丢弃 fragment），按 `&` 切片并跳过空片段，仅对键做解码后与 `navigation` 做 Ordinal 比较，第一个匹配片段原位替换为新令牌、后续重复项删除，没有则追加在末尾，其余片段原样保留（不解码、不重编码、顺序不变）。
-- 宿主：`navigation` URL 参数现在只标识本次文档加载代次（C# 内部 `_loadId`，Guid 的 N 格式），首次加载与每次重试时生成，业务切页不改它。首次加载地址为 `BuildDocumentUrl(null, loadId)`，不带 `route`，默认页由前端选择。
+- `BuildDocumentUrl` 规则：`loadId` 为空白抛 `ArgumentException`；来源不可信（非 https、非默认端口、host 或路径不符、为空或无法解析）时返回首次加载地址 `https://prototype.production-assistant.local/index.html?loadId=<转义后的 loadId>`；来源可信时用字符串操作取原始 query（丢弃 fragment），按 `&` 切片并跳过空片段，仅对键做解码后与 `loadId` 做 Ordinal 比较，第一个匹配片段原位替换为新令牌、后续重复项删除，没有则追加在末尾，其余片段原样保留（不解码、不重编码、顺序不变）。
+- 宿主：`loadId` URL 参数现在只标识本次文档加载代次（C# 内部 `_loadId`，Guid 的 N 格式），首次加载与每次重试时生成，业务切页不改它。首次加载地址为 `BuildDocumentUrl(null, loadId)`，不带 `route`，默认页由前端选择。
 - 宿主：`PrototypePage` 的 `LoadDocumentAsync(reuseCurrentSource)` 只保留“文档启动超时”（15 秒，收到匹配 ready 即取消，超时显示错误层）；业务切页没有宿主等待和加载层。`OnReactReady` 只校验来源可信与 `IsCurrentLoad`，`route` 只写日志。重试 `Retry_Click`：先换新 `_loadId`；已初始化时读取 `CoreWebView2.Source`，经 `BuildDocumentUrl` 重建地址并整页导航；未初始化则走 `InitializeAsync`。
 - 宿主：`MainWindow` 不再有 `_currentTag` 与 `NavigateTo`，构造函数只导航到 `PrototypePage`；`PrototypeBridge` 构造函数变为 `(WebView2, Action<string, string> ready)`，不再有 `_navigate` 与 `Navigate()`。`settings.close`、`SetSettingsModalOpen`、`ContentFrame`（XAML）、`PlanPdfExportPage` 文件本身保留给删除段。【2026-10-21：其中 ContentFrame（XAML）与 PlanPdfExportPage 已在 D2 删除。】【2026-10-22：其中 settings.close 与 SetSettingsModalOpen 已在 D3 删除。】
 - 日志与文案变化：`route-start-*`、`route-ready-*`、`navigation-start` 改为 `document-load-start`、`document-ready-wait=…ms-route=…`、`load-failed-*`；宿主错误文案“页面切换失败”改为“页面加载失败。请重试加载。”。
-- F5 与 ready：F5 重载文档不经过 `LoadDocumentAsync`，URL 中的 `navigation` 仍等于当前代次，因此重载后的 ready 被接受；每次 F5 产生一次 ready，不会重置启动超时。
+- F5 与 ready：F5 重载文档不经过 `LoadDocumentAsync`，URL 中的 `loadId` 仍等于当前代次，因此重载后的 ready 被接受；每次 F5 产生一次 ready，不会重置启动超时。
 
 T1/T2 实测结论（回答 9.2 第 6 条）：
 
 - T1（真实桌面，测试版）：F12 与 F5 可用；在数据库查看页按 F5 后仍停在该页（`location.href` 保留 `route=database-viewer`，导航类型为 reload）。
-- T2（一次性诊断分支，已丢弃）：前端 `replaceState` 会触发 `CoreWebView2.SourceChanged`（`isNewDocument=False`），`Source` 是含新 `navigation` 的完整地址；宿主调用 `CoreWebView2.Reload()` 后仍停在当前模块，ready 被接受（实验中宿主未换代次）。
+- T2（一次性诊断分支，已丢弃）：前端 `replaceState` 会触发 `CoreWebView2.SourceChanged`（`isNewDocument=False`），`Source` 是含新 `loadId` 的完整地址；宿主调用 `CoreWebView2.Reload()` 后仍停在当前模块，ready 被接受（实验中宿主未换代次）。
 - 推理（T2 当时未实测）：宿主若换了代次再 `Reload()`，URL 里仍是旧代次，ready 会被拒收，所以重试不能只靠 `Reload()`。这是选择整页导航方案（读取 `Source`、用 `BuildDocumentUrl` 替换代次并重新设置 `Source`）的原因，也是 9.2 第 4 条设计张力的解决方式；该方案的实测见下文第 5 项。
 
 测试版桌面验收（2026-10-20，Development 环境，发布到临时目录；只切页，未点击任何写入按钮）：
@@ -296,7 +296,7 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 
 与设计文字的差异和注意事项：
 
-- URL 参数名仍为 `navigation`，4.2 中“线上字段名在切换实现时明确”的结论是：本次不改名，改名登记到 Electron 阶段。
+- URL 加载编号参数名为 `loadId`；切换段当时未改名，后续命名决策见 electron-host-design.md 的 EHD-14、EHD-15。
 - 前端仍上报归一后的 `route`，宿主只写日志，不参与比较。
 - 重试时来源不可信或为空，退回首次加载地址，不保留 route。
 - 本次验收仅覆盖测试版；正式版未验证；开发版与正式版是否共用同一 Teable 库，源码查不出，验收时按“可能共用”处理，没有执行写入。
@@ -327,9 +327,9 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 
 | 编号 | 已定决策 | 理由 | 被否决的替代方案 |
 |---|---|---|---|
-| ADR-01 | 兼容段只集中路由表、导航入口、拆测试契约及归一旧前缀，仍由 app.navigateNative 驱动；正常七入口行为零变化。前端写 URL 与宿主退出每页握手在切换段同一 PR 原子完成 | 旧校验强制比较 route/navigation；半套切换会使 ready 无效并触发整页隐藏。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:131-133,187-193` | 前端先切页、C# 以后再改；双端同时写 URL；为兼容而放松旧 ready 校验。旧前缀修正的零变化边界见 4.2 |
+| ADR-01 | 兼容段只集中路由表、导航入口、拆测试契约及归一旧前缀，仍由 app.navigateNative 驱动；正常七入口行为零变化。前端写 URL 与宿主退出每页握手在切换段同一 PR 原子完成 | 旧校验强制比较 route/loadId；半套切换会使 ready 无效并触发整页隐藏。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96`；`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:131-133,187-193` | 前端先切页、C# 以后再改；双端同时写 URL；为兼容而放松旧 ready 校验。旧前缀修正的零变化边界见 4.2 |
 | ADR-02 | 模块切换继续 replaceState，不新增返回/前进历史；变化及时写回 URL，完整重载/重试恢复模块 | 保持已有历史行为，同时使 URL 能承载重载状态。现状依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:119-127`；现有完整重载入口：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:21` | pushState 新增模块历史；只改内存 route；让 C# 默认模块覆盖当前 URL |
-| ADR-03 | 过渡期保持 `/index.html?route=…`，navigation 不再决定业务页；Electron 来源/localStorage 留到后续 | 当前来源检查限定 /index.html，不能把装载协议变化混入导航权切换。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87` | 直接改 pathname；在此选择 Electron scheme 或清空/搬迁浏览器存储【2026-10-26：Electron 文档来源已决（自定义协议），见 electron-host-design.md 的 EHD-01；localStorage 迁移仍待决。】 |
+| ADR-03 | 过渡期保持 `/index.html?route=…`，loadId 不再决定业务页；Electron 来源/localStorage 留到后续 | 当前来源检查限定 /index.html，不能把装载协议变化混入导航权切换。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87` | 直接改 pathname；在此选择 Electron scheme 或清空/搬迁浏览器存储【2026-10-26：Electron 文档来源已决（自定义协议），见 electron-host-design.md 的 EHD-01；localStorage 迁移仍待决。】 |
 | ADR-04 | 保留按文档加载 ID 的启动确认，可沿用 app.ready；业务路由就绪交前端，route 仅日志；启动标准为外壳和首路由可呈现，不等业务查询/iframe | 分开宿主装载与业务切页，仍防旧文档误显示；保持当前 mounted 路由边界。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:59-64`；`routes/RouteReady.tsx:4-7`（同一 src 目录）；旧文档保护现状见 `src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96` | 删除全部启动确认；只用文档加载事件；等待业务查询/iframe 才显示；继续要求 C# 当前 route 一致 |
 | ADR-05 | 忙碌时切页/关窗保持现状，切页不主动取消已发操作、不新增守卫；守卫独立登记 | 当前没有统一导航/关窗业务拦截，后端忙碌锁按操作释放；不顺带改变业务执行。依据：`src/ProductionAssistant.App/MainWindow.xaml.cs:41-65`；`PrototypeBridge.PlanPdf.cs:18-19,75`、`PrototypeBridge.Meeting.cs:15-16,37`（同一 App 目录） | 本迁移中禁止切页/关窗；离页清锁或强制取消。此决策不保证关窗或进程退出后任务还能继续完成，该能力未确认 |
 | ADR-06 | 页面卸载即重置，不恢复；明确记录前端重置而后端 auditId/resultId 保留；Electron 再确定业务会话长驻 | 保持现有状态边界，不扩展成恢复系统。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:55`；`src/ProductionAssistant.App/PrototypeBridge.PlanPdf.cs:10-75`；`src/ProductionAssistant.App/PrototypeBridge.Meeting.cs:9-37` | 常驻所有页面；新增恢复接口；离页把后端结果一起清空；默认后端可逐请求重建 |
@@ -349,10 +349,10 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 ### 7.2 切换段
 
 - 半套前端/宿主部署，旧 ready 校验或 15 秒等待仍运行，导致整个 WebView 隐藏。依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:131-133,158-193`。
-- 去掉 navigation 参数却保留非空检查，或业务切页复用旧 navigation 去重机制。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:94`；`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:23-25`。
+- 去掉 loadId 参数却保留非空检查，或业务切页复用旧 loadId 去重机制。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:94`；`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:23-25`。
 - 宿主重试仍从旧 `_route` 构造 URL，丢失前端当前模块。现状依据：`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:119-127,171-177`。
 - 改 pathname 使受信路径不再匹配，或把 Electron 的新文档来源误当当前来源可直接替代。依据：`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:82-87`；未来 Electron 来源未确认。【2026-10-26：Electron 来源已定为自定义协议 pa，来源检查须按 electron-host-design.md 的 EHD-03 改写并有测试。】
-- 删除 navigation key 而没有替代错误边界重置，同路由失败后无法恢复。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:16-22,59`。
+- 删除 loadId key 而没有替代错误边界重置，同路由失败后无法恢复。依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.tsx:16-22,59`。
 - 切页后前端结果丢失、后端仍忙，返回页面重试时遭拒；重发写入是否产生业务重复取决于对应幂等规则，不能靠导航层保证。依据：`src/ProductionAssistant.App/Assets/Prototype/src/features/plan-pdf/PlanPdfPage.tsx:30-32,52-68`；`src/ProductionAssistant.App/PrototypeBridge.PlanPdf.cs:18-19`。
 - 直接换宿主但没有原生能力 transport，生产调用报未连接桌面宿主。依据：`src/ProductionAssistant.App/Assets/Prototype/src/bridge/index.ts:8-14`；`bridge/webview.ts:31-41`（同一 src 目录）。
 
@@ -399,7 +399,7 @@ T1/T2 实测结论（回答 9.2 第 6 条）：
 1. 独立协议文档的实际路径与维护归属；当前被跟踪文件中未发现独立 PrototypeBridge 协议文档，不能捏造路径或把协议代码当作文档。已有本地相关说明及跟踪状态见第 8 节。
 2. 仓库外旧 navigation:* 地址的真实来源、是否携带旧宿主令牌；不能以测试构造地址推定实际外部兼容已完成。测试依据：`src/ProductionAssistant.App/Assets/Prototype/src/app/App.test.tsx:349,457,492,549`。以上仍未确认；#49 仅有自动化测试，真实桌面未验证，不得视为通过。【切换段之后宿主不再产生 navigation: 前缀地址，前端仍保留归一能力；外部来源未确认的状态不变。】
 3. Electron 文档来源、能力 transport、localStorage 迁移及后端业务会话是否长驻；不能假设当前 WebView 通道直接可用。依据：`src/ProductionAssistant.App/Assets/Prototype/src/bridge/index.ts:3-14`；`bridge/webview.ts:31-41`（同一 src 目录）。【2026-10-26：其中文档来源已决，见 electron-host-design.md 的 EHD-01 至 EHD-05 与第 3 节原型验证；能力 transport、localStorage 迁移、后端业务会话是否长驻仍未确认。】【2026-10-27：能力通道已决，见 electron-host-design.md 的 EHD-06 至 EHD-09 与第 7 节原型验证；localStorage 迁移、后端业务会话是否长驻仍未确认。】【2026-10-27：后端业务会话是否长驻已决，见 electron-host-design.md 的 EHD-10、EHD-11；localStorage 迁移仍未确认。】【2026-10-27：localStorage 迁移已决，见 electron-host-design.md 的 EHD-12、EHD-13。】
-4. 文档加载 ID 的最终字段命名、启动计时边界和前端同路由重试的具体接口；语义已由 4.2-4.3 固定，实现形状在对应 PR 评审，不重新开放七项决策。未确认的设计张力：4.3 与 5.2 同时要求“宿主重试基于重载当前文档”和“重试更换文档加载代次”；若加载代次通过 URL 的 navigation 字段承载，直接重载当前文档会带回旧代次，两项要求无法同时满足。切换段实现设计需要在候选方案中二选一或另定方案，例如：代次不放在 URL、由宿主通过其他通道传递；或将重试改为受控的整文档导航，并明确当前 route 与其他参数的保留及加载代次更新规则。这里只记录张力和待决事项，不预选方案，不重新开放七条已定决策。【2026-10-20 已决：选用整页导航方案，见 5.2.1。URL 参数名仍为 navigation，C# 内部变量为 _loadId，线上参数改名留到 Electron 阶段。】【2026-10-28：线上参数改名已决为 loadId，见 electron-host-design.md 的 EHD-14、EHD-15。】
+4. 文档加载 ID 的最终字段命名、启动计时边界和前端同路由重试的具体接口；语义已由 4.2-4.3 固定，实现形状在对应 PR 评审，不重新开放七项决策。未确认的设计张力：4.3 与 5.2 同时要求“宿主重试基于重载当前文档”和“重试更换文档加载代次”；若加载代次通过 URL 的 loadId 字段承载，直接重载当前文档会带回旧代次，两项要求无法同时满足。切换段实现设计需要在候选方案中二选一或另定方案，例如：代次不放在 URL、由宿主通过其他通道传递；或将重试改为受控的整文档导航，并明确当前 route 与其他参数的保留及加载代次更新规则。这里只记录张力和待决事项，不预选方案，不重新开放七条已定决策。【2026-10-20 已决：选用整页导航方案，见 5.2.1。URL 参数名仍为 navigation，C# 内部变量为 _loadId，线上参数改名留到 Electron 阶段。】【2026-10-28：线上参数改名已决为 loadId，见 electron-host-design.md 的 EHD-14、EHD-15。】【2026-10-29：已在 #66 实施，线上参数现为 loadId；本文中描述历史状态的 navigation 字样（如兼容段 #49、切换段合并时的返回类型）保持原样。】
 5. 实际桌面加载、超时/晚到 ready、系统对话框和关窗期间业务结果的运行表现；本轮只读抽查，没有执行构建、测试或桌面验收，不能标记通过。【2026-10-20 切换段测试版桌面验收已覆盖：启动、七模块切换、F5、设置、文件选择器打开与取消、启动超时与重试；未覆盖：关窗期间业务结果、晚到 ready 的人工复现、正式版，见 5.2.1。】
 6. WebView2 的 Source 是否反映 history.replaceState 后的 URL，以及“重载当前文档”是否保留该 URL：均未确认，必须在真实桌面验证，并作为 5.2 切换段验收前置项；不能由当前重新设置 Source 的重试代码或浏览器/DOM 测试推定通过。【2026-10-20 已确认：Source 反映 replaceState 后的 URL；重载当前文档保留该 URL；结论与实测范围见 5.2.1。】
 
