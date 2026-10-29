@@ -2,7 +2,6 @@ src/ProductionAssistant.App/Assets/Prototype/dist/assets/*.js -diff
 
 # Keep generated frontend assets byte-for-byte across checkouts and rebuilds.
 src/ProductionAssistant.App/Assets/Prototype/dist/** -text
-src/ProductionAssistant.App/Assets/ReportEditor/editor.js -text
 
 # Vite preserves the input HTML line endings.
 src/ProductionAssistant.App/Assets/Prototype/index.html text eol=lf
