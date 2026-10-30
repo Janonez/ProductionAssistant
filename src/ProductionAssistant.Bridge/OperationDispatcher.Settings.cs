@@ -5,11 +5,11 @@ using ProductionAssistant.Services;
 
 namespace ProductionAssistant;
 
-internal sealed partial class PrototypeBridge
+public sealed partial class OperationDispatcher
 {
     private static readonly NotificationService SettingsNotifications = new();
 
-    private static async Task<object> SaveSettingsConnectionAsync(
+    private async Task<object> SaveSettingsConnectionAsync(
         JsonElement payload,
         bool refresh,
         CancellationToken cancellationToken)
@@ -33,13 +33,13 @@ internal sealed partial class PrototypeBridge
         return SettingsResult("Teable 连接及生产数据源已验证。", settings);
     }
 
-    private static object SaveSettingsNotification(JsonElement payload)
+    private object SaveSettingsNotification(JsonElement payload)
     {
         var settings = SaveNotificationChannel(payload);
         return SettingsResult("通知渠道已保存，建议发送一次测试。", notification: settings);
     }
 
-    private static async Task<object> TestSettingsNotificationAsync(
+    private async Task<object> TestSettingsNotificationAsync(
         JsonElement payload,
         CancellationToken cancellationToken)
     {
@@ -54,7 +54,7 @@ internal sealed partial class PrototypeBridge
         return SettingsResult(result.Message, notification: settings);
     }
 
-    private static object SaveSettingsNotificationRules(JsonElement payload)
+    private object SaveSettingsNotificationRules(JsonElement payload)
     {
         var settings = NotificationSettingsStore.Load();
         if (payload.ValueKind == JsonValueKind.Object &&
@@ -96,7 +96,7 @@ internal sealed partial class PrototypeBridge
         return NotificationSettingsStore.Load();
     }
 
-    private static object SettingsResult(
+    private object SettingsResult(
         string message,
         NotionSettings? notion = null,
         NotificationSettings? notification = null) => new
@@ -105,15 +105,13 @@ internal sealed partial class PrototypeBridge
         message
     };
 
-    private static object GetSettingsState(
+    private object GetSettingsState(
         NotionSettings? notion = null,
         NotificationSettings? notification = null)
     {
         notion ??= BusinessDatabaseSettingsStore.Load();
         notification ??= NotificationSettingsStore.Load();
-        var version = Assembly.GetExecutingAssembly()
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion ?? "1.5.3";
+        var version = _host.AppVersion ?? "1.5.3";
         return new
         {
             notion = new

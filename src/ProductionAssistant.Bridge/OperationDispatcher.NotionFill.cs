@@ -4,7 +4,7 @@ using ProductionAssistant.Services;
 
 namespace ProductionAssistant;
 
-internal sealed partial class PrototypeBridge
+public sealed partial class OperationDispatcher
 {
     private static object CreateNotionFillJob(JsonElement payload)
     {

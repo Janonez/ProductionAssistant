@@ -5,7 +5,7 @@ using ProductionAssistant.Services;
 
 namespace ProductionAssistant;
 
-internal sealed partial class PrototypeBridge
+public sealed partial class OperationDispatcher
 {
     private PlanAuditResult? _planAudit;
     private string _planAuditId = string.Empty;
@@ -22,8 +22,8 @@ internal sealed partial class PrototypeBridge
             if (operation == "plan.pickFolder")
             {
                 return new { path = await DesktopFilePicker.PickFolderAsync(
-                    WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow),
-                    ReadString(payload, "path"), PrototypeWebViewRuntime.Mark) };
+                    _host.GetWindowHandle(),
+                    ReadString(payload, "path"), _host.Mark) };
             }
             if (operation == "plan.audit")
             {
