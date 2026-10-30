@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatDate, monthGrid, parseDate, yearGrid } from './calendar'
 
 describe('calendar', () => {
+  afterEach(() => { vi.useRealTimers() })
+
   it('builds a stable six-week month without UTC date drift', () => {
     const days = monthGrid(2026, 7)
     expect(days).toHaveLength(42)
@@ -12,6 +14,8 @@ describe('calendar', () => {
 
   it('builds twelve-year pages and rejects impossible dates', () => {
     expect(yearGrid(2026)).toEqual([2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032])
-    expect(parseDate('2026-02-30').getDate()).not.toBe(30)
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0))
+    expect(formatDate(parseDate('2026-02-30'))).toBe('2026-06-15')
   })
 })
