@@ -5,7 +5,7 @@ using ProductionAssistant.Services;
 
 namespace ProductionAssistant;
 
-internal sealed partial class PrototypeBridge
+public sealed partial class OperationDispatcher
 {
     private static async Task<object> TencentSheetAsync(string operation, JsonElement payload, CancellationToken cancellationToken)
     {

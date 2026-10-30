@@ -4,7 +4,7 @@ using ProductionAssistant.Services;
 
 namespace ProductionAssistant;
 
-internal sealed partial class PrototypeBridge
+public sealed partial class OperationDispatcher
 {
     private bool _meetingBusy;
     private ProductionMeetingExportResult? _meetingOutput;
@@ -19,8 +19,8 @@ internal sealed partial class PrototypeBridge
             if (operation == "meeting.pickFile")
             {
                 return new { path = await DesktopFilePicker.PickExcelAsync(
-                    WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow),
-                    ReadString(payload, "path"), PrototypeWebViewRuntime.Mark) };
+                    _host.GetWindowHandle(),
+                    ReadString(payload, "path"), _host.Mark) };
             }
             if (operation == "meeting.export")
             {

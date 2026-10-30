@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace ProductionAssistant;
 
-internal sealed partial class PrototypeBridge
+public sealed partial class OperationDispatcher
 {
     private static async Task<object> ListAutomationTasksAsync() =>
         new { tasks = await AppServices.AutomationTaskHandlers.ListTasksAsync(), availableTaskTypes = AppServices.AutomationTaskHandlers.TaskTypes };

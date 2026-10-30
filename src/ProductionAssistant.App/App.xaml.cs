@@ -42,17 +42,7 @@ public partial class App : Application
             var taskId = legacyDailyReport
                 ? ReadArgument(arguments, "--job-id")
                 : ReadArgument(arguments, "--task-id");
-            try
-            {
-                if (string.IsNullOrWhiteSpace(taskType) || string.IsNullOrWhiteSpace(taskId))
-                    Environment.ExitCode = (int)Models.DailyReportExitCode.JobNotFound;
-                else
-                    Environment.ExitCode = (await AppServices.AutomationTasks.RunAsync(taskType, taskId)).Result.ExitCode;
-            }
-            catch
-            {
-                Environment.ExitCode = (int)Models.DailyReportExitCode.JobNotFound;
-            }
+            await AutomationLauncher.RunAsync(taskType, taskId);
             Exit();
             return;
         }

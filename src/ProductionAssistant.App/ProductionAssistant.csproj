@@ -37,6 +37,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ProductionAssistant.Core\ProductionAssistant.Core.csproj" />
     <ProjectReference Include="..\ProductionAssistant.Infrastructure\ProductionAssistant.Infrastructure.csproj" />
+    <ProjectReference Include="..\ProductionAssistant.Bridge\ProductionAssistant.Bridge.csproj" />
   </ItemGroup>
 
   <ItemGroup>
