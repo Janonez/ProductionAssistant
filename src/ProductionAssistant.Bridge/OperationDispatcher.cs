@@ -11,8 +11,16 @@ public sealed partial class OperationDispatcher
     {
         Converters = { new JsonStringEnumConverter() }
     };
+    private static readonly HashSet<string> ExclusiveOperations = new(StringComparer.Ordinal)
+    {
+        "production.write",
+        "weld.write",
+        "notionFill.runNow",
+        "daily.sendToday",
+        "report.run"
+    };
     private readonly IBridgeHost _host;
-    private CancellationTokenSource? _activeOperation;
+    private readonly OperationRegistry _registry = new();
 
     public OperationDispatcher(IBridgeHost host)
     {
@@ -37,17 +45,19 @@ public sealed partial class OperationDispatcher
 
             if (operation == "production.cancel")
             {
-                _activeOperation?.Cancel();
+                _registry.Cancel(ReadString(payload, "targetId"));
                 Respond(id, new { cancelled = true });
                 return;
             }
 
-            _activeOperation?.Dispose();
-            _activeOperation = new CancellationTokenSource();
             var timedRead = operation is "production.getBindings" or "automation.list";
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             if (timedRead) _host.Mark($"bridge-start-{operation}");
-            var result = await DispatchAsync(id, operation, payload, _activeOperation.Token);
+            object? result;
+            using (var lease = _registry.Begin(id, operation, ExclusiveOperations.Contains(operation)))
+            {
+                result = await DispatchAsync(id, operation, payload, lease.Token);
+            }
             if (timedRead) _host.Mark($"bridge-end-{operation}-duration={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0}ms");
             Respond(id, result);
         }

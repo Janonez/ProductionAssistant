@@ -6,5 +6,6 @@
   <ItemGroup>
     <ProjectReference Include="..\ProductionAssistant.Core\ProductionAssistant.Core.csproj" />
     <ProjectReference Include="..\ProductionAssistant.Infrastructure\ProductionAssistant.Infrastructure.csproj" />
+    <InternalsVisibleTo Include="ProductionAssistant.Tests" />
   </ItemGroup>
 </Project>
