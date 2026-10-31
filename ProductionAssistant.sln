@@ -16,6 +16,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeableProbe", "tools\Teable
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProductionAssistant.Bridge", "src\ProductionAssistant.Bridge\ProductionAssistant.Bridge.csproj", "{FC2C292B-41E9-4EB7-872C-42BE5C6E54C9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProductionAssistant.Sidecar", "src\ProductionAssistant.Sidecar\ProductionAssistant.Sidecar.csproj", "{3F6940CE-1A36-403E-A6FC-C81D4974AB80}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -46,6 +48,10 @@ Global
 		{FC2C292B-41E9-4EB7-872C-42BE5C6E54C9}.Debug|x64.Build.0 = Debug|x64
 		{FC2C292B-41E9-4EB7-872C-42BE5C6E54C9}.Release|x64.ActiveCfg = Release|x64
 		{FC2C292B-41E9-4EB7-872C-42BE5C6E54C9}.Release|x64.Build.0 = Release|x64
+		{3F6940CE-1A36-403E-A6FC-C81D4974AB80}.Debug|x64.ActiveCfg = Debug|x64
+		{3F6940CE-1A36-403E-A6FC-C81D4974AB80}.Debug|x64.Build.0 = Debug|x64
+		{3F6940CE-1A36-403E-A6FC-C81D4974AB80}.Release|x64.ActiveCfg = Release|x64
+		{3F6940CE-1A36-403E-A6FC-C81D4974AB80}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{784E7C31-813B-4E2D-9885-3B448805F639} = {03C35FFF-B818-4824-8700-F5F5F19D7E2B}

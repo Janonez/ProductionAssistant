@@ -37,6 +37,17 @@ internal sealed class OperationRegistry
         catch (ObjectDisposedException) { return false; }
     }
 
+    internal void CancelAll()
+    {
+        Lease[] leases;
+        lock (_gate) leases = _requests.Values.ToArray();
+        foreach (var lease in leases)
+        {
+            try { lease.Source.Cancel(); }
+            catch (ObjectDisposedException) { }
+        }
+    }
+
     private void End(Lease lease)
     {
         lock (_gate)

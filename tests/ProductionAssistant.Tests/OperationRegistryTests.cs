@@ -133,4 +133,57 @@ public sealed class OperationRegistryTests
         }
         finally { replacement?.Dispose(); }
     }
+
+    [Fact]
+    public void CancelAll_cancels_every_inflight_request_but_not_subsequent_requests()
+    {
+        var registry = new OperationRegistry();
+        using var first = registry.Begin("first", "production.parse", false);
+        using var second = registry.Begin("second", "weld.generate", false);
+
+        registry.CancelAll();
+
+        Assert.True(first.Token.IsCancellationRequested);
+        Assert.True(second.Token.IsCancellationRequested);
+        using var next = registry.Begin("next", "production.parse", false);
+        Assert.False(next.Token.IsCancellationRequested);
+    }
+
+    [Fact]
+    public void CancelAll_is_safe_for_an_empty_registry_and_disposed_leases()
+    {
+        var registry = new OperationRegistry();
+        registry.CancelAll();
+        var lease = registry.Begin("first", "production.parse", false);
+        lease.Dispose();
+
+        registry.CancelAll();
+        registry.CancelAll();
+        Assert.False(registry.Cancel("first"));
+    }
+
+    [Fact]
+    public void CancelAll_callbacks_can_release_leases_without_holding_the_registry_lock()
+    {
+        var registry = new OperationRegistry();
+        using var first = registry.Begin("first", "production.parse", false);
+        using var second = registry.Begin("second", "weld.generate", false);
+        using var released = new ManualResetEventSlim();
+        using var registration = first.Token.Register(() =>
+        {
+            _ = Task.Run(() =>
+            {
+                first.Dispose();
+                second.Dispose();
+                released.Set();
+            });
+            Assert.True(released.Wait(TimeSpan.FromSeconds(5)));
+        });
+
+        registry.CancelAll();
+
+        Assert.True(first.Token.IsCancellationRequested);
+        Assert.False(registry.Cancel("first"));
+        Assert.False(registry.Cancel("second"));
+    }
 }
