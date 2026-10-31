@@ -79,6 +79,8 @@ public sealed partial class OperationDispatcher
             RespondError(id, BridgeErrorLog.Record(operation, exception));
     }
 
+    public void CancelAll() => _registry.CancelAll();
+
     private async Task<object?> DispatchAsync(string id, string operation, JsonElement payload, CancellationToken cancellationToken) =>
         operation switch
         {
