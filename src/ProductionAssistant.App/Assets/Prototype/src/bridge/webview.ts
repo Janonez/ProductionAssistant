@@ -2,11 +2,15 @@ export interface BridgeRequest<T = unknown> { id: string; operation: string; pay
 export interface BridgeResponse<T = unknown> { id: string; ok?: boolean; type?: 'progress'; data?: T; error?: string }
 
 type Pending = { resolve: (value: unknown) => void; reject: (reason: Error) => void; timer: number; progress?: (value: unknown) => void }
-type WebView = { postMessage(value: unknown): void; addEventListener(name: string, handler: (event: MessageEvent) => void): void }
+type Host = { postMessage(value: unknown): void; addEventListener(name: string, handler: (event: { data: unknown }) => void): void }
 
 const pending = new Map<string, Pending>()
 let nextId = 0
-const webview = () => (window as typeof window & { chrome?: { webview?: WebView } }).chrome?.webview
+const host = () => {
+  const desktop = window as typeof window & { chrome?: { webview?: Host }; paHost?: Host }
+  return desktop.chrome?.webview ?? desktop.paHost
+}
+export const hasHost = () => Boolean(host())
 
 export function receive(response: BridgeResponse) {
   const request = pending.get(response.id)
@@ -17,18 +21,18 @@ export function receive(response: BridgeResponse) {
   response.ok ? request.resolve(response.data) : request.reject(new Error(response.error || '操作失败'))
 }
 
-webview()?.addEventListener('message', event => receive(event.data as BridgeResponse))
+host()?.addEventListener('message', event => receive(event.data as BridgeResponse))
 
 // 传输层只负责发送 app.ready；同一文档加载代次的幂等（按 loadId 令牌去重）由 bridge/index.ts 适配层保证。
 export function notifyReady(route: string, loadId: string) {
-  webview()?.postMessage({ type: 'app.ready', route, loadId,
+  host()?.postMessage({ type: 'app.ready', route, loadId,
     moduleEntryMs: Math.round(performance.getEntriesByName('module-entry')[0]?.startTime || 0),
     readyMs: Math.round(performance.now()) })
 }
 
 export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 30000, onProgress?: (value: unknown) => void): Promise<T> {
-  const host = webview()
-  if (!host) return Promise.reject(new Error('当前页面未连接到桌面宿主'))
+  const desktop = host()
+  if (!desktop) return Promise.reject(new Error('当前页面未连接到桌面宿主'))
   const id = `${Date.now()}-${++nextId}`
   return new Promise<T>((resolve, reject) => {
     const timer = window.setTimeout(() => {
@@ -36,7 +40,7 @@ export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 3000
       reject(new Error('操作超时，请重试'))
     }, timeoutMs)
     pending.set(id, { resolve: value => resolve(value as T), reject, timer, progress: onProgress })
-    host.postMessage({ id, operation, payload } satisfies BridgeRequest)
+    desktop.postMessage({ id, operation, payload } satisfies BridgeRequest)
   })
 }
 

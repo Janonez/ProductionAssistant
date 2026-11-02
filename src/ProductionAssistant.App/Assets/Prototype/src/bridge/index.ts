@@ -1,13 +1,11 @@
 import * as webview from './webview'
 
-const hasWebView = () => Boolean((window as typeof window & { chrome?: { webview?: unknown } }).chrome?.webview)
-
 type ProgressListener = (value: unknown) => void
 const progressListeners = new Map<string, Set<ProgressListener>>()
 const readyLoadIds = new Set<string>()
 
 export function invoke<T>(operation: string, payload?: unknown, timeoutMs = 30000, progress?: ProgressListener): Promise<T> {
-  if (import.meta.env.DEV && !hasWebView())
+  if (import.meta.env.DEV && !webview.hasHost())
     return import('./mock').then(mock => mock.invoke<T>(operation, payload))
   return webview.invoke<T>(operation, payload, timeoutMs, value => {
     progress?.(value)
@@ -31,7 +29,7 @@ export function onProgress(operation: string, listener: ProgressListener): () =>
 export function notifyReady(route: string, loadId: string): void {
   if (loadId && readyLoadIds.has(loadId)) return
   if (loadId) readyLoadIds.add(loadId)
-  if (import.meta.env.DEV && !hasWebView()) {
+  if (import.meta.env.DEV && !webview.hasHost()) {
     void import('./mock').then(mock => mock.ready(route, loadId))
     return
   }

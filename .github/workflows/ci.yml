@@ -19,7 +19,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: src/ProductionAssistant.App/Assets/Prototype/package-lock.json
+          cache-dependency-path: |
+            src/ProductionAssistant.App/Assets/Prototype/package-lock.json
+            src/ProductionAssistant.Desktop/package-lock.json
       - name: Verify
         shell: pwsh
         run: ./scripts/verify.ps1

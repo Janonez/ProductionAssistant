@@ -165,3 +165,43 @@ describe('bridge transport selection', () => {
     expect(postMessage).toHaveBeenCalledWith({ id: expect.any(String), operation: 'database.getState', payload: undefined })
   })
 })
+
+describe('Electron bridge adapter in DEV', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubEnv('DEV', true)
+    Reflect.deleteProperty(window, 'chrome')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+    Reflect.deleteProperty(window, 'paHost')
+  })
+
+  it('uses paHost instead of mock for requests and ready in DEV', async () => {
+    let receive!: (event: { data: unknown }) => void
+    const hostState: DatabaseState = { provider: 'Electron fixture', usesBusinessSections: false, businessSections: [], sources: [] }
+    const postMessage = vi.fn((request: BridgeRequest) => {
+      if (request.id) queueMicrotask(() => receive({ data: { id: request.id, ok: true, data: hostState } }))
+    })
+    Object.assign(window, { paHost: {
+      postMessage, addEventListener: (_: string, handler: typeof receive) => { receive = handler },
+    } })
+    const mock = await import('./mock')
+    const mockedInvoke = vi.spyOn(mock, 'invoke')
+    const mockedReady = vi.spyOn(mock, 'ready')
+    const { bridge } = await import('./index')
+    await expect(bridge.invoke('database.getState')).resolves.toEqual(hostState)
+    bridge.ready('database-viewer', 'electron-load')
+    bridge.ready('database-viewer', 'electron-load')
+    expect(postMessage).toHaveBeenCalledWith({ id: expect.any(String), operation: 'database.getState', payload: undefined })
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'app.ready', route: 'database-viewer', loadId: 'electron-load',
+      moduleEntryMs: expect.any(Number), readyMs: expect.any(Number),
+    })
+    expect(postMessage).toHaveBeenCalledTimes(2)
+    expect(mockedInvoke).not.toHaveBeenCalled()
+    expect(mockedReady).not.toHaveBeenCalled()
+  })
+})
