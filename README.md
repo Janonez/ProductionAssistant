@@ -61,7 +61,7 @@ v1.8.0 的 Windows x64 稳定包见 [GitHub Release](https://github.com/Janonez/
 
 左侧原“设置”入口打开由 `App.tsx` 控制的全局 React 弹窗，不再切换到独立页面；关闭后仍停留在原业务页面。弹窗集中管理 Teable 连接、数据源缓存、系统通知渠道和关于信息。已保存的令牌、Webhook 与 Secret 只显示密码掩码，明文不返回前端。
 
-日报详情采用正文 `/` 插入、并列预览、设置弹窗与折叠记录；文件统计汇总继续独立管理 FineReport 采集与汇总。`scripts\verify.ps1` 会执行字体字重检查、前端测试、类型检查、离线生产构建、Release 编译、xUnit 测试和 Debug 发布。
+日报详情采用正文 `/` 插入、并列预览、设置弹窗与折叠记录；文件统计汇总继续独立管理 FineReport 采集与汇总。`scripts\verify.ps1` 会执行字体字重检查、前端测试、类型检查、离线生产构建、Release 编译、xUnit 测试和 Debug 发布。同时运行 `src\ProductionAssistant.Desktop` 的 `npm ci --ignore-scripts` 与 `npm test`。
 
 “数据库查看”是只读调试入口。数据库目录由当前适配器统一提供：Teable 按迁移映射保留原业务板块与数据库目录；不提供业务分组的本地数据库适配器会自动退化为单层数据库选择。View 下拉框只显示所选数据库自身真实存在的 View。普通 View（包括独立月计划数据库的 View）读取完整结果；仅精确名称“本年截止今日”显示日期字段、数值字段和日期查询口径。
 
@@ -70,7 +70,12 @@ v1.8.0 的 Windows x64 稳定包见 [GitHub Release](https://github.com/Janonez/
 - `ProductionAssistant.App`：WinUI 壳与页面、React/WebView2 前端资源、导航、程序入口和依赖组装。
 - `ProductionAssistant.Core`：模型、解析与纯业务计算，不依赖 UI 或外部系统。
 - `ProductionAssistant.Infrastructure`：Teable、Notion 迁移兼容、钉钉、Excel、PDF、DPAPI、本地文件和任务计划程序。
+- `ProductionAssistant.Bridge`：界面请求分发层（OperationDispatcher、会话状态、取消与独占登记），不引用 WinUI 与 WebView2，供 WinUI 宿主与 Sidecar 共用。
+- `ProductionAssistant.Sidecar`：无窗口进程，通过标准输入输出以一行一个 JSON 提供 Bridge 的能力，也是计划任务入口之一；目前只开放只读子集。
+- `ProductionAssistant.Desktop`：Electron 外壳（Node 项目，纯逻辑在 lib，用 node --test 验证），尚未替代 WinUI，仅在开发机手动运行。
 - `ProductionAssistant.Tests`：引用真实生产程序集的自动化测试。
+
+分层依赖关系：Core ← Infrastructure ← Bridge ← App 与 Sidecar；Desktop 是与 .NET 项目并列的 Node 项目，通过 Sidecar 的标准输入输出通信。
 
 各版本已经发布的用户可见变化见 [变更记录](CHANGELOG.md)。
 

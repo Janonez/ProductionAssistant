@@ -22,6 +22,8 @@
 - 能力通道：原型只证明消息能从真实页面送达主进程并通过校验，没有证明真实前端能通信。真实前端目前只识别 window.chrome.webview，须在前端 bridge 增加 Electron 传输实现；属待决项 B。
 - 打包与分发：Electron 自 42 起不再在安装脚本中下载二进制，首次运行或手动执行 install-electron 才下载。打包与发布流程须明确二进制来源，不能依赖安装时自动带上。
 
+【2026-11-02：存储位置已决定（EHD-13 与 EHD-19）；应用菜单已决定（EHD-19）；内容安全策略与打包尚未决定，见第 16 节。】
+
 ## 3. 原型验证记录（2026-10-26）
 
 原型位于本机仓库内被 .gitignore 排除的目录，不随仓库提交；本节为结论摘要。验证环境：Electron 45.0.0，Node v24.19.0，npm 12.0.2，一台机器。被加载的前端是提交 aa4d203 的 Assets/Prototype/dist 的拷贝，共 123 个文件，index.html 的 SHA256 为 30CCA028AA0CB8B1A2CC228F4E8DFB7020E1F4965276A6DE562CDDD9B9ADCABE。
@@ -73,6 +75,8 @@ WebView2 桌面验收中观察到的现象，在 Electron 原型中做了人工�
 | EHD-08 | 第一阶段由无窗口的 C# 进程承载 Infrastructure 中的业务服务，行为不变，前端协议不变；路由表中每个操作任何时刻只有一个提供方；之后可按操作组把提供方换成别的语言，每组迁移前录制真实请求与响应作为对照夹具，迁完删除原路由 | 迁宿主与换语言不叠加，出错时能分清来源；Infrastructure 不引用 WinUI，已读到的服务类型均为 public；回滚即修改路由 | 迁宿主的同时重写业务；两个提供方同时处理同一个操作 |
 | EHD-09 | 文件夹与 Excel 选择：第一阶段保留 C# 选择器，由 Electron 传入原生窗口句柄；第二阶段评估改由 Electron 对话框提供，只改路由。网络驱动器不可达时系统对话框加载慢，登记为环境问题，不作为选型依据 | 第一阶段不改行为；两种方式在原型中都能弹出，Electron 对话框没有异常；系统自带的打开对话框在同一环境下同样慢，且该机器存在断开的映射网络驱动器，见第 8 节 | 第一阶段直接改用 Electron 对话框 |
 
+【2026-11-02 实施注记：EHD-07 中“显式指定数据根目录”在实现中改为只显式指定环境名，不设置数据目录变量，理由见 EHD-17；EHD-09 的第二阶段提前：外壳路径上的文件夹与 Excel 选择已由 Electron 对话框承担，Sidecar 不使用 C# 选择器与窗口句柄；WinUI 宿主在退役前仍使用 C# 选择器。】
+
 ## 7. 原型验证记录（能力通道，2026-10-27）
 
 原型位于本机仓库内被 .gitignore 排除的目录，不随仓库提交；本节为结论摘要。验证环境：Electron 45.0.0，.NET SDK 8.0.423，Node v24.19.0，仓库提交 511c66f，一台机器。原型直接引用 Core 与 Infrastructure，不引用 WinUI，数据目录指向系统临时目录；只运行三个只读真实操作（settings.open、database.getState、automation.list）和仅原型使用的机制测试操作。
@@ -98,6 +102,8 @@ WebView2 桌面验收中观察到的现象，在 Electron 原型中做了人工�
 ## 8. 已登记的环境问题
 
 开发机连接手机热点时，存在处于断开状态的映射网络驱动器，系统文件对话框的内容加载很慢，系统自带记事本的打开对话框在同一环境下同样慢，因此不是我们的选择器或宿主造成的。正式版日志中的选择器跟踪只记录对话框窗口出现的时间（约 410 至 614 毫秒），量不到出现之后的内容加载，不能用来排除该问题。在公司内网中该问题是否消失，没有验证。设计文档不据此改变选型，只在第一阶段验收时在内网环境下复核。
+
+【2026-11-02：本节“因此不是我们的选择器或宿主造成的”一句不再作为定论。开发者此后称在本机实测：系统对话框内容加载慢，而 Electron 自带对话框在同一环境下不慢；既有日志显示 WinUI 选择器在 2026-10-15、10-20、10-22 已出现从对话框露面到关闭耗时 24 至 29 秒，这些日期早于抽取分发层的改动。原因未查明；选择对话框已按 EHD-19 改由 Electron 提供。】
 
 ## 9. 决策记录（待决项 C：业务会话）
 
@@ -144,5 +150,28 @@ WebView2 桌面验收中观察到的现象，在 Electron 原型中做了人工�
 - 测试文件中有 9 个文件、162 行包含 navigation，其中多少属于加载编号、多少属于路由导航，没有逐行核对，改名前须先做逐行清单。
 - 普通浏览器重新加载时是否重新生成加载编号，没有验证（源码中只在字段初始化与点击重试时生成）。
 - 改名是协议改动，前端与宿主必须同一个 PR 完成，不保留旧名字。
+- 【2026-11-02：ReportEditor 已在 #68 清理，上面“清理 PR 的前置核对”一条所述事项已完成；loadId 改名已在 #66、#67 合并。】
 
-本轮只写入决定，不修改代码；原型代码不进仓库。【2026-10-27：本文新增待决项 B 的决定（第 6 至 8 节）、待决项 C 的决定（第 9、10 节）与待决项 D 的决定（第 11、12 节）；E、F 仍待决。】【2026-10-28：本文新增待决项 E、F 的决定（第 13、14 节）；A 至 F 均已决定。】
+## 15. 决策记录（实施：无窗口进程与 Electron 外壳最小版本）
+
+本节记录 2026-11-02 之前已合并的实现所固化的决定，其中 EHD-17 实施路线第 5 步，EHD-19 对应路线第 6 步的第一个任务；实施代码见 src/ProductionAssistant.Bridge、src/ProductionAssistant.Sidecar、src/ProductionAssistant.Desktop。
+
+| 编号 | 已定决策 | 理由 | 被否决的替代方案 |
+|---|---|---|---|
+| EHD-17 | 无窗口进程 ProductionAssistant.Sidecar（控制台项目，只引用 Bridge）承载分发层。协议沿用 EHD-06，并以前端现有消息为准：一行一个 JSON；取消使用 production.cancel，在 payload 中带 targetId（不带则取消最近一个在途请求），不另设取消消息；必须显式传 --environment，缺失或非法以退出码 2 退出；不设置 PRODUCTIONASSISTANT_DATA_DIR；标准输出只输出协议行，意外的控制台输出改道到标准错误；标准输入关闭后取消所有在途请求并最多等 10 秒；同一程序带 --send-daily-report 或 --run-automation-task 时作为计划任务入口，语义与 WinUI 一致，退出码规则不变，本步不重新注册计划任务。 | PRODUCTIONASSISTANT_DATA_DIR 一旦设置，实际数据目录一定再追加环境名（读自 RuntimeEnvironment），表达不了与现有 WinUI 共用的 Production 数据目录，所以只显式指定环境名；协议与前端一致，外壳只需转发；计划任务入口与协议循环在同一程序里，不再多一个可执行文件；按请求登记取消与同名写入类操作独占已在 Bridge 层实现，Sidecar 直接受益。 | 沿用原型的单独取消消息；每个请求一个进程；设置数据目录变量。 |
+| EHD-18 | 只把整条调用链只读的操作开放给第二个宿主；读取时会条件性保存或迁移本地文件的操作暂不开放，待归属决定后再迁。当前开放 production.cancel 与 12 项：production.getBindings、weld.getState、weld.generate、database.getState、database.getSchema、database.inspect、tencentSheet.get、tencentSheet.runs、tencentSheet.sources、tencentSheet.schema、tencentSheet.views、notionFill.runs。其余一律返回“该操作尚未迁移到新宿主。”。 | EHD-08 规定每个操作任何时刻只有一个提供方，不得让两个宿主改同一份本地文件；automation.list、daily.list、daily.get、daily.runs 经日报任务目录的读取方法（DailyReportSettingsStore.LoadCatalog）在旧配置迁移时会保存任务目录文件；report.getState 经 ReportCenterConfigStore.Load 在配置缺失时创建默认配置文件；这些保存分支只在特定数据条件下触发（读源码，未用真实数据验证）；settings.open 因设置页版本号的来源在新宿主中尚未确定，暂不开放。 | 把这些操作一并开放，由第二个宿主触发条件性写入。 |
+| EHD-19 | Electron 外壳（src/ProductionAssistant.Desktop，CommonJS，electron 固定 45.0.0，纯逻辑放 lib 并用 node --test 验证）。（1）pa://app 提供 Prototype 构建产物，权限仅 standard、secure、supportFetchAPI，请求路径解析后复查真实路径，越界 403、不存在 404；（2）预加载只暴露 postMessage 与 addEventListener，全局名 paHost；前端 bridge 同时支持 chrome.webview 与 paHost，两者并存时优先 chrome.webview；（3）IPC 校验发送者非空、属于本窗口的主框架、页面地址严格等于 pa://app/index.html（忽略查询串）；导航、新窗口、webview 附加与权限请求一律拒绝；（4）加载地址带 loadId，app.ready 的 loadId 逐字符相等才接受；重新加载（F5、Ctrl+R）生成新 loadId，并保留当前地址中的其他参数，与 C# 的 BuildDocumentUrl 一致；（5）app.ready、plan.pickFolder、meeting.pickFile 由外壳处理，文件夹与 Excel 选择用 Electron 自带对话框，第一版不传默认目录，其余请求转给 Sidecar；（6）Sidecar 崩溃不自动重启，等待中的请求收到错误；退出时先关输入并最多等 12 秒，再杀进程树；（7）存储位置 `%LOCALAPPDATA%\ProductionAssistant\Electron\<环境>`，单实例锁；环境默认 Development，Production 必须显式指定；（8）菜单只保留重新加载，以及非 Production 下的开发者工具；（9）日志写入 userData 下 logs\desktop.log，不记录请求数据、响应内容、选中路径、地址查询串，也不记录控制台与 Sidecar 标准错误的文字内容。 | 来源比对与现有 WebView2 一样严格；纯逻辑模块可在 CI 里验证而不必下载 Electron 二进制；重新加载若丢失当前地址中的 route，会回到默认模块（读开发机日志与代码得出，已修正）；日志只保留诊断所需的最少信息。 | 沿用旧的令牌握手；重新加载沿用旧 loadId；给选择对话框传默认目录（可能触碰映射网络盘）；崩溃后自动重启（会话状态会悄悄丢失，见 EHD-10）。 |
+
+## 16. 已登记事项（实施后，第一批不处理）
+
+- 外壳没有内容安全策略、没有加载中与加载失败遮罩、没有打包配置；Electron 二进制的获取方式仍未定。
+- Sidecar 的标准错误内容与前端控制台内容不进日志，只有 production.getBindings 与 automation.list 两个操作带内部计时。
+- 设置页的版本号来源：WinUI 读 App 程序集的 InformationalVersion，Sidecar 没有同一来源，settings.open 暂不开放。
+- 腾讯填报与报表采集的 node 脚本及其依赖按应用基目录定位，在 App 项目里配置复制，Sidecar 的输出目录不会自动带上；appsettings 与 runtime-environment.json 同理。
+- 计划任务注册取自当前进程路径：由 Sidecar 注册的任务会指向 Sidecar，已存在的任务仍指向 WinUI 程序；迁移时必须重新保存；控制台程序被计划任务启动时可能出现黑窗口（推断，未验证）。
+- 开发版可能与正式版共用 Teable 库，写入类操作的验收需要独立的测试库，目前没有。
+- plan.* 与 meeting.* 共 8 个操作不接收取消令牌，取消对它们仍无效。
+- 前端控制台、Sidecar 标准错误的文字内容为保守起见不写日志，若日后需要，应逐项评估隐私。
+- 开发机上文件选择对话框的问题：见第 8 节注记。
+
+本轮只写入决定，不修改代码；原型代码不进仓库。【2026-10-27：本文新增待决项 B 的决定（第 6 至 8 节）、待决项 C 的决定（第 9、10 节）与待决项 D 的决定（第 11、12 节）；E、F 仍待决。】【2026-10-28：本文新增待决项 E、F 的决定（第 13、14 节）；A 至 F 均已决定。】【2026-11-02：新增第 15、16 节（无窗口进程与 Electron 外壳最小版本的决定与已登记事项）。】
