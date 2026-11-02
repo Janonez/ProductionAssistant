@@ -106,3 +106,92 @@ describe('[nav-switch] webview ready transport', () => {
     ])
   })
 })
+
+describe('Electron bridge transport', () => {
+  let previousChrome: PropertyDescriptor | undefined
+  let previousPaHost: PropertyDescriptor | undefined
+
+  beforeEach(() => {
+    vi.resetModules()
+    previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
+    previousPaHost = Object.getOwnPropertyDescriptor(window, 'paHost')
+    Reflect.deleteProperty(window, 'chrome')
+    Reflect.deleteProperty(window, 'paHost')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    if (previousChrome) Object.defineProperty(window, 'chrome', previousChrome)
+    else Reflect.deleteProperty(window, 'chrome')
+    if (previousPaHost) Object.defineProperty(window, 'paHost', previousPaHost)
+    else Reflect.deleteProperty(window, 'paHost')
+  })
+
+  it('sends requests through paHost and resolves its matching response', async () => {
+    let receive!: (event: { data: unknown }) => void
+    let sent!: { id: string; operation: string; payload: unknown }
+    Object.assign(window, { chrome: {}, paHost: {
+      postMessage: (request: typeof sent) => { sent = request },
+      addEventListener: (_: string, handler: typeof receive) => { receive = handler },
+    } })
+    const { hasHost, invoke } = await import('./webview')
+    expect(hasHost()).toBe(true)
+    const result = invoke('database.getState', { source: 'fixture' })
+    expect(sent).toEqual({ id: expect.any(String), operation: 'database.getState', payload: { source: 'fixture' } })
+    receive({ data: { id: sent.id, ok: true, data: { value: 7 } } })
+    await expect(result).resolves.toEqual({ value: 7 })
+  })
+
+  it('delivers paHost progress before the final response', async () => {
+    let receive!: (event: { data: unknown }) => void
+    let id = ''
+    const progress = vi.fn()
+    Object.assign(window, { paHost: {
+      postMessage: (request: { id: string }) => { id = request.id },
+      addEventListener: (_: string, handler: typeof receive) => { receive = handler },
+    } })
+    const { invoke } = await import('./webview')
+    const result = invoke('report.run', undefined, 30000, progress)
+    receive({ data: { id, type: 'progress', data: { current: 1 } } })
+    expect(progress).toHaveBeenCalledWith({ current: 1 })
+    receive({ data: { id, ok: true, data: { done: true } } })
+    await expect(result).resolves.toEqual({ done: true })
+  })
+
+  it('posts the existing ready fields and timing values through paHost', async () => {
+    const postMessage = vi.fn()
+    vi.spyOn(performance, 'getEntriesByName').mockReturnValue([{ startTime: 12.6 } as PerformanceEntry])
+    vi.spyOn(performance, 'now').mockReturnValue(99.2)
+    Object.assign(window, { paHost: { postMessage, addEventListener: () => undefined } })
+    const { notifyReady } = await import('./webview')
+    notifyReady('daily-report', 'electron-load')
+    expect(postMessage.mock.calls).toEqual([[{
+      type: 'app.ready', route: 'daily-report', loadId: 'electron-load', moduleEntryMs: 13, readyMs: 99,
+    }]])
+  })
+
+  it('prefers chrome.webview for both subscription and messages when both hosts exist', async () => {
+    let receive!: (event: { data: unknown }) => void
+    let id = ''
+    const postMessage = vi.fn((request: { id: string }) => { id = request.id })
+    const paHost = { postMessage: vi.fn(), addEventListener: vi.fn() }
+    Object.assign(window, { chrome: { webview: {
+      postMessage, addEventListener: (_: string, handler: typeof receive) => { receive = handler },
+    } }, paHost })
+    const { invoke, notifyReady } = await import('./webview')
+    const result = invoke('database.getState')
+    receive({ data: { id, ok: true, data: 'chrome' } })
+    await expect(result).resolves.toBe('chrome')
+    notifyReady('database-viewer', 'chrome-load')
+    expect(postMessage).toHaveBeenCalledTimes(2)
+    expect(paHost.postMessage).not.toHaveBeenCalled()
+    expect(paHost.addEventListener).not.toHaveBeenCalled()
+  })
+
+  it('preserves missing-host rejection and silent ready when neither host exists', async () => {
+    const { hasHost, invoke, notifyReady } = await import('./webview')
+    expect(hasHost()).toBe(false)
+    await expect(invoke('database.getState')).rejects.toThrow('当前页面未连接到桌面宿主')
+    expect(() => notifyReady('database-viewer', 'missing-host')).not.toThrow()
+  })
+})

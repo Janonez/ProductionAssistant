@@ -1,0 +1,12 @@
+{
+  "name": "productionassistant-desktop",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "45.0.0"
+  }
+}
