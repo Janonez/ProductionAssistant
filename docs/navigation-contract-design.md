@@ -33,6 +33,8 @@
 - `favicon.ico` 的 ERR_FILE_NOT_FOUND 控制台报错无害，低优先级。
 - 切换段之前提交信息中 (#49) 出现两次，仅外观，不处理。
 
+【2026-11-02：PrototypeBridge 现在是 App 项目中的薄适配器（来源检查、app.ready、WebView2 收发）；界面请求的分发层已抽取到 ProductionAssistant.Bridge 的 OperationDispatcher（10 个 partial），取消按请求登记，写入类操作同名独占，AppServices 随之移入；本文中提到的 PrototypeBridge 分文件（PrototypeBridge.*.cs）与行号均为抽取前的状态，保留为历史描述。Electron 外壳的实现与决定见 electron-host-design.md 第 15、16 节。】【ReportEditor 已在 #68 清理，本文中对它的描述为清理前状态。】
+
 ## 1. 目标与非目标
 
 ### 1.1 目标
