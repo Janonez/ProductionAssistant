@@ -7,7 +7,7 @@ namespace ProductionAssistant;
 
 public sealed partial class OperationDispatcher
 {
-    private static readonly NotificationService SettingsNotifications = new();
+    private static readonly DailyReportService SettingsNotifications = new();
 
     private async Task<object> SaveSettingsConnectionAsync(
         JsonElement payload,
@@ -39,61 +39,72 @@ public sealed partial class OperationDispatcher
         return SettingsResult("通知渠道已保存，建议发送一次测试。", notification: settings);
     }
 
-    private async Task<object> TestSettingsNotificationAsync(
+    internal async Task<object> TestSettingsNotificationAsync(
         JsonElement payload,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DailyReportService? sender = null)
     {
-        var settings = SaveNotificationChannel(payload);
-        var result = await SettingsNotifications.SendMessageAsync(
-            $"【生产助手测试通知】\n渠道：{settings.DingTalkChannelName}\n时间：{DateTime.Now:yyyy-MM-dd HH:mm}",
-            cancellationToken);
-        settings.DingTalkConnected = result.Succeeded;
-        settings.DingTalkCheckedAt = DateTimeOffset.Now;
-        settings.DingTalkStatus = result.Message;
-        NotificationSettingsStore.Save(settings);
-        return SettingsResult(result.Message, notification: settings);
+        var tested = SaveNotificationChannel(payload);
+        // Send the captured credentials through the existing HTTP implementation; do not reload them after capturing.
+        var result = !tested.DingTalkEnabled
+            ? new DailyReportSendResult(false, "系统通知渠道未启用。")
+            : await (sender ?? SettingsNotifications).SendAsync(
+                NotificationSettingsStore.ReadWebhook(tested), NotificationSettingsStore.ReadSecret(tested),
+                $"【生产助手测试通知】\n渠道：{tested.DingTalkChannelName}\n时间：{DateTime.Now:yyyy-MM-dd HH:mm}",
+                cancellationToken);
+        var credentialsChanged = false;
+        var settings = NotificationSettingsStore.Update(current =>
+        {
+            credentialsChanged = current.EncryptedWebhook != tested.EncryptedWebhook || current.EncryptedSecret != tested.EncryptedSecret;
+            if (credentialsChanged) return;
+            current.DingTalkConnected = result.Succeeded;
+            current.DingTalkCheckedAt = DateTimeOffset.Now;
+            current.DingTalkStatus = result.Message;
+        });
+        return SettingsResult(credentialsChanged ? "通知凭据已变化，请使用当前配置重新测试。" : result.Message, notification: settings);
     }
 
     private object SaveSettingsNotificationRules(JsonElement payload)
     {
-        var settings = NotificationSettingsStore.Load();
-        if (payload.ValueKind == JsonValueKind.Object &&
-            payload.TryGetProperty("rules", out var rules) &&
-            rules.ValueKind == JsonValueKind.Array)
+        var settings = NotificationSettingsStore.Update(settings =>
         {
-            var enabledByEvent = rules.EnumerateArray()
-                .Where(item => item.ValueKind == JsonValueKind.Object)
-                .Select(item => new
-                {
-                    EventType = ReadString(item, "eventType"),
-                    Enabled = item.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.True
-                })
-                .Where(item => !string.IsNullOrWhiteSpace(item.EventType))
-                .ToDictionary(item => item.EventType, item => item.Enabled, StringComparer.Ordinal);
-            foreach (var rule in settings.Rules)
-                if (enabledByEvent.TryGetValue(rule.EventType, out var enabled)) rule.Enabled = enabled;
-        }
-        NotificationSettingsStore.Save(settings);
+            if (payload.ValueKind == JsonValueKind.Object &&
+                payload.TryGetProperty("rules", out var rules) &&
+                rules.ValueKind == JsonValueKind.Array)
+            {
+                var enabledByEvent = rules.EnumerateArray()
+                    .Where(item => item.ValueKind == JsonValueKind.Object)
+                    .Select(item => new
+                    {
+                        EventType = ReadString(item, "eventType"),
+                        Enabled = item.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.True
+                    })
+                    .Where(item => !string.IsNullOrWhiteSpace(item.EventType))
+                    .ToDictionary(item => item.EventType, item => item.Enabled, StringComparer.Ordinal);
+                foreach (var rule in settings.Rules)
+                    if (enabledByEvent.TryGetValue(rule.EventType, out var enabled)) rule.Enabled = enabled;
+            }
+        });
         return SettingsResult("通知规则已保存。", notification: settings);
     }
 
     private static NotificationSettings SaveNotificationChannel(JsonElement payload)
     {
-        var settings = NotificationSettingsStore.Load();
         var webhook = ReadString(payload, "webhook").Trim();
         var secret = ReadString(payload, "secret").Trim();
-        if (!string.IsNullOrWhiteSpace(webhook) || !string.IsNullOrWhiteSpace(secret))
+        return NotificationSettingsStore.Update(settings =>
         {
-            settings.DingTalkConnected = null;
-            settings.DingTalkStatus = "凭据已更新，请发送测试。";
-        }
-        settings.DingTalkEnabled = payload.ValueKind == JsonValueKind.Object &&
-            payload.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.True;
-        settings.DingTalkChannelName = string.IsNullOrWhiteSpace(ReadString(payload, "channelName"))
-            ? "生产管理群"
-            : ReadString(payload, "channelName").Trim();
-        NotificationSettingsStore.Save(settings, webhook, secret);
-        return NotificationSettingsStore.Load();
+            if (!string.IsNullOrWhiteSpace(webhook) || !string.IsNullOrWhiteSpace(secret))
+            {
+                settings.DingTalkConnected = null;
+                settings.DingTalkStatus = "凭据已更新，请发送测试。";
+            }
+            settings.DingTalkEnabled = payload.ValueKind == JsonValueKind.Object &&
+                payload.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.True;
+            settings.DingTalkChannelName = string.IsNullOrWhiteSpace(ReadString(payload, "channelName"))
+                ? "生产管理群"
+                : ReadString(payload, "channelName").Trim();
+        }, webhook, secret);
     }
 
     private object SettingsResult(

@@ -22,6 +22,8 @@ internal sealed class StdioHost : IBridgeHost
         "tencentSheet.views",
         "notionFill.runs",
         "settings.open",
+        "settings.saveNotification",
+        "settings.saveNotificationRules",
         "automation.list",
         "daily.list",
         "daily.get",

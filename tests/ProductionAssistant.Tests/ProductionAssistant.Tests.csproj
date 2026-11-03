@@ -18,5 +18,6 @@
     <ProjectReference Include="..\..\src\ProductionAssistant.Core\ProductionAssistant.Core.csproj" />
     <ProjectReference Include="..\..\src\ProductionAssistant.Infrastructure\ProductionAssistant.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\ProductionAssistant.Bridge\ProductionAssistant.Bridge.csproj" />
+    <ProjectReference Include="..\..\src\ProductionAssistant.Sidecar\ProductionAssistant.Sidecar.csproj" />
   </ItemGroup>
 </Project>
