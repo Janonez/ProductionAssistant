@@ -16,6 +16,7 @@ static class Program
             }
             _ = RuntimeEnvironment.Current;
             RuntimeEnvironment.WriteStartupSummary();
+            StartupMigration.Run(message => Console.Error.WriteLine(message));
 
             var legacyDailyReport = HasArgument(args, "--send-daily-report");
             var automationTask = HasArgument(args, "--run-automation-task");

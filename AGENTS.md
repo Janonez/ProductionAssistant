@@ -50,7 +50,7 @@
 - 回滚：关闭软件，用最近一份 production-backup-before-* 替换 production。
 
 ## 对外发布（GitHub Release）
-- 版本号只在 src/ProductionAssistant.App/ProductionAssistant.csproj 的 `<Version>` 修改，并同步 AssemblyVersion、FileVersion、InformationalVersion。
+- 版本号只在 根目录 Directory.Build.props 的 `<Version>` 修改，并同步 AssemblyVersion、FileVersion、InformationalVersion。
 - 只修 bug 升第三位，新增功能升第二位。
 - 同步更新 CHANGELOG.md，只写用户可见变化，遵循文件开头的规则；整理时参考 `git log 上一个版本标签..main`。
 - 顺序：改版本与变更记录 → verify → 推送并经 PR 合并 → 确认 CI 通过 → 打标签 v版本号 → 打稳定版 → 生成 ZIP → 发布 Release。其中打版本标签、更新稳定版、发布 Release 这三步之前先列出命令并等我确认，其余步骤自行执行。
