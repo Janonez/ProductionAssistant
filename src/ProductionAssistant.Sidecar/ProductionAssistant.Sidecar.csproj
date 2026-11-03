@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ProductionAssistant.Bridge\ProductionAssistant.Bridge.csproj" />
+    <InternalsVisibleTo Include="ProductionAssistant.Tests" />
   </ItemGroup>
 </Project>
