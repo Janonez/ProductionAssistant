@@ -31,6 +31,7 @@ public partial class App : Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         Services.RuntimeEnvironment.WriteStartupSummary();
+        StartupMigration.Run(Services.PrototypeWebViewRuntime.Mark);
         var arguments = Environment.GetCommandLineArgs();
         var legacyDailyReport = HasArgument(arguments, "--send-daily-report");
         var automationTask = HasArgument(arguments, "--run-automation-task");

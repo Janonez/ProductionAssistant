@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -19,7 +20,13 @@ internal sealed class StdioHost : IBridgeHost
         "tencentSheet.sources",
         "tencentSheet.schema",
         "tencentSheet.views",
-        "notionFill.runs"
+        "notionFill.runs",
+        "settings.open",
+        "automation.list",
+        "daily.list",
+        "daily.get",
+        "daily.runs",
+        "report.getState"
     };
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -152,7 +159,8 @@ internal sealed class StdioHost : IBridgeHost
         }
     }
 
-    string? IBridgeHost.AppVersion => null;
+    string? IBridgeHost.AppVersion => typeof(StdioHost).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 
     private static string ReadString(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
