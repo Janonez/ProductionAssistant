@@ -26,7 +26,9 @@ internal sealed class StdioHost : IBridgeHost
         "settings.saveNotificationRules",
         "automation.list",
         "daily.list",
+        "daily.create",
         "daily.get",
+        "daily.saveTemplate",
         "daily.runs",
         "report.getState"
     };

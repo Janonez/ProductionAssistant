@@ -36,7 +36,7 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
     }
 
     [Fact]
-    public void Allowlist_is_exactly_the_original_nineteen_plus_two_notification_saves()
+    public void Allowlist_is_exactly_the_original_nineteen_plus_four_local_saves()
     {
         string[] expected =
         [
@@ -44,9 +44,9 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
             "database.getState", "database.getSchema", "database.inspect",
             "tencentSheet.get", "tencentSheet.runs", "tencentSheet.sources", "tencentSheet.schema", "tencentSheet.views",
             "notionFill.runs", "settings.open", "automation.list", "daily.list", "daily.get", "daily.runs", "report.getState",
-            "settings.saveNotification", "settings.saveNotificationRules"
+            "settings.saveNotification", "settings.saveNotificationRules", "daily.create", "daily.saveTemplate"
         ];
-        Assert.Equal(21, StdioHost.AllowedOperations.Count);
+        Assert.Equal(23, StdioHost.AllowedOperations.Count);
         Assert.True(StdioHost.AllowedOperations.SetEquals(expected));
     }
 
@@ -518,9 +518,9 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
     public async Task Every_unmigrated_protocol_operation_is_rejected_before_dispatch()
     {
         var blocked = PrototypeBridgeProtocol.AllowedOperations.Except(StdioHost.AllowedOperations).ToArray();
-        Assert.Equal(60, blocked.Length);
+        Assert.Equal(58, blocked.Length);
         var responses = await RunHostAsync(blocked.Append("unknown.operation").Select(operation => Request(operation)).ToArray());
-        Assert.Equal(61, responses.Length);
+        Assert.Equal(59, responses.Length);
         Assert.All(responses, response =>
         {
             Assert.False(response.GetProperty("ok").GetBoolean());

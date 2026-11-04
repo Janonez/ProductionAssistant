@@ -22,15 +22,20 @@ public sealed partial class OperationDispatcher
 
     private static object CreateDailyJob(JsonElement payload)
     {
-        var catalog = DailyReportSettingsStore.LoadCatalog();
         var name = ReadString(payload, "name").Trim();
         var sendTime = ReadString(payload, "sendTime");
-        if (string.IsNullOrWhiteSpace(name)) name = $"日报任务 {catalog.Jobs.Count + 1}";
         if (string.IsNullOrWhiteSpace(sendTime)) sendTime = "17:30";
         if (!TimeSpan.TryParse(sendTime, out var time)) throw new InvalidOperationException("发送时间无效。");
-        var job = new DailyReportJob { Name = name, SendTime = time.ToString(@"hh\:mm") };
-        DailyReportSettingsStore.SaveJob(job);
-        return new { job.Id };
+        return DailyReportSettingsStore.UpdateCatalog(catalog =>
+        {
+            var job = new DailyReportJob
+            {
+                Name = string.IsNullOrWhiteSpace(name) ? $"日报任务 {catalog.Jobs.Count + 1}" : name,
+                SendTime = time.ToString(@"hh\:mm")
+            };
+            catalog.Jobs.Add(job);
+            return new { job.Id };
+        });
     }
 
     private static async Task<object> GetDailyJobAsync(JsonElement payload)
@@ -62,35 +67,26 @@ public sealed partial class OperationDispatcher
 
     private static async Task<object> SaveDailyBasicsAsync(JsonElement payload)
     {
-        var job = FindDailyJob(payload);
         var name = ReadString(payload, "name").Trim();
         var sendTime = ReadString(payload, "sendTime");
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("任务名称不能为空。");
-        if (!TimeSpan.TryParse(sendTime, out var time)) throw new InvalidOperationException("发送时间无效。");
-        var timeChanged = job.SendTime != sendTime;
+        if (!TimeSpan.TryParse(sendTime, out _)) throw new InvalidOperationException("发送时间无效。");
+        List<string>? sourceIds = null;
         if (payload.TryGetProperty("metricSourceIds", out var metricSources) && metricSources.ValueKind == JsonValueKind.Array)
         {
             var allowed = AppServices.DatabaseProvider.GetSources().Select(source => source.Id).ToHashSet(StringComparer.Ordinal);
-            job.MetricSourceIds = metricSources.EnumerateArray().Select(item => item.GetString() ?? "").Where(allowed.Contains).Distinct().ToList();
+            sourceIds = metricSources.EnumerateArray().Select(item => item.GetString() ?? "").Where(allowed.Contains).Distinct().ToList();
         }
-        job.Name = name;
-        job.SendTime = time.ToString(@"hh\:mm");
-        DailyReportSettingsStore.SaveJob(job);
-        if (job.IsEnabled && timeChanged && DailyReportTaskScheduler.IsSchedulingAvailable)
-        {
-            var result = await DailyReportTaskScheduler.InstallAsync(job.Id, time);
-            if (!result.Succeeded) throw new InvalidOperationException(result.Message);
-        }
+        var job = await AppServices.DailyReportTasks.SaveBasicsAsync(ReadString(payload, "id"), name, sendTime, sourceIds);
         return new { saved = true, job.SendTime };
     }
 
     private static Task<object> SaveDailyTemplateAsync(JsonElement payload)
     {
-        var job = FindDailyJob(payload);
         var text = ReadString(payload, "text");
         var document = ReadString(payload, "document");
-        var changed = DailyReportSettingsStore.UpdateTemplate(job, text, document);
-        if (changed) DailyReportSettingsStore.SaveJob(job);
+        var changed = DailyReportSettingsStore.UpdateJob(ReadString(payload, "id"),
+            job => DailyReportSettingsStore.UpdateTemplate(job, text, document));
         return Task.FromResult<object>(new { saved = true, invalidated = changed });
     }
 
@@ -116,89 +112,98 @@ public sealed partial class OperationDispatcher
         };
     }
 
-    private static async Task<object> AddDailyFieldAsync(JsonElement payload, CancellationToken cancellationToken)
+    internal static async Task<object> AddDailyFieldAsync(
+        JsonElement payload, CancellationToken cancellationToken, IDatabaseQueryProvider? provider = null)
     {
-        var job = FindDailyJob(payload);
+        var snapshot = FindDailyJob(payload);
         var sourceId = ReadString(payload, "sourceId");
         var metricId = ReadString(payload, "metricId");
-        var source = AppServices.DatabaseProvider.GetSources().FirstOrDefault(item => item.Id == sourceId)
-            ?? throw new InvalidOperationException("找不到所选数据源。");
-        var schema = await AppServices.DatabaseProvider.GetSchemaAsync(source.Id, cancellationToken);
-        if (!schema.Succeeded) throw new InvalidOperationException(schema.Message);
-        var metric = BuildDailyBusinessMetrics(job, source, schema.Fields)
-            .FirstOrDefault(item => item.Id == metricId)
-            ?? throw new InvalidOperationException("请选择当前数据库支持的具体业务。");
-        DateRangeSpec? dateRangeSpec = null;
-        if (payload.TryGetProperty("dateRangeSpec", out var spec) && spec.ValueKind == JsonValueKind.Object)
-        {
-            var granularity = ReadString(spec, "granularity");
-            if (!spec.TryGetProperty("yearOffset", out var offset) || !offset.TryGetInt32(out var yearOffset))
-                throw new InvalidOperationException("请选择年份。");
-            dateRangeSpec = new(granularity, yearOffset);
-            var validation = DatabaseDateRanges.Resolve(dateRangeSpec, DateOnly.FromDateTime(DateTime.Today));
-            if (!validation.Succeeded) throw new InvalidOperationException(validation.Message);
-        }
-        var rangeKind = dateRangeSpec?.Granularity switch
-        {
-            "day" => "day", "mtd" => "month", "ytd" => "year", "fullyear" => "current-year",
-            _ => ReadString(payload, "rangeKind")
-        };
-        if (rangeKind is not ("day" or "current-month" or "month" or "current-year" or "year" or
-            "last-year-to-date" or "last-year" or "specific-date" or "specific-month" or "custom"))
-            throw new InvalidOperationException("请选择日期范围。");
-        var customStartDate = ReadString(payload, "customStartDate");
-        var customEndDate = ReadString(payload, "customEndDate");
-        if (rangeKind is "specific-date" or "specific-month" && string.IsNullOrWhiteSpace(customStartDate))
-            throw new InvalidOperationException("请选择指定日期或月份。");
-        if (rangeKind == "custom" &&
-            (string.IsNullOrWhiteSpace(customStartDate) || string.IsNullOrWhiteSpace(customEndDate)))
-            throw new InvalidOperationException("请选择开始和结束日期。");
-        var useExactMonth = dateRangeSpec is null && metric.Granularity == "monthly" && rangeKind is "current-month" or "specific-month";
-        var queryMode = useExactMonth ? "exact-match" : "date-range";
-        job.ConfigurationValidated = false;
-        var binding = job.Sources.FirstOrDefault(item => item.DataSourceId == source.Id);
-        if (binding is null) { binding = new() { DataSourceId = source.Id }; job.Sources.Add(binding); }
-        binding.DataSourceName = source.Name;
-        binding.MatchPropertyId = metric.DatePropertyId;
-        binding.MatchPropertyName = metric.DatePropertyName;
-        binding.MatchPropertyType = "date";
-        var token = new DailyReportFieldToken(source.Id, source.Name,
-            metric.PropertyId, metric.PropertyName, metric.PropertyType,
-            QueryMode: queryMode,
-            DatePropertyId: queryMode == "date-range" ? metric.DatePropertyId : "",
-            DatePropertyName: queryMode == "date-range" ? metric.DatePropertyName : "",
-            QueryRangeKind: rangeKind,
-            AggregateKind: metric.DefaultAggregate,
-            FilterPropertyId: metric.FilterPropertyId,
-            FilterPropertyName: metric.FilterPropertyName,
-            FilterOperator: string.IsNullOrWhiteSpace(metric.FilterPropertyId) ? "" : "equals",
-            FilterValue: metric.FilterValue,
-            ExactMatchPropertyId: useExactMonth ? metric.DatePropertyId : "",
-            ExactMatchPropertyName: useExactMonth ? metric.DatePropertyName : "",
-            ExactMatchPropertyType: useExactMonth ? "date" : "",
-            ExactMatchValueKind: useExactMonth
-                ? rangeKind == "specific-month" ? "specific-month" : "business-month"
-                : "",
-            CustomStartDate: customStartDate,
-            CustomEndDate: customEndDate,
-            BusinessMetricId: metric.Id,
-            BusinessMetricName: metric.Name,
-            DataGranularity: metric.Granularity,
-            DateRangeSpec: dateRangeSpec);
         var editedPlaceholder = ReadString(payload, "placeholder");
-        var edited = job.Fields.FirstOrDefault(field => field.Placeholder == editedPlaceholder);
-        var placeholder = edited is null
-            ? DailyReportSettingsStore.AddOrUpdateField(job, token)
-            : edited.Placeholder;
-        if (edited is not null)
+        var originalField = JsonSerializer.Serialize(snapshot.Fields.FirstOrDefault(field => field.Placeholder == editedPlaceholder));
+        var originalBinding = JsonSerializer.Serialize(snapshot.Sources.FirstOrDefault(binding => binding.DataSourceId == sourceId));
+        provider ??= AppServices.DatabaseProvider;
+        var source = provider.GetSources().FirstOrDefault(item => item.Id == sourceId)
+            ?? throw new InvalidOperationException("找不到所选数据源。");
+        var schema = await provider.GetSchemaAsync(source.Id, cancellationToken);
+        if (!schema.Succeeded) throw new InvalidOperationException(schema.Message);
+        return DailyReportSettingsStore.UpdateJob(snapshot.Id, job =>
         {
-            if (edited.Token != token) job.ActiveTemplateVersion++;
-            edited.Token = token;
-        }
-        var displayName = ReadString(payload, "displayName");
-        if (!string.IsNullOrWhiteSpace(displayName)) job.Fields.First(field => field.Placeholder == placeholder).DisplayName = displayName;
-        DailyReportSettingsStore.SaveJob(job);
-        return new { field = DailyFieldDto(job.Fields.First(field => field.Placeholder == placeholder)) };
+            if (originalField != JsonSerializer.Serialize(job.Fields.FirstOrDefault(field => field.Placeholder == editedPlaceholder)) ||
+                originalBinding != JsonSerializer.Serialize(job.Sources.FirstOrDefault(binding => binding.DataSourceId == sourceId)))
+                throw new InvalidOperationException("日报字段绑定已变化，请重新加载后重试。");
+            var metric = BuildDailyBusinessMetrics(job, source, schema.Fields)
+                .FirstOrDefault(item => item.Id == metricId)
+                ?? throw new InvalidOperationException("请选择当前数据库支持的具体业务。");
+            DateRangeSpec? dateRangeSpec = null;
+            if (payload.TryGetProperty("dateRangeSpec", out var spec) && spec.ValueKind == JsonValueKind.Object)
+            {
+                var granularity = ReadString(spec, "granularity");
+                if (!spec.TryGetProperty("yearOffset", out var offset) || !offset.TryGetInt32(out var yearOffset))
+                    throw new InvalidOperationException("请选择年份。");
+                dateRangeSpec = new(granularity, yearOffset);
+                var validation = DatabaseDateRanges.Resolve(dateRangeSpec, DateOnly.FromDateTime(DateTime.Today));
+                if (!validation.Succeeded) throw new InvalidOperationException(validation.Message);
+            }
+            var rangeKind = dateRangeSpec?.Granularity switch
+            {
+                "day" => "day", "mtd" => "month", "ytd" => "year", "fullyear" => "current-year",
+                _ => ReadString(payload, "rangeKind")
+            };
+            if (rangeKind is not ("day" or "current-month" or "month" or "current-year" or "year" or
+                "last-year-to-date" or "last-year" or "specific-date" or "specific-month" or "custom"))
+                throw new InvalidOperationException("请选择日期范围。");
+            var customStartDate = ReadString(payload, "customStartDate");
+            var customEndDate = ReadString(payload, "customEndDate");
+            if (rangeKind is "specific-date" or "specific-month" && string.IsNullOrWhiteSpace(customStartDate))
+                throw new InvalidOperationException("请选择指定日期或月份。");
+            if (rangeKind == "custom" &&
+                (string.IsNullOrWhiteSpace(customStartDate) || string.IsNullOrWhiteSpace(customEndDate)))
+                throw new InvalidOperationException("请选择开始和结束日期。");
+            var useExactMonth = dateRangeSpec is null && metric.Granularity == "monthly" && rangeKind is "current-month" or "specific-month";
+            var queryMode = useExactMonth ? "exact-match" : "date-range";
+            job.ConfigurationValidated = false;
+            var binding = job.Sources.FirstOrDefault(item => item.DataSourceId == source.Id);
+            if (binding is null) { binding = new() { DataSourceId = source.Id }; job.Sources.Add(binding); }
+            binding.DataSourceName = source.Name;
+            binding.MatchPropertyId = metric.DatePropertyId;
+            binding.MatchPropertyName = metric.DatePropertyName;
+            binding.MatchPropertyType = "date";
+            var token = new DailyReportFieldToken(source.Id, source.Name,
+                metric.PropertyId, metric.PropertyName, metric.PropertyType,
+                QueryMode: queryMode,
+                DatePropertyId: queryMode == "date-range" ? metric.DatePropertyId : "",
+                DatePropertyName: queryMode == "date-range" ? metric.DatePropertyName : "",
+                QueryRangeKind: rangeKind,
+                AggregateKind: metric.DefaultAggregate,
+                FilterPropertyId: metric.FilterPropertyId,
+                FilterPropertyName: metric.FilterPropertyName,
+                FilterOperator: string.IsNullOrWhiteSpace(metric.FilterPropertyId) ? "" : "equals",
+                FilterValue: metric.FilterValue,
+                ExactMatchPropertyId: useExactMonth ? metric.DatePropertyId : "",
+                ExactMatchPropertyName: useExactMonth ? metric.DatePropertyName : "",
+                ExactMatchPropertyType: useExactMonth ? "date" : "",
+                ExactMatchValueKind: useExactMonth
+                    ? rangeKind == "specific-month" ? "specific-month" : "business-month"
+                    : "",
+                CustomStartDate: customStartDate,
+                CustomEndDate: customEndDate,
+                BusinessMetricId: metric.Id,
+                BusinessMetricName: metric.Name,
+                DataGranularity: metric.Granularity,
+                DateRangeSpec: dateRangeSpec);
+            var edited = job.Fields.FirstOrDefault(field => field.Placeholder == editedPlaceholder);
+            var placeholder = edited is null
+                ? DailyReportSettingsStore.AddOrUpdateField(job, token)
+                : edited.Placeholder;
+            if (edited is not null)
+            {
+                if (edited.Token != token) job.ActiveTemplateVersion++;
+                edited.Token = token;
+            }
+            var displayName = ReadString(payload, "displayName");
+            if (!string.IsNullOrWhiteSpace(displayName)) job.Fields.First(field => field.Placeholder == placeholder).DisplayName = displayName;
+            return new { field = DailyFieldDto(job.Fields.First(field => field.Placeholder == placeholder)) };
+        });
     }
 
     private static async Task<object> PreviewDailyReportAsync(JsonElement payload, CancellationToken cancellationToken)
@@ -209,16 +214,22 @@ public sealed partial class OperationDispatcher
         return new { result.Succeeded, result.Message, result.Text, fieldErrors = result.FieldErrors ?? [], fieldValues = result.FieldValues };
     }
 
-    private static async Task<object> TestDailyReportAsync(JsonElement payload, CancellationToken cancellationToken)
+    internal static async Task<object> TestDailyReportAsync(
+        JsonElement payload, CancellationToken cancellationToken, DailyReportRunner? runner = null)
     {
         var job = FindDailyJob(payload);
+        var fingerprint = DailyReportSettingsStore.ValidationFingerprint(job);
         var date = ReadDate(payload, "businessDate");
-        var result = await new DailyReportRunner().TestAsync(job, date, job.DraftTemplate, cancellationToken);
+        var result = await (runner ?? new DailyReportRunner()).TestAsync(job, date, job.DraftTemplate, cancellationToken);
         if (result == DailyReportExitCode.Success)
         {
             // Only record the test result, without publishing content or changing scheduling.
-            job.ConfigurationValidated = true;
-            DailyReportSettingsStore.SaveJob(job);
+            DailyReportSettingsStore.TryUpdateJob(job.Id, current =>
+            {
+                if (DailyReportSettingsStore.ValidationFingerprint(current) != fingerprint) return false;
+                current.ConfigurationValidated = true;
+                return true;
+            });
         }
         return new { succeeded = result == DailyReportExitCode.Success, exitCode = result.ToString() };
     }
