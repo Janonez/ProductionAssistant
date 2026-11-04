@@ -1,0 +1,36 @@
+/* Adapted from satnaing/shadcn-admin @ e16c87f; Copyright (c) 2024 Sat Naing; MIT. */
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './shadcn-theme.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Vite scopes this entire base layer, including Tailwind preflight, to the new UI. */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  button:not(:disabled), [role='button']:not(:disabled) { cursor: pointer; }
+}
+
+.pa-shell-theme {
+  /* Font trial: keep Tailwind defaults on the existing bundled UI font chain. */
+  --font-sans: var(--font-ui);
+  --default-font-family: var(--font-ui);
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+}
+[data-shadcn-surface] { box-sizing: border-box; font-family: var(--font-ui); }
+.pa-shell-portal { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: transparent; }
+.pa-shell-portal > *, .pa-shell-portal [data-slot='dropdown-menu-content'],
+.pa-shell-portal [data-slot='sheet-content'], .pa-shell-portal [data-slot='sheet-overlay'] { pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  [data-shadcn-surface] *, [data-shadcn-surface] *::before, [data-shadcn-surface] *::after {
+    animation-duration: .01ms !important; transition-duration: .01ms !important;
+  }
+}

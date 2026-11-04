@@ -4,7 +4,7 @@ import { navigateInDocument } from '../routes/navigation'
 import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
 import { ROUTES } from '../routes/routeTable'
-import { OperationSidebar } from '../components/layout/OperationSidebar'
+import { AppLayout } from '../components/layout/AppLayout'
 import ProductionMessagePage from '../features/production-message/ProductionMessagePage'
 const AutomationPage = lazy(() => import('../features/daily-report/AutomationPage').then(module => ({ default: module.AutomationPage })))
 const DailyWeldPage = lazy(() => import('../features/daily-weld/DailyWeldPage').then(module => ({ default: module.DailyWeldPage })))
@@ -38,14 +38,11 @@ export function App() {
     window.dispatchEvent(new Event('production-settings-updated'))
   }, [])
 
-  return <div className="desktop-shell">
-    <div className="production-message-demo desktop-shell-navigation">
-      <OperationSidebar active={route} navigate={goTo} openSettings={() => setSettingsOpen(true)} />
-    </div>
-    <div className="desktop-shell-content">
+  return <>
+    <AppLayout route={route} navigate={goTo} openSettings={() => setSettingsOpen(true)}>
       <div
         key={route}
-        className={route === ROUTES.productionMessage || route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}
+        className={`pa-legacy-content ${route === ROUTES.productionMessage || route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}`}
         data-page-route={route}
       >
         <LoadBoundary>
@@ -56,7 +53,7 @@ export function App() {
           </Suspense>
         </LoadBoundary>
       </div>
-    </div>
+    </AppLayout>
     {settingsOpen && <LoadBoundary onClose={closeSettings}><SettingsModal open onClose={closeSettings} /></LoadBoundary>}
-  </div>
+  </>
 }
