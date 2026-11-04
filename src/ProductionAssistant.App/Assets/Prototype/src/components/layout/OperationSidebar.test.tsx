@@ -2,6 +2,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it, vi } from 'vitest'
 import { OperationSidebar } from './OperationSidebar'
+import { SidebarProvider } from '../ui/sidebar'
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -12,7 +13,7 @@ describe('operation sidebar compatibility', () => {
     const navigate = vi.fn()
     const openSettings = vi.fn()
     try {
-      await act(async () => root.render(createElement(OperationSidebar, { active: 'daily-weld', navigate, openSettings })))
+      await act(async () => root.render(createElement(SidebarProvider, null, createElement(OperationSidebar, { active: 'daily-weld', navigate, openSettings }))))
       const sections = Array.from(container.querySelectorAll('.sidebar-section'))
       expect(sections.map(section => ({
         category: section.querySelector('.sidebar-section-label')?.textContent,
@@ -24,7 +25,7 @@ describe('operation sidebar compatibility', () => {
       ])
       const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('.sidebar-nav button'))
       expect(buttons.map(button => button.getAttribute('aria-current'))).toEqual([null, 'page', null, null, null, null, null])
-      expect(buttons.map(button => button.classList.contains('sidebar-item-active'))).toEqual([false, true, false, false, false, false, false])
+      expect(buttons.map(button => button.getAttribute('data-active'))).toEqual(['false', 'true', 'false', 'false', 'false', 'false', 'false'])
       await act(async () => { buttons.forEach(button => button.click()) })
       expect(navigate.mock.calls).toEqual([
         ['production-message'], ['daily-weld'], ['database-viewer'], ['plan-pdf'],

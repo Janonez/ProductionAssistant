@@ -25,6 +25,7 @@ import './tencent-sheet-demo.css'
 import './skeleton.css'
 import './plan-pdf.css'
 import './production-meeting.css'
+import './styles/shadcn-shell.css'
 
 performance.mark('module-entry')
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

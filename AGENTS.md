@@ -9,6 +9,7 @@
 - [PLAN.md](PLAN.md)：稳定目标、架构和阶段范围。
 - [README.md](README.md)：项目定位、环境、运行命令和功能说明。
 - [Electron 宿主设计](docs/electron-host-design.md)：宿主迁移决策及各阶段授权边界。
+- [前端设计与组件复用规范](docs/frontend-ui-standards.md)：所有后续前端开发必须遵守。
 
 ## 总原则
 - 遇到不确定的情况先停下报告，不要自行决定。先只读检查，再动手。
