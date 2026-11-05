@@ -2,30 +2,59 @@
 
 ## 当前状态
 
-- 项目包含 WinUI / WebView2 应用、React 前端、共享 Bridge、Sidecar 和 Electron 开发外壳；后者尚未替代 WinUI。结构和运行方式见 [README.md](README.md)。
+- 项目包含 WinUI / WebView2 应用、React 前端、共享 Bridge、Sidecar 和 Electron Desktop；长期方向明确为 Electron 优先，WinUI 仅作业务迁移期过渡，维护边界见 [PLAN.md](PLAN.md)。现阶段不删除 WinUI，不改变构建与发布流程；结构和运行方式见 [README.md](README.md)。
 - SD-8c 已完成：日报本地配置迁移通过 [PR #77](https://github.com/Janonez/ProductionAssistant/pull/77) 合并，提交 `fe4c08c`。这是后端迁移，不代表新 UI 已实现。
 - UI-0 接入方案已通过 [PR #79](https://github.com/Janonez/ProductionAssistant/pull/79) 合并，提交 `90b8406636ea1057fe6d532a212d95163f572ffe`。
-- 用户已决定前端设计迁移与后端功能迁移交替推进；UI-1a 之后当前实施 DX-1，下一阶段为 UI-1b，其余阶段范围见 [PLAN.md](PLAN.md)。
+- 用户已决定前端设计迁移与后端功能迁移交替推进；UI-1a、DX-1 均已完成并合并，UI-1b-1 已完成实现及 Electron 人工验收，本轮进入提交和 PR 阶段。下一阶段 UI-1b-2 尚未授权实施，其余阶段范围见 [PLAN.md](PLAN.md)。
 - UI-1a 已通过 [PR #81](https://github.com/Janonez/ProductionAssistant/pull/81) 合并，main 合并提交为 `21af67f652700ca43517a93dd397fc99f159ff8b`；Electron 和 WinUI Development 均已完成基本视觉人工验收。移植来源固定为 shadcn-admin 提交 `e16c87f213a5ba5e45964e9b67c792105ec74d26`，来源、MIT 许可与逐项适配见 [移植说明](docs/third-party/shadcn-admin.md)。
 - 七个路由、query/loadId、Suspense、RouteReady、LoadBoundary、设置与原业务组件保持；没有修改业务页面内部、Bridge、Electron、Sidecar 或 .NET 源码。
 - 前端新增 Tailwind 4.2.2 与必要的 Radix/CVA/clsx 等依赖；React、ReactDOM、Vite、TypeScript、Vitest 和其他原有依赖的解析版本未改变。旧 CSS、reset、同名变量及新 portal 已建立边界；旧内容与旧设置暂保持浅色，完整统一留给 UI-1b。
-- DX-1 在 `codex/electron-runtime-cache` 分支实施，基于 `21af67f`。用户已决定采用官方 `@electron/get` ZIP 缓存；自定义启动器、运行时校验清单、导入脚本及专用测试已按明确路径撤销，Desktop package.json 恢复原生 `electron .`。最终 Git 变更仅保留 README.md 和 STATUS.md，现有 npm ci、verify、宿主和业务代码保持基线。
+- DX-1 已通过 [PR #82](https://github.com/Janonez/ProductionAssistant/pull/82) 合并，提交 `2aae55af22321c4915cae73e7090dd9de31828af`，完成状态按用户最新确认记录。采用官方 `@electron/get` ZIP 缓存和原生 `electron .`；没有保留自定义运行时管理器，npm ci、verify、宿主与业务代码保持原有流程。
+- UI-1b-1 在 `codex/ui1b-theme-persistence` 分支实施，基于 `2aae55af`；仅补齐当前主题的 localStorage 持久化与新表面的 color-scheme，不改整体视觉、布局、ThemeSwitch、旧业务或设置。完整 verify 与 dist 核验通过，Electron Development 运行正常，用户已明确确认主题持久化人工验收通过并授权提交、推送及创建 PR；本轮禁止合并。
 - 字体试验保留原版 Inter Variable → Noto Sans SC Variable → sans-serif，将新外壳内 Tailwind 默认字体变量统一到现有 `--font-ui`；没有改变上游布局、字号、字重、平滑或旧页面。长期组件复用规则见 [前端规范](docs/frontend-ui-standards.md)，AGENTS.md 已强制引用；字体继续作为试验方案记录，尚未正式定稿。
 - 核查结论：保留现有 React/Vite、查询参数路由和统一桥接，渐进接入 shadcn-admin；日报完整工作流仍有 Sidecar 接口缺口。详细事实、能力表和验收边界只在 UI-0 文档维护。
 
 ## 下次入口
 
 1. 只读检查 `git status -sb`、`git worktree list`、分支和最近提交，按实际状态更新判断。
-2. DX-1 官方缓存准备、原样完整 verify、进程内禁用联网后的真实安装器恢复，以及两次 Development 窗口启动/正常退出已完成，证据见下方。当前等待用户对 GUI 外观与交互作最终人工验收，不把技术核查写成用户已回复通过。
-3. DX-1 官方缓存说明见 [README](README.md#electron-开发运行时)。原启动命令为 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`；Development 发布目录是 WinUI 测试版，不是 Electron 启动入口。当前暂不提交或推送，完成真实验证后交用户审查；下一阶段 UI-1b 仍须单独授权。
+2. 完成 UI-1b-1 提交与 PR 交付后停止，等待 ChatGPT 审查及用户后续授权；不得自行合并。自动测试、实际窗口技术检查与用户验收分别记录，提交和 PR 状态以 Git / GitHub 为准。
+3. Electron Development 入口为 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`；Development 发布目录是 WinUI 测试版。下一阶段 UI-1b-2 主要面向 Electron 迁移全局设置 Dialog，尚未授权实施；UI-1b-3 调整为 Electron 宿主兼容性及 UI 收尾。详细边界只在 [PLAN.md](PLAN.md) 维护，WinUI 仅保留必要兼容与基础回归。
 4. UI-2 实施前确认日报能力范围；不能把 SD-8c 开放创建/保存模板视为预览、发送、启停等完整链路已迁移。
 
 ## 待决策
 
-- UI-1a 两个宿主的基本视觉验收已完成；DX-1 的技术验证已完成，GUI 最终人工验收与本轮报告审查待用户确认。官方缓存缺失或损坏时原生安装器可能尝试重新下载，不再以自定义管理器阻断该行为。
+- UI-1b-1 用户人工验收已通过，当前等待提交后的 PR 审查；本轮禁止合并。官方缓存缺失或损坏时原生 Electron 安装器仍可能尝试下载，DX-1 没有引入阻断机制。
+- 已知 Electron 深色标题栏窗口控制按钮对比度不足，按用户反馈列入 UI-1b-3，尚未修复。不处理 WinUI 白色标题栏及“视图”菜单视觉问题，不再要求双宿主视觉一致性验收。
 - UI-2 按已开放接口分批交付，或先另行授权补齐接口后完整验收，见 UI-0 第 5 节。
 
-## DX-1 验证（2026-11-05）
+## UI-1b-1 验证（2026-11-05）
+
+- main 干净并执行 `git pull --ff-only` 确认已同步后建立本批分支；仅使用主工作目录。当前获准提交、推送和创建 PR；未更新稳定版或修改业务数据。
+- ThemeProvider 保留原接口与 matchMedia 监听；唯一 localStorage 键为 `production-assistant-ui-theme-v1`，惰性恢复并校验三种选择，读写异常均不阻断当前会话。新表面分别声明 light / dark color-scheme，旧内容仍直接声明 light；不向 html / body 添加 dark。
+- 定向测试退出 0：ThemeProvider 18 项、AppLayout 8 项、导航 40 项、设置 2 项、Sidebar 1 项，共 69 项通过。存储和 matchMedia 测试隔离并清理；AppLayout 使用真实主题菜单 portal，覆盖解析后系统主题、七页切换、query/loadId、旧容器边界与设置入口。此结果不代表 CSS 实际视觉验收。
+- 上一轮已单次授权执行完整 `pwsh -NoProfile -File .\scripts\verify.ps1`，不带 SkipRestore / SyncRelease，退出 0：前端 294 通过 / 1 跳过（符号链接权限），Desktop 81 通过，xUnit 355 通过；字体检查、TypeScript / Vite、Release 构建及 Development 发布通过。Release 构建 1 个 PRI249 警告、0 错误；另保留 npm 审计 32 项、esbuild 安装脚本提示及 Vite 大块提示，未自动升级或修复依赖。
+- dist 已通过 Git 元数据和文本引用核验：基线与当前均为 120 个文件，11 组旧哈希资源一一替换；入口引用 `index-Cqe1G6EX.js` / `index-CXai2rwv.css` 均存在，文本资源无缺失引用及旧文件名残留。9 个业务 / 图标 JS chunk 在更新资源名引用后与基线一致；CSS 与基线相比恰好只新增两条 color-scheme 声明；入口 JS 包含与当前 ThemeProvider 对应的存储校验、异常处理和系统监听代码。业务源码、宿主和依赖无额外变化。
+- Development 前端产物与当前 dist 的文本内容及全部 120 个文件大小一致；未全文读取或比较大型字体等二进制文件，不将该结果表述为全部文件 SHA-256 核对。
+- Electron npm 包实际目录为 `src/ProductionAssistant.Desktop/node_modules/electron`，版本 45.0.0，官方 ZIP 缓存已确认存在且与包内 SHA-256 一致。本轮执行实际存在的官方 `install.js`，日志为 Checking the cache / Cache hit，退出 0；确认 `dist/electron.exe`、`path.txt` 存在，`path.txt=electron.exe`、`dist/version=45.0.0`。没有新增安装器、依赖或缓存机制，也未重跑 npm ci / verify。
+- Electron Development 已通过原命令 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development` 启动；实际捕获 npm 包内 electron.exe 对应窗口，确认 Sidebar、Header 和默认生产消息页面已渲染。首次捕获提示窗口最小化，按现有工具流程激活后成功捕获，没有另建 GUI 自动化机制。
+- WinUI Development 已通过 `& .\deployments\development\ProductionAssistant.exe` 启动；实际捕获对应部署目录进程窗口，标题为“生产助手 [Development]”，显示测试环境标识及共享前端。仅记录必要启动兼容，不记录 WinUI 完整视觉验收通过，也不再要求双宿主视觉一致性验收。Codex 启动检查没有点击业务查询、解析、写入或发送按钮。
+- 用户已明确确认 Electron Development 的 UI-1b-1 主题持久化人工验收通过，并授权进入 Git 提交及 PR 阶段；该结论来自用户确认，不将 Codex 启动截图或 jsdom 断言当成人工视觉验收。Codex 未单独完成浏览器 computed color-scheme 检查，不把本批验收扩大为七个业务页面已迁移或完整业务链路验收。
+
+| 资源 | 旧哈希 | 新哈希 |
+|---|---|---|
+| AutomationPage.js | XTlFNvAR | Db_mRSkQ |
+| DailyWeldPage.js | CtMA_qVx | C_iQoX2Q |
+| DatabaseViewerPage.js | V4YWjaVV | RFKMjTxb |
+| PlanPdfPage.js | CPW6RuHB | CFMgyPzL |
+| ProductionMeetingPage.js | BOhJrywr | D6n0MZ_n |
+| ReportCenterPage.js | DB03VoAs | CwEXnAfA |
+| file-spreadsheet.js | CGAkVFAR | kn1swJmP |
+| folder-open.js | BJUVJGyQ | BdMvHxCB |
+| loader-circle.js | 6HZd8iMx | ozG7Aex0 |
+| index.js | CdFFcFYv | Cqe1G6EX |
+| index.css | Dn-XXNFu | CXai2rwv |
+
+## DX-1 验证归档（2026-11-05，验收状态以后续用户确认为准）
 
 - 已核对七个文件差异均来自 DX-1，按用户授权恢复 package.json 并删除四个未跟踪的自定义实现/测试文件；当前仅 README.md、STATUS.md 有 Git 差异。没有删除外部失败临时目录，没有修改系统 ACL。
 - 已完成的只读模拟验证：Electron 45.0.0、@electron/get 5.1.0 的官方函数体在 7 组内存探测中验证了有效 ZIP 缓存与内置校验和的零下载器调用、模拟 npm ci 后的安装器缓存恢复分支，以及缓存缺失/损坏或远程校验和触发下载的行为。文件写入、下载器、校验器和原生解压均以替身记录，不能代替真实安装验收。

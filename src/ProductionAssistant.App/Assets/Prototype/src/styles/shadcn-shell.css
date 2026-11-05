@@ -16,6 +16,7 @@
 }
 
 .pa-shell-theme {
+  color-scheme: light;
   /* Font trial: keep Tailwind defaults on the existing bundled UI font chain. */
   --font-sans: var(--font-ui);
   --default-font-family: var(--font-ui);
@@ -25,6 +26,7 @@
   font-size: 14px;
   line-height: 1.5;
 }
+.pa-shell-theme.dark { color-scheme: dark; }
 [data-shadcn-surface] { box-sizing: border-box; font-family: var(--font-ui); }
 .pa-shell-portal { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: transparent; }
 .pa-shell-portal > *, .pa-shell-portal [data-slot='dropdown-menu-content'],

@@ -18,15 +18,26 @@ vi.mock('../../features/daily-report/AutomationPage', () => ({ AutomationPage: (
 describe('transplanted shadcn application shell', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot>
+  let colorScheme: MediaQueryList
+  let savedPreference: string | null
+  const storageKey = 'production-assistant-ui-theme-v1'
   const chrome = Object.getOwnPropertyDescriptor(window, 'chrome')
   const navButton = (name: string) => container.querySelector<HTMLButtonElement>(`[data-sidebar="content"] button[aria-label="${name}"]`)!
+  const openThemeMenu = async () => {
+    await act(async () => container.querySelector('[data-slot="dropdown-menu-trigger"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+  }
   const settings = {
     notion: { configured: false, rootPageId: '', dataSourceCount: 0, lastSyncedAt: '', sources: [] },
     notification: { enabled: false, channelName: '', webhookConfigured: false, secretConfigured: false, connected: null, status: '', checkedAt: '', rules: [] },
     version: '',
   }
   beforeEach(async () => {
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    savedPreference = localStorage.getItem(storageKey)
+    localStorage.removeItem(storageKey)
+    colorScheme = Object.assign(new EventTarget(), { matches: false, media: '(prefers-color-scheme: dark)' }) as MediaQueryList
+    const desktop = Object.assign(new EventTarget(), { matches: false, media: '(max-width: 767px)' }) as MediaQueryList
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => query === colorScheme.media ? colorScheme : desktop))
     Reflect.deleteProperty(window, 'chrome')
     history.replaceState({}, '', '?loadId=document-one')
     invoke.mockReset().mockResolvedValue(settings)
@@ -42,6 +53,49 @@ describe('transplanted shadcn application shell', () => {
     if (chrome) Object.defineProperty(window, 'chrome', chrome)
     else Reflect.deleteProperty(window, 'chrome')
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    if (savedPreference === null) localStorage.removeItem(storageKey)
+    else localStorage.setItem(storageKey, savedPreference)
+  })
+  it('keeps one selected theme across the sidebar, Header, routes and settings entry', async () => {
+    await openThemeMenu()
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent?.startsWith('深色'))!.click())
+    const shell = container.querySelector('.pa-shell-theme')!
+    expect(shell.classList.contains('dark')).toBe(true)
+    expect(localStorage.getItem(storageKey)).toBe('dark')
+    expect(container.querySelector('[data-slot="sidebar"]')?.closest('.pa-shell-theme')).toBe(shell)
+    expect(container.querySelector('[aria-label="页面工具栏"]')?.closest('.pa-shell-theme')).toBe(shell)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(document.body.classList.contains('dark')).toBe(false)
+    for (const module of SIDEBAR_MODULES) {
+      await act(async () => { navButton(module.name).click(); await vi.dynamicImportSettled() })
+      expect(container.querySelector('.pa-shell-theme')).toBe(shell)
+      expect(shell.classList.contains('dark')).toBe(true)
+      const legacy = container.querySelector('.pa-legacy-content')!
+      expect(legacy.getAttribute('data-page-route')).toBe(module.route)
+      expect(legacy.hasAttribute('data-shadcn-surface')).toBe(false)
+      expect(new URLSearchParams(location.search).get('loadId')).toBe('document-one')
+    }
+    const query = location.search
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="打开设置"]')!.click())
+    expect(container.querySelector('[role="dialog"][aria-label="设置"]')?.closest('.pa-shell-theme')).toBeNull()
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click())
+    expect(location.search).toBe(query)
+    expect(shell.classList.contains('dark')).toBe(true)
+    expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'document-one')
+  })
+  it('gives the real theme-menu portal the resolved system theme', async () => {
+    await act(async () => { Reflect.set(colorScheme, 'matches', true); colorScheme.dispatchEvent(new Event('change')) })
+    await openThemeMenu()
+    const portal = document.querySelector('.pa-shell-portal')!
+    expect(portal).not.toBeNull()
+    expect(portal.hasAttribute('data-shadcn-surface')).toBe(true)
+    expect(portal.classList.contains('dark')).toBe(true)
+    expect(container.querySelector('.pa-shell-theme')?.classList.contains('dark')).toBe(true)
+    expect(localStorage.getItem(storageKey)).toBeNull()
+    await act(async () => { Reflect.set(colorScheme, 'matches', false); colorScheme.dispatchEvent(new Event('change')) })
+    expect(portal.classList.contains('dark')).toBe(false)
+    expect(container.querySelector('.pa-shell-theme')?.classList.contains('dark')).toBe(false)
   })
   it('mounts all seven business slots using query navigation and keeps the document/sidebar alive', async () => {
     const sidebar = container.querySelector('[data-slot="sidebar"]')
@@ -102,12 +156,14 @@ describe('transplanted shadcn application shell', () => {
   })
   it('restores a URL-selected route and new host loadId when the React document is remounted', async () => {
     await act(async () => root.unmount())
+    localStorage.setItem(storageKey, 'dark')
     history.replaceState({}, '', '?route=plan-pdf&loadId=document-two')
     root = createRoot(container)
     await act(async () => { root.render(<App />); await vi.dynamicImportSettled() })
     expect(container.querySelector('[data-business-page]')?.getAttribute('data-business-page')).toBe('plan-pdf')
     expect(navButton('挂网计划 PDF 导出').getAttribute('aria-current')).toBe('page')
     expect(notifyReady).toHaveBeenLastCalledWith('plan-pdf', 'document-two')
+    expect(container.querySelector('.pa-shell-theme')?.classList.contains('dark')).toBe(true)
   })
   it('reserves the native title-bar inset only for WinUI', async () => {
     expect(container.querySelector('[data-winui]')?.getAttribute('data-winui')).toBe('false')

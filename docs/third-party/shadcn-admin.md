@@ -14,7 +14,7 @@
 | `src/components/layout/header.tsx` | `components/layout/AppHeader.tsx` | 保留上游布局、64px 高度、SidebarTrigger 和 Separator；加入当前业务名称、真实设置入口及上游 ThemeSwitch |
 | `src/components/layout/main.tsx` | `components/layout/PageContainer.tsx` | 保留 16px 横向、24px 纵向间距及 fluid 选项；外层改用 div，避免和现有业务页面的 main 地标嵌套 |
 | `src/components/layout/authenticated-layout.tsx` | `components/layout/AppLayout.tsx` | 保留 SidebarProvider → Sidebar → SidebarInset；不引入认证、搜索和路由 Provider；接入现有页面与 Suspense 边界 |
-| `src/components/theme-switch.tsx`、`src/context/theme-provider.tsx` | `components/layout/ThemeSwitch.tsx`、`ThemeProvider.tsx` | 真实浅色/深色/系统切换；主题限于新外壳及 portal；暂不持久化或统一旧页面主题 |
+| `src/components/theme-switch.tsx`、`src/context/theme-provider.tsx` | `components/layout/ThemeSwitch.tsx`、`ThemeProvider.tsx` | 保留浅色/深色/系统切换和系统主题监听；用 localStorage 持久化选择；主题仍限于新外壳及 portal，不统一旧页面主题 |
 | `src/hooks/use-mobile.tsx`、`src/lib/utils.ts` 的 `cn` | `components/layout/use-mobile.tsx`、`utils.ts` | 保留 768px 断点和 clsx/tailwind-merge；测试无 matchMedia 时按桌面处理 |
 | `src/styles/theme.css`、`src/styles/index.css` | `styles/shadcn-theme.css`、`styles/shadcn-shell.css` | 原始 OKLCH 颜色、圆角与 Tailwind 主题映射；变量从全局迁到 `.pa-shell-theme`；仅移植外壳所需 base 样式 |
 
@@ -28,7 +28,10 @@
 - 保留上游 Ctrl+B 侧栏快捷键，但编辑器、输入框和已处理的事件不拦截，避免破坏现有文本编辑功能。
 - 收起状态的透明分组标题禁用指针命中，防止负 margin 的标题框拦截前一组图标点击；不改变其尺寸、间距、动画或颜色。
 - 旧页面重复的一级标题改为仅辅助技术可读，业务配置按钮、状态与表单保留；旧外层宽度和背景不覆盖新 inset。内容变窄时生产消息两栏纵向重排，防止旧固定列挤出窗口。这些是宿主/旧业务兼容适配，不改数据逻辑。
-- 旧业务内部、iframe 和旧设置弹窗仍保持浅色；完整主题统一、持久化与业务控件替换留给 UI-1b 及后续阶段。浏览器布局检查不代表 Electron、WinUI 或 Sidecar 真实业务验收。
+- UI-1b-1 使用唯一 localStorage 键 `production-assistant-ui-theme-v1` 保存 `light`、`dark` 或 `system`。React 状态惰性初始化读取并校验，无记录、非法值或读取异常均回退 `system`；写入异常时仍更新当前会话状态。系统主题继续通过 matchMedia 监听，卸载时移除监听，不经过 Bridge / IPC，也不新增依赖。
+- 不直接复制上游 cookie 和 html 全局主题方案：尚未迁移的页面有固定浅色色值、独立 iframe 和旧 portal；给 html / body 添加全局 dark 会突破现有兼容边界。保留唯一 ThemeProvider、`.pa-shell-theme` 与 `.pa-shell-theme.dark`，仅在新主题表面声明对应 `color-scheme`；旧 `.pa-legacy-content` 的直接浅色声明继续优先于祖先继承值。
+- Electron 与 WinUI 复用主题代码，但 localStorage 受来源及浏览器 profile 隔离，主题偏好在各自宿主与运行环境独立保存，不自动同步。后续以 Electron 实际界面验收为主，WinUI 只保留过渡期必要兼容及基础回归，不要求长期视觉一致性；存储失败时当前会话有效不代表重启后能够保留。
+- 旧业务内部、iframe 和旧设置弹窗仍保持浅色；主要面向 Electron 的全局设置迁移（UI-1b-2）、Electron 宿主兼容性及 UI 收尾（UI-1b-3）与后续业务控件替换另行实施，具体边界见 [PLAN.md](../../PLAN.md)。ThemeSwitch 的 theme-color meta effect 本批保持原样。浏览器布局检查不代表 Electron 或 Sidecar 真实业务验收。
 
 ## 依赖与验证边界
 
