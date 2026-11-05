@@ -27,6 +27,41 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 
 脚本依次验证前端 bundle、Release build 和 xUnit 测试，默认只生成 Windows x64 自包含测试版 `deployments\development`。只有明确需要同步正式版时才传入 `-SyncRelease`，生成或覆盖 `deployments\production`。桌面人工验收先运行 `deployments\development\ProductionAssistant.exe`。
 
+## Electron 开发运行时
+
+Electron 开发外壳沿用 npm 包的原生 `electron .`，由官方 `@electron/get` 管理 ZIP 缓存，不使用项目自定义启动器、解压运行时管理器或文件哈希清单。当前锁定 Electron 45.0.0，开发环境使用 Windows x64 Node.js 22.12.0 或更新版本。
+
+Windows 默认缓存位于 `%LOCALAPPDATA%\electron\Cache\<URL 目录哈希>\electron-v<版本>-win32-x64.zip`。子目录由官方缓存实现根据下载 URL 的目录部分计算 SHA-256，与 ZIP 内容的校验和不同；更换镜像、版本或设置 `electron_config_cache` 后须重新确认目标路径。缓存机制及镜像配置见 [Electron 官方说明](https://www.electronjs.org/docs/latest/tutorial/installation#cache)。
+
+已有本地官方 ZIP 时，可一次性准备缓存：先用已安装 Electron 包的 `checksums.json` 核对 ZIP 的 SHA-256；若目标已有相同有效文件则复用，若冲突则停止；否则复制到目标目录中的临时文件，再校验复制件并改名为正式 ZIP 文件名。保留原 ZIP，不自行解压，不关闭官方校验。每位开发者自行指定本地 ZIP 来源路径；不提交 ZIP、缓存或机器专属配置。
+
+完整 verify 保留 `npm ci --ignore-scripts`，会清除 `node_modules/electron/dist` 和 `node_modules/electron/path.txt`，但不会清除仓库外的官方 ZIP 缓存。verify 后首次运行仍会调用官方安装器，校验缓存 ZIP 并重新解压到 `node_modules/electron/dist`；有效缓存配合 npm 包内置的校验和可避免再次联网下载。后续正常启动不再安装，也不进行约 374 MB 的逐文件全量哈希。
+
+启动命令保持不变：
+
+```powershell
+npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development
+```
+
+要核对缓存命中，在完整 verify 后、包内运行时尚未恢复时，启用官方调试日志并调用本地安装器：
+
+```powershell
+$previousElectronDebug = $env:DEBUG
+try {
+    $env:DEBUG = '@electron/get*'
+    node .\src\ProductionAssistant.Desktop\node_modules\electron\install.js
+    if ($LASTEXITCODE -ne 0) { throw "Electron 安装器退出码 $LASTEXITCODE" }
+} finally {
+    $env:DEBUG = $previousElectronDebug
+}
+```
+
+检查日志中的目标 ZIP、缓存路径、`Cache hit` 与校验结果，再核对 `dist/version`、`electron.exe` 和 `path.txt`。运行时已安装时安装器可能直接退出，没有缓存日志；不需要为取日志手动删除运行时。`Downloading Electron binary...` 只说明调用了安装器，不能单独作为联网下载证据；须区分安装器调用、缓存命中、本地解压和网络请求。
+
+缓存缺失或损坏时，官方机制可能重新联网下载；开启 `electron_use_remote_checksums` 时也可能访问远程校验和。DEBUG 本身不禁止网络，严格离线验收须另有进程网络禁用条件，并记录真实结果。官方缓存读写模式中的 `ReadOnly` 也不是离线开关。正常启动不逐文件校验已解压内容，不能把缓存校验等同于每次启动的完整性检查。
+
+Electron 仍依赖共享前端 dist 和匹配源码的 Release Sidecar，默认完整 verify 会生成这些资源；`deployments\development\ProductionAssistant.exe` 是 WinUI 入口。真实缓存准备、完整 verify 后恢复、窗口和再次启动均单独验收，不以模拟验证代替实际结果。
+
 ## 运行环境
 
 运行环境与 Debug/Release 编译配置相互独立。程序按以下优先级识别环境：`--environment Development|Production`、`DOTNET_ENVIRONMENT`、发布目录中的 `runtime-environment.json`，均未设置时安全回退为 `Production`。因此 Release 构建也可以使用 Development 环境：
