@@ -36,5 +36,5 @@ export function notifyReady(route: string, loadId: string): void {
   webview.notifyReady(route, loadId)
 }
 export const bridge = { invoke, onProgress, ready: notifyReady }
-export { cancelPending } from './webview'
+export { cancelPending, notifyTheme } from './webview'
 export type { BridgeRequest, BridgeResponse } from './webview'

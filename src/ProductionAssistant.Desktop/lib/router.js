@@ -54,6 +54,10 @@ function classify(message) {
   } catch {
     return invalid('not-serializable');
   }
+  if (message.type === 'app.theme') {
+    if (!['light', 'dark', 'system'].includes(message.theme)) return invalid('invalid-theme');
+    return { kind: 'theme', theme: message.theme };
+  }
   if (message.type === 'app.ready') {
     return {
       kind: 'ready',

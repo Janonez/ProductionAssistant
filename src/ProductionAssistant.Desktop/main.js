@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, ipcMain, Menu, protocol } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { parseEnvironment, resolveSidecarPath, resolveDistRoot, resolveUserDataDir } = require('./lib/environment');
@@ -243,13 +243,16 @@ function start() {
     contents.session.setPermissionCheckHandler(() => false);
     contents.on('did-fail-load', (_event, errorCode, _description, _url, isMainFrame) => log('did-fail-load', { errorCode, isMainFrame }));
     contents.on('render-process-gone', (_event, details) => log('render-process-gone', { reason: details.reason, exitCode: details.exitCode }));
-    ipcMain.on('bridge:message', (event, message) => {
+    const onBridgeMessage = (event, message) => {
+      if (!window || window.isDestroyed() || contents.isDestroyed()) return;
       const sender = checkSender(event, { webContents: contents, url: documentUrl });
       if (!sender.ok) { log('ipc-rejected', { reason: sender.reason }); return; }
       const request = classify(message);
       if (request.kind === 'invalid') {
         log('request-invalid', { reason: request.reason });
         if (request.id) reply({ id: request.id, ok: false, error: '无效的界面请求。' });
+      } else if (request.kind === 'theme') {
+        nativeTheme.themeSource = request.theme;
       } else if (request.kind === 'ready') {
         if (isCurrentLoad(request.loadId, currentLoadId)) {
           log('react-ready', { moduleEntryMs: request.moduleEntryMs, readyMs: request.readyMs, sinceLoadMs: now() - loadStartT });
@@ -264,14 +267,18 @@ function start() {
         log('request-forward', { operation });
         if (!client.send(request)) reply({ id: request.id, ok: false, error: '能力进程不可用，请重启应用。' });
       }
-    });
+    };
+    ipcMain.on('bridge:message', onBridgeMessage);
     const viewMenu = [
       { label: '重新加载', accelerator: 'F5', click: reload },
       { label: '重新加载', accelerator: 'CmdOrCtrl+R', visible: false, acceleratorWorksWhenHidden: true, click: reload },
     ];
     if (environment !== 'Production') viewMenu.push({ label: '开发者工具', role: 'toggleDevTools' });
     Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: '视图', submenu: viewMenu }]));
-    window.on('closed', () => { window = null; });
+    window.on('closed', () => {
+      ipcMain.removeListener('bridge:message', onBridgeMessage);
+      window = null;
+    });
     loadDocument('initial');
   }).catch(error => {
     log('startup-failed', { error: error.name });

@@ -12,6 +12,12 @@ const host = () => {
 }
 export const hasHost = () => Boolean(host())
 
+// Electron shell preference only; never send this message to WinUI or the Sidecar.
+export function notifyTheme(theme: 'light' | 'dark' | 'system') {
+  const desktop = window as typeof window & { chrome?: { webview?: Host }; paHost?: Host }
+  if (!desktop.chrome?.webview) desktop.paHost?.postMessage({ type: 'app.theme', theme })
+}
+
 export function receive(response: BridgeResponse) {
   const request = pending.get(response.id)
   if (!request) return

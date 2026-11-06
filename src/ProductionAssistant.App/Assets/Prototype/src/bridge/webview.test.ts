@@ -127,6 +127,27 @@ describe('Electron bridge transport', () => {
     else Reflect.deleteProperty(window, 'paHost')
   })
 
+  it.each(['light', 'dark', 'system'] as const)('sends %s through the public theme API only to Electron', async theme => {
+    const postMessage = vi.fn()
+    Object.assign(window, { paHost: { postMessage, addEventListener: () => undefined } })
+    const { notifyTheme } = await import('./index')
+    notifyTheme(theme)
+    expect(postMessage.mock.calls).toEqual([[{ type: 'app.theme', theme }]])
+  })
+
+  it('does not send theme notifications to either host when WinUI takes precedence', async () => {
+    const winui = { postMessage: vi.fn(), addEventListener: vi.fn() }
+    const electron = { postMessage: vi.fn(), addEventListener: vi.fn() }
+    Object.assign(window, { chrome: { webview: winui }, paHost: electron })
+    const { notifyTheme } = await import('./webview')
+    notifyTheme('dark')
+    expect(winui.postMessage).not.toHaveBeenCalled()
+    expect(electron.postMessage).not.toHaveBeenCalled()
+    Reflect.deleteProperty(window, 'paHost')
+    notifyTheme('system')
+    expect(winui.postMessage).not.toHaveBeenCalled()
+  })
+
   it('sends requests through paHost and resolves its matching response', async () => {
     let receive!: (event: { data: unknown }) => void
     let sent!: { id: string; operation: string; payload: unknown }
@@ -189,9 +210,10 @@ describe('Electron bridge transport', () => {
   })
 
   it('preserves missing-host rejection and silent ready when neither host exists', async () => {
-    const { hasHost, invoke, notifyReady } = await import('./webview')
+    const { hasHost, invoke, notifyReady, notifyTheme } = await import('./webview')
     expect(hasHost()).toBe(false)
     await expect(invoke('database.getState')).rejects.toThrow('当前页面未连接到桌面宿主')
     expect(() => notifyReady('database-viewer', 'missing-host')).not.toThrow()
+    expect(() => notifyTheme('dark')).not.toThrow()
   })
 })

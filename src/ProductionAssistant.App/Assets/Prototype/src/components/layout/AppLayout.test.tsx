@@ -6,7 +6,7 @@ import { SIDEBAR_MODULES } from '../../routes/routeTable'
 import { hasNativeTitleBar } from './AppLayout'
 
 const { invoke, notifyReady } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn() }))
-vi.mock('../../bridge/index', () => ({ invoke, notifyReady }))
+vi.mock('../../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
 vi.mock('../../features/production-message/ProductionMessagePage', () => ({ default: () => <h1 data-business-page="production-message">生产消息入库</h1> }))
 vi.mock('../../features/daily-weld/DailyWeldPage', () => ({ DailyWeldPage: () => <h1 data-business-page="daily-weld">每日焊接数据模拟</h1> }))
 vi.mock('../../features/database-viewer/DatabaseViewerPage', () => ({ DatabaseViewerPage: () => <h1 data-business-page="database-viewer">数据库查看</h1> }))
