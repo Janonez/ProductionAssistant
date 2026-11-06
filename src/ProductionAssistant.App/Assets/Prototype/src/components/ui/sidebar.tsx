@@ -193,6 +193,14 @@ function Sidebar({
             } as React.CSSProperties
           }
           side={side}
+          onCloseAutoFocus={event => {
+            // The Header trigger lives outside this controlled Sheet Root.
+            const trigger = document.querySelector<HTMLButtonElement>('[data-slot="sidebar-trigger"][aria-controls="business-navigation"]')
+            if (trigger) {
+              event.preventDefault()
+              trigger.focus()
+            }
+          }}
         >
           <SheetHeader className='sr-only'>
             <SheetTitle>业务导航</SheetTitle>

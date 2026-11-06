@@ -5,29 +5,40 @@
 - 项目包含 WinUI / WebView2 应用、React 前端、共享 Bridge、Sidecar 和 Electron Desktop；长期方向明确为 Electron 优先，WinUI 仅作业务迁移期过渡，维护边界见 [PLAN.md](PLAN.md)。现阶段不删除 WinUI，不改变构建与发布流程；结构和运行方式见 [README.md](README.md)。
 - SD-8c 已完成：日报本地配置迁移通过 [PR #77](https://github.com/Janonez/ProductionAssistant/pull/77) 合并，提交 `fe4c08c`。这是后端迁移，不代表新 UI 已实现。
 - UI-0 接入方案已通过 [PR #79](https://github.com/Janonez/ProductionAssistant/pull/79) 合并，提交 `90b8406636ea1057fe6d532a212d95163f572ffe`。
-- 用户已决定前端设计迁移与后端功能迁移交替推进；UI-1a、DX-1、UI-1b-1 已完成。UI-1b-2 全局设置 Dialog 已通过 [PR #84](https://github.com/Janonez/ProductionAssistant/pull/84) 合并关闭，main 提交 `28d35397771df2dff15badb69bc566eeb2ec049f`。UI-1b-3 第一批 [PR #85](https://github.com/Janonez/ProductionAssistant/pull/85) 的标题栏验收修正已通过完整 verify；用户认可本轮 32px 标题栏基本检查，但新反馈首次设置弹窗及导航栏展开/收起掉帧，尚未定位，PR 未获整体验收通过，禁止合并。
+- UI-1a、DX-1、UI-1b-1 已完成；UI-1b-2 已通过 [PR #84](https://github.com/Janonez/ProductionAssistant/pull/84) 合并。UI-1b-3 第一批标题栏及主题交互已获用户明确人工验收通过，经 [PR #85](https://github.com/Janonez/ProductionAssistant/pull/85) squash 合并，main 提交 `1ade3076b563be6c63814c55d83b7f638cbd682d`；合并后完整 verify 退出 0（前端 326 通过/1 跳过、Desktop 90、xUnit 355，Release 0 警告/0 错误）。第二批仅修复有证据的移动 Sheet 关闭焦点问题，自动验证通过，等待本批 PR 与人工验收。
 - UI-1a 已通过 [PR #81](https://github.com/Janonez/ProductionAssistant/pull/81) 合并，main 合并提交为 `21af67f652700ca43517a93dd397fc99f159ff8b`；Electron 和 WinUI Development 均已完成基本视觉人工验收。移植来源固定为 shadcn-admin 提交 `e16c87f213a5ba5e45964e9b67c792105ec74d26`，来源、MIT 许可与逐项适配见 [移植说明](docs/third-party/shadcn-admin.md)。
 - 七个路由、query/loadId、Suspense、RouteReady、LoadBoundary、设置与原业务组件保持；UI-1b-3 第一批仅增加主题同步、Electron 官方窗口覆盖层及必要外壳顶部留位，没有修改业务页面内部、Sidecar 或 .NET 源码。
 - 前端沿用 Tailwind 4.2.2 与现有 Radix/CVA/clsx 等依赖；UI-1b-2 未修改依赖或锁文件。旧业务 CSS、reset、同名变量及新 portal 保持隔离；全局设置已接入共享主题，七个业务页面内部及 iframe 仍保留原样。
 - DX-1 已通过 [PR #82](https://github.com/Janonez/ProductionAssistant/pull/82) 合并，提交 `2aae55af22321c4915cae73e7090dd9de31828af`，完成状态按用户最新确认记录。采用官方 `@electron/get` ZIP 缓存和原生 `electron .`；没有保留自定义运行时管理器，npm ci、verify、宿主与业务代码保持原有流程。
-- UI-1b-3 第一批位于 `codex/ui1b3-electron-shell`，基线为 `28d35397771df2dff15badb69bc566eeb2ec049f`；本批采用官方 Window Controls Overlay 保留原生按钮，未迁移 Sidebar、Dialog、Sheet、响应式或业务页面，不改稳定版或版本号。
+- UI-1b-3 第二批位于 `codex/ui1b3-shell-interactions`，基线为 `1ade3076b563be6c63814c55d83b7f638cbd682d`；运行代码仅修改 Sidebar 的移动 Sheet 关闭焦点回调，不改业务逻辑、Bridge、Sidecar、Electron 标题栏、WinUI 专属 UI、稳定版或版本号。
 - 字体试验保留原版 Inter Variable → Noto Sans SC Variable → sans-serif，将新外壳内 Tailwind 默认字体变量统一到现有 `--font-ui`；没有改变上游布局、字号、字重、平滑或旧页面。长期组件复用规则见 [前端规范](docs/frontend-ui-standards.md)，AGENTS.md 已强制引用；字体继续作为试验方案记录，尚未正式定稿。
 - 核查结论：保留现有 React/Vite、查询参数路由和统一桥接，渐进接入 shadcn-admin；日报完整工作流仍有 Sidecar 接口缺口。详细事实、能力表和验收边界只在 UI-0 文档维护。
 
 ## 下次入口
 
 1. 只读检查 `git status -sb`、`git worktree list`、分支和最近提交，按实际状态更新判断。
-2. 从 PR #85 的新 CI 和首次交互性能证据接续：设置弹窗第一次打开及导航栏第一次展开/收起掉帧、重复后流畅仍未定位。用户要求人工验收，不自动操控电脑；如继续诊断需真实渲染线程 Performance 记录，不能用 IPC 耗时推断掉帧原因。必须等用户最终明确回复“通过”及 CI verify pass 才可 squash 合并。
+2. 从 UI-1b-3 第二批的 PR / CI 和移动 Sheet 人工验收接续，等用户明确回复“通过”及 CI verify pass 才可 squash 合并。第一批已经通过并合并，不重复验收；用户要求人工验收，不自动操控电脑。
 3. Electron Development 入口为 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`；Development 发布目录是 WinUI 测试版。人工检查项目见下文。本批以外的 UI-1b-3 内容需另行授权；WinUI 仅保留必要兼容与基础回归。
-4. UI-2 实施前确认日报能力范围；不能把 SD-8c 开放创建/保存模板视为预览、发送、启停等完整链路已迁移。
+4. 第二批结束后优先进入 UI-2，实施前确认日报能力范围；不能把 SD-8c 开放创建/保存模板视为预览、发送、启停等完整链路已迁移。独立 DX-2 冷启动调查不阻碍 UI-1b-3 或 UI-2。
 
 ## 待决策
 
-- UI-1b-3 第一批尚未整体验收通过：32px 顶部及基本窗口交互已获用户本轮认可，首次设置/侧栏动画问题仍待定位；Snap Layouts、不同 Windows 缩放及 Alt 临时菜单布局没有单项验收记录。不处理 WinUI 标题栏；不添加预热、等待器或动画掩盖问题。
+- UI-1b-3 第二批待用户人工检查窄屏 Sheet 的 Escape、遮罩、选导航项、Ctrl+B 关闭后焦点，以及必要的 WinUI 业务兼容。无宿主浏览器检查不代表真实 Electron/Sidecar 工作流验收。
+- 按用户最新反馈，首次交互掉帧已不再稳定复现，已有 Performance 记录未显示明显持续的严重长任务，不声称彻底修复。约 3392ms 的窗口创建前间隔列为独立 DX-2，范围与非阻塞关系见 [PLAN.md](PLAN.md)，本批不加无证据优化。
 - UI-1b-2 的辅助 DOM 检查与固定上游源码逐行对照限制仍见其归档，不表述为检查通过。官方缓存缺失或损坏时原生 Electron 安装器仍可能尝试下载，DX-1 没有引入阻断机制。
 - UI-2 按已开放接口分批交付，或先另行授权补齐接口后完整验收，见 UI-0 第 5 节。
 
-## UI-1b-3 第一批实现与验证（2026-11-06）
+## UI-1b-3 第二批检查与验证（2026-11-06）
+
+- 已检查 Sidebar 桌面折叠/导航及移动 Sheet、Header 窄宽布局、Dialog/Sheet/Tooltip/DropdownMenu 的 Portal、主题、焦点和关闭路径，主滚动及旧 iframe 的外壳边界。既有实现可满足的部分保持：没有改 Header、Sheet/Dialog/Tooltip/菜单基础组件、业务组件、宿主接口或状态管理。
+- 唯一确认缺陷：移动 Sidebar 是受控 Sheet，而 Header 的 SidebarTrigger 不在 Sheet Root 内，没有 Radix triggerRef。基线无头浏览器实测 Escape 后焦点落到 body；修复使用官方 onCloseAutoFocus 回调定位现有 aria-controls=business-navigation 的 Header 按钮，无新状态/定时器/焦点框架。更新 dist 后同一检查返回 focusReturned=true。
+- 新增 4 项移动 Sheet 回归：Escape、遮罩完成点击、选择模块、Ctrl+B 的关闭返回焦点，并覆盖暗色 Portal、焦点约束、编辑器快捷键和业务槽 DOM 保留。连同现有导航、主题、Electron 布局、Dialog 与设置定向测试 61/61 通过。
+- 完整 pwsh -NoProfile -File .\scripts\verify.ps1（不带 SkipRestore / SyncRelease）退出 0：前端 330 通过/1 跳过，Desktop 90/90，xUnit 355/355；TypeScript/Vite、字体检查、Release 构建及 Development 发布通过。Release 1 个既有 PRI249 PACKAGE-LOCK 警告、0 错误；保留既有 npm 审计 32 项与安装脚本/Vite 提示，不升级依赖。
+- 无宿主、拦截外部请求的本地 dist 无头 Edge 检查：1100×700、960×600、720×600 无文档或内容横向溢出，Header 高 64px、全部控制按钮在窗口内；960×600 七个路由外层内容宽和 scrollWidth 均为 696px。Tooltip 在收起侧栏之外正常显示并继承暗色，主题菜单及设置关闭焦点恢复，运行时未捕获 pageerror。只验证外壳与无宿主状态，不作为真实业务数据工作流验收。
+- 480×640 下 Header 和文档不溢出，旧生产消息内容有 24px 内部横向溢出；低于 Electron 原生最小宽度 960px，本批不改业务内部 CSS。真实 iframe 编辑器、Windows 缩放与 WinUI 基础运行仍由人工按适用环境检查，不将 jsdom 或无宿主检查表述为这些项目通过。
+- 第一批原生窗口、32px 安全区域及 WinUI 48px 兼容保持，不开展 DX-2 或其他外壳扩展；验收后优先进入 UI-2。
+
+## UI-1b-3 第一批归档（2026-11-06，已验收合并）
 
 - 实际版本为 Electron 45.0.0。按后续明确授权，BrowserWindow 改用 titleBarStyle: hidden 与官方 titleBarOverlay，保留原生最小化/最大化/关闭按钮；没有自绘按钮或第三方窗口依赖。Overlay 高度维持 32px，未改变首次显示流程或添加启动等待、轮询、超时管理器。
 - 唯一 ThemeProvider 在初始化和 theme 选择变化时，通过公开 Bridge 的 notifyTheme、Electron 专属 paHost.postMessage 和已有 bridge:message 发送 app.theme；system 原样传递。resolvedTheme 的变化不触发重复发送；不增加持久化配置。WinUI/WebView2 不接收该消息。
@@ -38,7 +49,7 @@
 - 构建前默认 dist 缺少新拖拽区，存在新主进程配旧前端的条件，不能追溯截图对应进程。已用标准 build 更新；默认加载 src/ProductionAssistant.App/Assets/Prototype/dist，进程/用户/机器均无 PRODUCTIONASSISTANT_DIST 覆盖。实际启动前已确认 JS/CSS 标记；最新 verify 后 dist 与 Development 的 120 个文件路径及全部 SHA256 一致，入口 index-BEC-LjZI.js / index-Cvbxincv.css。未修改 C#、csproj、sln、业务数据、稳定版、版本号或系统安全设置。
 - 2026-11-06 11:18 的独立进程启动日志（t 为 process.uptime 毫秒）：app-ready 56、window-created 3448、load-start 3449、dom-ready 3721、react-ready 3742、sidecar-first-output 3521、首个 production.getBindings 完成 3877。主要延迟为 app-ready→window-created 3392ms，页面到 React ready 293ms；Sidecar 首次输出回调也可能受主线程阻塞影响，不能当成独立 Sidecar 初始化耗时。npm/OS 启动前延迟、首帧及首次可交互没有独立标记。
 - 历史独立启动 React ready 有 240/249ms，也有 3049/5049ms；缓存、产物及代码版本条件不受控，不构成变更前后基线。主题监听器和 React 布局都在窗口创建后生效，不能解释创建前停顿；overlay 构造是否额外变慢未获证明。不清缓存、不操控电脑自动验收、不添加性能框架或无证据补丁。
-- 用户已手动检查当前 32px 标题栏、按钮、拖拽、主题、隐藏菜单和快捷键，反馈“这些没问题”并关闭窗口；新增反馈首次设置弹窗及导航栏展开/收起掉帧、重复后流畅。settings.open 首次 70ms，随后 3/2/2ms；弹窗本身先渲染再异步加载配置，侧栏无该请求，现有日志不足以判定渲染/合成瓶颈。此问题未解决，PR #85 不合并，需后续渲染线程证据和用户最终验收。
+- 用户后续已明确回复“通过”，授权并完成 PR #85 合并。此前 settings.open 首次 70ms、随后 3/2/2ms 不足以解释设置/侧栏动画，最新反馈也不能稳定复现，不声称彻底修复；冷启动问题独立转入 DX-2，不阻碍后续 UI 批次。
 
 ## UI-1b-2 实现与验证归档（2026-11-06）
 
