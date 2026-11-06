@@ -23,9 +23,10 @@
 - `vite.config.ts` 的 PostCSS 边界把现有平级业务 CSS 包在 `@scope (body) to ([data-shadcn-surface])` 中，将原 `:root` 定义保留为作用域根变量；旧规则（包括 `!important` 和 `all: revert`）无法进入新 Sidebar、Header 或新 portal。
 - Tailwind 实际 preflight/base 限于 `@scope ([data-shadcn-surface])`，不对旧业务输入、表格和 iframe 施加新 reset；UI-1b-2 的全局设置 Dialog 位于新主题表面内。不是仅给 utilities 加前缀。
 - 新主题沿用上游颜色；旧内容根局部恢复原 `--primary`、`--border` 等值，避免同名变量串用。旧 portal 继续使用旧 body 变量；新 Radix portal 的 `PortalSurface` 携带同一套主题与 reset。
-- `operation-sidebar.css` 已移除原 222px 导航视觉，仅保留宿主几何与旧内容适配：WinUI 可信 HTTPS 来源预留原生 48px 标题栏，Electron 的 `pa:` 文档不留此空白。该判断不读取宿主对象或发送 IPC。
+- `operation-sidebar.css` 已移除原 222px 导航视觉，仅保留宿主几何与旧内容适配：WinUI 可信 HTTPS 来源预留原生 48px 标题栏；Electron `pa://app` 沿用 UI-1b-3 第一批的 32px Window Controls Overlay 安全区域留位。该布局判断不读取宿主对象或发送 IPC。
 - 保留上游 16rem 侧栏、3rem 图标宽度变量、inset 间距/边框/阴影/圆角、导航 14px 与分组 12px 字号。中文使用现有离线 Inter Variable / Noto Sans SC Variable 字体。
 - 保留上游 Ctrl+B 侧栏快捷键，但编辑器、输入框和已处理的事件不拦截，避免破坏现有文本编辑功能。
+- UI-1b-3 第二批只为受控移动 Sidebar Sheet 补充 Radix 官方 onCloseAutoFocus 回调：Header 的 SidebarTrigger 位于 Sheet Root 外，默认 triggerRef 为空；关闭时回到现有 aria-controls=business-navigation 的 Header 按钮。焦点约束、Escape、外部点击等机制继续由 Radix 承担，不新建焦点或状态系统；对应回归覆盖四种关闭入口。
 - 收起状态的透明分组标题禁用指针命中，防止负 margin 的标题框拦截前一组图标点击；不改变其尺寸、间距、动画或颜色。
 - 旧页面重复的一级标题改为仅辅助技术可读，业务配置按钮、状态与表单保留；旧外层宽度和背景不覆盖新 inset。内容变窄时生产消息两栏纵向重排，防止旧固定列挤出窗口。这些是宿主/旧业务兼容适配，不改数据逻辑。
 - UI-1b-1 使用唯一 localStorage 键 `production-assistant-ui-theme-v1` 保存 `light`、`dark` 或 `system`。React 状态惰性初始化读取并校验，无记录、非法值或读取异常均回退 `system`；写入异常时仍更新当前会话状态。系统主题继续通过 matchMedia 监听，卸载时移除监听，不经过 Bridge / IPC，也不新增依赖。
