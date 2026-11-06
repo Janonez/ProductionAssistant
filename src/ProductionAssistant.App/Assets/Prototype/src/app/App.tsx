@@ -5,6 +5,8 @@ import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
 import { ROUTES } from '../routes/routeTable'
 import { AppLayout } from '../components/layout/AppLayout'
+import { ThemeProvider } from '../components/layout/ThemeProvider'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import ProductionMessagePage from '../features/production-message/ProductionMessagePage'
 const AutomationPage = lazy(() => import('../features/daily-report/AutomationPage').then(module => ({ default: module.AutomationPage })))
 const DailyWeldPage = lazy(() => import('../features/daily-weld/DailyWeldPage').then(module => ({ default: module.DailyWeldPage })))
@@ -20,7 +22,7 @@ class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void
   render() {
     if (!this.state.failed) return this.props.children
     const error = <div className="route-load-status" role="alert">界面加载失败，请重新加载。<button className="secondary" onClick={() => window.location.reload()}>重新加载</button>{this.props.onClose && <button className="secondary" onClick={this.props.onClose}>关闭</button>}</div>
-    return this.props.onClose ? <div className="settings-overlay"><div className="settings-window">{error}</div></div> : error
+    return this.props.onClose ? <Dialog open onOpenChange={open => { if (!open) this.props.onClose?.() }}><DialogContent closeLabel="关闭设置"><DialogTitle>设置</DialogTitle><DialogDescription>设置界面暂时无法加载。</DialogDescription>{error}</DialogContent></Dialog> : error
   }
 }
 
@@ -38,7 +40,7 @@ export function App() {
     window.dispatchEvent(new Event('production-settings-updated'))
   }, [])
 
-  return <>
+  return <ThemeProvider>
     <AppLayout route={route} navigate={goTo} openSettings={() => setSettingsOpen(true)}>
       <div
         key={route}
@@ -55,5 +57,5 @@ export function App() {
       </div>
     </AppLayout>
     {settingsOpen && <LoadBoundary onClose={closeSettings}><SettingsModal open onClose={closeSettings} /></LoadBoundary>}
-  </>
+  </ThemeProvider>
 }

@@ -487,34 +487,34 @@ describe('shared operation sidebar', () => {
     await act(async () => { settings.click(); await Promise.resolve() })
     await act(async () => { await vi.dynamicImportSettled() })
 
-    expect(container.querySelector('[role="dialog"]')).toBeTruthy()
-    expect(container.querySelector('.settings-page-header h1')?.textContent).toBe('连接')
-    expect((container.querySelector('.settings-input[type="password"]') as HTMLInputElement).value).not.toBe('')
+    expect(document.querySelector('[role="dialog"]')).toBeTruthy()
+    expect(document.querySelector('.settings-page-header h1')?.textContent).toBe('连接')
+    expect((document.querySelector('.settings-input[type="password"]') as HTMLInputElement).value).not.toBe('')
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
     expect(invoke).toHaveBeenCalledWith('settings.open')
 
-    const tab = (label: string) => [...container.querySelectorAll('.settings-nav-item')]
+    const tab = (label: string) => [...document.querySelectorAll('.settings-nav-item')]
       .find(button => button.textContent?.trim() === label) as HTMLButtonElement
     await act(async () => { tab('通知').click() })
-    expect([...container.querySelectorAll<HTMLInputElement>('.settings-input[type="password"]')].map(input => input.value))
+    expect([...document.querySelectorAll<HTMLInputElement>('.settings-input[type="password"]')].map(input => input.value))
       .toEqual(expect.arrayContaining([expect.not.stringMatching(/^$/), expect.not.stringMatching(/^$/)]))
 
     await act(async () => { tab('数据与缓存').click() })
-    expect(container.textContent).not.toContain('模块绑定')
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('模块绑定')
     vi.useFakeTimers()
-    const refresh = [...container.querySelectorAll('button')]
+    const refresh = [...document.querySelectorAll('[role="dialog"] button')]
       .find(button => button.textContent?.trim() === '刷新') as HTMLButtonElement
     await act(async () => { refresh.click() })
-    expect(container.querySelector('.settings-spinner')).toBeTruthy()
+    expect(document.querySelector('.settings-spinner')).toBeTruthy()
     await act(async () => { finishRefresh({ state: settingsState, message: '数据源已刷新。' }); await Promise.resolve() })
-    expect(container.querySelector('.settings-message')?.textContent).toBe('数据源已刷新。')
+    expect(document.querySelector('.settings-message')?.textContent).toBe('数据源已刷新。')
     await act(async () => { vi.advanceTimersByTime(3000) })
-    expect(container.querySelector('.settings-message')).toBeNull()
+    expect(document.querySelector('.settings-message')).toBeNull()
     vi.useRealTimers()
 
-    const close = container.querySelector('[aria-label="关闭设置"]') as HTMLButtonElement
+    const close = document.querySelector('[aria-label="关闭设置"]') as HTMLButtonElement
     await act(async () => { close.click(); await Promise.resolve() })
-    expect(container.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
 
     await act(async () => { root.unmount() })
     container.remove()
@@ -547,20 +547,20 @@ describe('shared operation sidebar', () => {
 
     expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', { tag: 'settings' })
 
-    const tab = (label: string) => [...container.querySelectorAll('.settings-nav-item')]
+    const tab = (label: string) => [...document.querySelectorAll('.settings-nav-item')]
       .find(button => button.textContent?.trim() === label) as HTMLButtonElement
     await act(async () => { tab('通知').click() })
 
     await act(async () => { tab('数据与缓存').click() })
     vi.useFakeTimers()
-    const refresh = [...container.querySelectorAll('button')]
+    const refresh = [...document.querySelectorAll('[role="dialog"] button')]
       .find(button => button.textContent?.trim() === '刷新') as HTMLButtonElement
     await act(async () => { refresh.click() })
     await act(async () => { finishRefresh({ state: settingsState, message: '数据源已刷新。' }); await Promise.resolve() })
     await act(async () => { vi.advanceTimersByTime(3000) })
     vi.useRealTimers()
 
-    const close = container.querySelector('[aria-label="关闭设置"]') as HTMLButtonElement
+    const close = document.querySelector('[aria-label="关闭设置"]') as HTMLButtonElement
     await act(async () => { close.click(); await Promise.resolve() })
     expect(invoke).not.toHaveBeenCalledWith('settings.close')
 
@@ -599,7 +599,7 @@ describe('shared operation sidebar', () => {
         await act(async () => { settings.click() })
         expect(window.location.search).toBe(search)
         expect(notifyReady.mock.calls.map(([readyRoute]) => readyRoute)).toEqual(['production-message'])
-        await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
+        await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
       }
 
       const settingsCalls = invoke.mock.calls.filter(([operation]) => operation === 'settings.open' || operation === 'settings.close')

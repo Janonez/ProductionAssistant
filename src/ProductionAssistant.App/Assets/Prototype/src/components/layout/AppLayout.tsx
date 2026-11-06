@@ -8,15 +8,12 @@ import { Button } from '../ui/button'
 import { Header } from './AppHeader'
 import { OperationSidebar } from './OperationSidebar'
 import { PageContainer } from './PageContainer'
-import { ThemeProvider, useTheme } from './ThemeProvider'
+import { useTheme } from './ThemeProvider'
 import { ThemeSwitch } from './ThemeSwitch'
-export function AppLayout(props: { route: string; navigate: (route: string) => void; openSettings: () => void; children: ReactNode }) {
-  return <ThemeProvider><Shell {...props} /></ThemeProvider>
-}
 export function hasNativeTitleBar(location: Pick<Location, 'protocol' | 'hostname'>) {
   return location.protocol === 'https:' && location.hostname === 'prototype.production-assistant.local'
 }
-function Shell({ route, navigate, openSettings, children }: Parameters<typeof AppLayout>[0]) {
+export function AppLayout({ route, navigate, openSettings, children }: { route: string; navigate: (route: string) => void; openSettings: () => void; children: ReactNode }) {
   const { resolvedTheme } = useTheme()
   // WinUI's 48px native title bar overlays the document; Electron's frame does not.
   const winui = hasNativeTitleBar(window.location)

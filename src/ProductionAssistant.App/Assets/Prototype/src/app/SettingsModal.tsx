@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '../bridge/index'
 import { clearDailyFieldCache } from '../features/daily-report/dailyFieldCache'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Bell, Database, Info, Link, Search } from 'lucide-react'
 
 
 type SettingsPage = 'connection' | 'notification' | 'data' | 'about'
@@ -32,10 +36,10 @@ const pendingSettings: SettingsState = { notion: { configured: false, rootPageId
 const maskedCredential = '••••••••••••'
 
 const navItems: { key: SettingsPage; label: string; keywords: string; icon: React.ReactNode }[] = [
-  { key: 'connection', label: '连接', keywords: 'Teable API 令牌 实例 数据源', icon: <LinkIcon /> },
-  { key: 'notification', label: '通知', keywords: '钉钉 Webhook Secret 规则', icon: <BellIcon /> },
-  { key: 'data', label: '数据与缓存', keywords: 'Teable 数据源 缓存 绑定', icon: <DatabaseIcon /> },
-  { key: 'about', label: '关于', keywords: '版本 WebView2 React TypeScript', icon: <InfoIcon /> },
+  { key: 'connection', label: '连接', keywords: 'Teable API 令牌 实例 数据源', icon: <Link /> },
+  { key: 'notification', label: '通知', keywords: '钉钉 Webhook Secret 规则', icon: <Bell /> },
+  { key: 'data', label: '数据与缓存', keywords: 'Teable 数据源 缓存 绑定', icon: <Database /> },
+  { key: 'about', label: '关于', keywords: '版本 WebView2 React TypeScript', icon: <Info /> },
 ]
 
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -45,28 +49,19 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('settings.open')
-  const closeButton = useRef<HTMLButtonElement>(null)
-  const returnFocus = useRef<HTMLElement | null>(null)
+  // Several global entries open this controlled Dialog without a single Radix Trigger.
+  // Customize only Radix's close autofocus target; its FocusScope owns the focus trap.
+  const returnFocus = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null)
 
   useEffect(() => {
     if (!open) return
-    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setBusy('settings.open')
     setError('')
     invoke<SettingsState>('settings.open')
       .then(value => setState(value))
       .catch(reason => setError(reason instanceof Error ? reason.message : '设置加载失败，请重试。'))
       .finally(() => setBusy(''))
-    window.setTimeout(() => closeButton.current?.focus(), 0)
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', keydown)
-    return () => {
-      window.removeEventListener('keydown', keydown)
-      returnFocus.current?.focus()
-    }
-  }, [open, onClose])
+  }, [open])
 
   useEffect(() => {
     if (!message) return
@@ -99,18 +94,23 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
   if (!open) return null
 
-  return <div className="settings-overlay" onMouseDown={event => {
-    if (event.target === event.currentTarget) onClose()
-  }}>
-    <div className="settings-window" role="dialog" aria-modal="true" aria-label="设置">
+  return <Dialog open={open} onOpenChange={nextOpen => { if (!nextOpen) onClose() }}>
+    <DialogContent className="settings-window flex h-[min(720px,calc(100svh-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[960px]" closeLabel="关闭设置"
+      onCloseAutoFocus={event => { event.preventDefault(); returnFocus.current?.focus() }}>
+      <DialogHeader className="shrink-0 border-b px-6 py-4 pr-12">
+        <DialogTitle>设置</DialogTitle>
+        <DialogDescription className="sr-only">连接、通知、数据与缓存和版本信息。</DialogDescription>
+      </DialogHeader>
+      <div className="settings-body">
       <aside className="settings-sidebar">
         <label className="settings-search">
-          <SearchIcon />
-          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" />
+          <Search className="size-4 shrink-0" aria-hidden="true" />
+          <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" />
         </label>
         <div className="settings-sidebar-title">设置</div>
         <nav className="settings-nav" aria-label="设置分类">
-          {filteredItems.map(item => <button
+          {filteredItems.map(item => <Button
+            variant={page === item.key ? 'secondary' : 'ghost'}
             key={item.key} disabled={!state && item.key !== 'connection'}
             type="button"
             className={page === item.key ? 'settings-nav-item active' : 'settings-nav-item'}
@@ -119,15 +119,12 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           >
             <span className="settings-nav-icon">{item.icon}</span>
             <span>{item.label}</span>
-          </button>)}
+          </Button>)}
           {filteredItems.length === 0 && <p className="settings-empty-search">没有匹配的设置</p>}
         </nav>
       </aside>
 
       <main className="settings-main">
-        <button ref={closeButton} type="button" className="settings-close" onClick={onClose} aria-label="关闭设置">
-          <CloseIcon />
-        </button>
         <div className="settings-content">
           <fieldset className="settings-form-content" disabled={!state} aria-busy={!state}>
             {page === 'connection' && <ConnectionSettings state={state ?? pendingSettings} pending={!state} busy={busy} run={run} />}
@@ -140,8 +137,9 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           </div>}
         </div>
       </main>
-    </div>
-  </div>
+      </div>
+    </DialogContent>
+  </Dialog>
 }
 
 function ConnectionSettings({ state, busy, run, pending = false }: {
@@ -174,20 +172,20 @@ function ConnectionSettings({ state, busy, run, pending = false }: {
         <Status connected={pending ? null : state.notion.configured} label={pending ? (busy ? '读取中…' : '读取失败') : state.notion.configured ? '已配置' : '未配置'} />
       </SettingsRow>
       <SettingsField title="API 令牌" description="使用 Windows 当前用户加密后保存在本机">
-        <input className="settings-input" type="password" autoComplete="off"
+        <Input className="settings-input" type="password" autoComplete="off"
           placeholder={`输入 ${provider} API Token`}
           value={tokenChanged ? token : state.notion.configured ? maskedCredential : ''}
           onFocus={event => { if (!tokenChanged && state.notion.configured) event.currentTarget.select() }}
           onChange={event => { setTokenChanged(true); setToken(event.target.value) }} />
       </SettingsField>
       {provider === 'Teable' ? <SettingsField title="实例地址" description="本机实例允许 HTTP，远程实例使用 HTTPS">
-        <input className="settings-input" value={serverUrl} onChange={event => setServerUrl(event.target.value)} />
+        <Input className="settings-input" value={serverUrl} onChange={event => setServerUrl(event.target.value)} />
       </SettingsField> : <SettingsField title="根页面 ID" description="可选。留空时自动发现当前令牌有权限访问的数据源">
-        <input className="settings-input" value={rootPageId} onChange={event => setRootPageId(event.target.value)} />
+        <Input className="settings-input" value={rootPageId} onChange={event => setRootPageId(event.target.value)} />
       </SettingsField>}
       <div className="settings-buttons">
-        <button type="button" className="settings-button-primary" disabled={!!busy} onClick={() => submit('settings.saveConnection')}>{connecting && <Spinner />} {connecting ? '正在连接…' : '保存并连接'}</button>
-        <button type="button" className="settings-button-secondary" disabled={!!busy} onClick={() => submit('settings.refreshDataSources')}>{refreshing && <Spinner />} {refreshing ? '正在刷新…' : '刷新数据源'}</button>
+        <Button type="button" variant="default" className="settings-button-primary" disabled={!!busy} onClick={() => submit('settings.saveConnection')}>{connecting && <Spinner />} {connecting ? '正在连接…' : '保存并连接'}</Button>
+        <Button type="button" variant="outline" className="settings-button-secondary" disabled={!!busy} onClick={() => submit('settings.refreshDataSources')}>{refreshing && <Spinner />} {refreshing ? '正在刷新…' : '刷新数据源'}</Button>
       </div>
     </SettingsSection>
     <SettingsSection title="数据源">
@@ -245,25 +243,25 @@ function NotificationSettings({ state, busy, run }: {
     </SettingsSection>
     <SettingsSection title="钉钉机器人">
       <SettingsField title="Webhook URL" description="使用 Windows 当前用户加密后保存在本机">
-        <input className="settings-input" type="password" autoComplete="off"
+        <Input className="settings-input" type="password" autoComplete="off"
           placeholder="https://oapi.dingtalk.com/robot/send?..."
           value={webhookChanged ? webhook : notification.webhookConfigured ? maskedCredential : ''}
           onFocus={event => { if (!webhookChanged && notification.webhookConfigured) event.currentTarget.select() }}
           onChange={event => { setWebhookChanged(true); setWebhook(event.target.value) }} />
       </SettingsField>
       <SettingsField title="加签密钥" description="钉钉机器人 Secret，使用 Windows 当前用户加密保存">
-        <input className="settings-input" type="password" autoComplete="off"
+        <Input className="settings-input" type="password" autoComplete="off"
           placeholder="SEC..."
           value={secretChanged ? secret : notification.secretConfigured ? maskedCredential : ''}
           onFocus={event => { if (!secretChanged && notification.secretConfigured) event.currentTarget.select() }}
           onChange={event => { setSecretChanged(true); setSecret(event.target.value) }} />
       </SettingsField>
       <SettingsField title="默认接收群" description="用于识别当前通知渠道">
-        <input className="settings-input" value={channelName} onChange={event => setChannelName(event.target.value)} placeholder="生产管理群" />
+        <Input className="settings-input" value={channelName} onChange={event => setChannelName(event.target.value)} placeholder="生产管理群" />
       </SettingsField>
       <div className="settings-buttons">
-        <button type="button" className="settings-button-primary" disabled={!!busy} onClick={() => saveChannel('settings.saveNotification')}>{saving && <Spinner />} {saving ? '正在保存…' : '保存设置'}</button>
-        <button type="button" className="settings-button-secondary" disabled={!!busy} onClick={() => saveChannel('settings.testNotification')}>{testing && <Spinner />} {testing ? '正在发送…' : '发送测试'}</button>
+        <Button type="button" variant="default" className="settings-button-primary" disabled={!!busy} onClick={() => saveChannel('settings.saveNotification')}>{saving && <Spinner />} {saving ? '正在保存…' : '保存设置'}</Button>
+        <Button type="button" variant="outline" className="settings-button-secondary" disabled={!!busy} onClick={() => saveChannel('settings.testNotification')}>{testing && <Spinner />} {testing ? '正在发送…' : '发送测试'}</Button>
       </div>
       {notification.status && <p className="settings-inline-status">{notification.status}</p>}
     </SettingsSection>
@@ -274,7 +272,7 @@ function NotificationSettings({ state, busy, run }: {
         </SettingsRow>)}
       </div>
       <div className="settings-buttons settings-buttons-end">
-        <button type="button" className="settings-button-primary" disabled={!!busy} onClick={() => run('settings.saveNotificationRules', { rules })}>保存通知规则</button>
+        <Button type="button" variant="default" className="settings-button-primary" disabled={!!busy} onClick={() => run('settings.saveNotificationRules', { rules })}>保存通知规则</Button>
       </div>
     </SettingsSection>
   </SettingsPageLayout>
@@ -288,7 +286,7 @@ function DataSettings({ state, busy, run }: {
   return <SettingsPageLayout title="数据与缓存" description="查看和维护生产助手保存在本机的数据源缓存。">
     <SettingsSection title="本地数据">
       <SettingsRow title={`${state.notion.provider ?? 'Teable'} 数据源缓存`} description="用于减少重复的网络请求">
-        <div className="settings-inline-actions"><span className="settings-value">{state.notion.dataSourceCount} 个</span><button type="button" className="settings-text-button" disabled={!!busy} onClick={() => run('settings.refreshDataSources')}>{busy === 'settings.refreshDataSources' && <Spinner />} {busy === 'settings.refreshDataSources' ? '刷新中…' : '刷新'}</button></div>
+        <div className="settings-inline-actions"><span className="settings-value">{state.notion.dataSourceCount} 个</span><Button type="button" variant="link" className="settings-text-button" disabled={!!busy} onClick={() => run('settings.refreshDataSources')}>{busy === 'settings.refreshDataSources' && <Spinner />} {busy === 'settings.refreshDataSources' ? '刷新中…' : '刷新'}</Button></div>
       </SettingsRow>
       <SettingsRow title="上次同步" description="数据源元信息最后更新时间"><span className="settings-value">{state.notion.lastSyncedAt || '尚未同步'}</span></SettingsRow>
     </SettingsSection>
@@ -326,10 +324,3 @@ function Status({ connected, label }: { connected: boolean | null; label: string
 }
 function Spinner() { return <span className="settings-spinner" aria-hidden="true" /> }
 const levelLabel = (level: string) => level === 'warning' ? '警告' : level === 'info' ? '信息' : '错误'
-
-function SearchIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg> }
-function LinkIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" /><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1" /></svg> }
-function BellIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg> }
-function DatabaseIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg> }
-function InfoIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6" /><path d="M12 7h.01" /></svg> }
-function CloseIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12" /><path d="m18 6-12 12" /></svg> }
