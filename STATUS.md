@@ -5,29 +5,43 @@
 - 项目包含 WinUI / WebView2 应用、React 前端、共享 Bridge、Sidecar 和 Electron Desktop；长期方向明确为 Electron 优先，WinUI 仅作业务迁移期过渡，维护边界见 [PLAN.md](PLAN.md)。现阶段不删除 WinUI，不改变构建与发布流程；结构和运行方式见 [README.md](README.md)。
 - SD-8c 已完成：日报本地配置迁移通过 [PR #77](https://github.com/Janonez/ProductionAssistant/pull/77) 合并，提交 `fe4c08c`。这是后端迁移，不代表新 UI 已实现。
 - UI-0 接入方案已通过 [PR #79](https://github.com/Janonez/ProductionAssistant/pull/79) 合并，提交 `90b8406636ea1057fe6d532a212d95163f572ffe`。
-- 用户已决定前端设计迁移与后端功能迁移交替推进；UI-1a、DX-1 均已完成并合并，UI-1b-1 已完成实现及 Electron 人工验收，本轮进入提交和 PR 阶段。下一阶段 UI-1b-2 尚未授权实施，其余阶段范围见 [PLAN.md](PLAN.md)。
+- 用户已决定前端设计迁移与后端功能迁移交替推进；UI-1a、DX-1、UI-1b-1 已完成，UI-1b-2 全局设置 Dialog 迁移已实现、自动化验证通过，用户已明确确认 Electron 人工验收通过。当前等待提交授权；UI-1b-3 尚未开始，其余阶段范围见 [PLAN.md](PLAN.md)。
 - UI-1a 已通过 [PR #81](https://github.com/Janonez/ProductionAssistant/pull/81) 合并，main 合并提交为 `21af67f652700ca43517a93dd397fc99f159ff8b`；Electron 和 WinUI Development 均已完成基本视觉人工验收。移植来源固定为 shadcn-admin 提交 `e16c87f213a5ba5e45964e9b67c792105ec74d26`，来源、MIT 许可与逐项适配见 [移植说明](docs/third-party/shadcn-admin.md)。
 - 七个路由、query/loadId、Suspense、RouteReady、LoadBoundary、设置与原业务组件保持；没有修改业务页面内部、Bridge、Electron、Sidecar 或 .NET 源码。
-- 前端新增 Tailwind 4.2.2 与必要的 Radix/CVA/clsx 等依赖；React、ReactDOM、Vite、TypeScript、Vitest 和其他原有依赖的解析版本未改变。旧 CSS、reset、同名变量及新 portal 已建立边界；旧内容与旧设置暂保持浅色，完整统一留给 UI-1b。
+- 前端沿用 Tailwind 4.2.2 与现有 Radix/CVA/clsx 等依赖；UI-1b-2 未修改依赖或锁文件。旧业务 CSS、reset、同名变量及新 portal 保持隔离；全局设置已接入共享主题，七个业务页面内部及 iframe 仍保留原样。
 - DX-1 已通过 [PR #82](https://github.com/Janonez/ProductionAssistant/pull/82) 合并，提交 `2aae55af22321c4915cae73e7090dd9de31828af`，完成状态按用户最新确认记录。采用官方 `@electron/get` ZIP 缓存和原生 `electron .`；没有保留自定义运行时管理器，npm ci、verify、宿主与业务代码保持原有流程。
-- UI-1b-1 在 `codex/ui1b-theme-persistence` 分支实施，基于 `2aae55af`；仅补齐当前主题的 localStorage 持久化与新表面的 color-scheme，不改整体视觉、布局、ThemeSwitch、旧业务或设置。完整 verify 与 dist 核验通过，Electron Development 运行正常，用户已明确确认主题持久化人工验收通过并授权提交、推送及创建 PR；本轮禁止合并。
+- UI-1b-2 位于 `codex/ui1b-settings-dialog`，基线与当前 HEAD 均为 `409ae067c27b8ec0f6965a285fe076b5b4e5e999`。源码、测试、配置、许可与 dist 均为未提交变更；尚未提交、推送、创建 PR、执行本批 GitHub CI 或合并。本轮仅文档收尾和只读核对，不执行上述 Git 写操作。
 - 字体试验保留原版 Inter Variable → Noto Sans SC Variable → sans-serif，将新外壳内 Tailwind 默认字体变量统一到现有 `--font-ui`；没有改变上游布局、字号、字重、平滑或旧页面。长期组件复用规则见 [前端规范](docs/frontend-ui-standards.md)，AGENTS.md 已强制引用；字体继续作为试验方案记录，尚未正式定稿。
 - 核查结论：保留现有 React/Vite、查询参数路由和统一桥接，渐进接入 shadcn-admin；日报完整工作流仍有 Sidecar 接口缺口。详细事实、能力表和验收边界只在 UI-0 文档维护。
 
 ## 下次入口
 
 1. 只读检查 `git status -sb`、`git worktree list`、分支和最近提交，按实际状态更新判断。
-2. 完成 UI-1b-1 提交与 PR 交付后停止，等待 ChatGPT 审查及用户后续授权；不得自行合并。自动测试、实际窗口技术检查与用户验收分别记录，提交和 PR 状态以 Git / GitHub 为准。
-3. Electron Development 入口为 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`；Development 发布目录是 WinUI 测试版。下一阶段 UI-1b-2 主要面向 Electron 迁移全局设置 Dialog，尚未授权实施；UI-1b-3 调整为 Electron 宿主兼容性及 UI 收尾。详细边界只在 [PLAN.md](PLAN.md) 维护，WinUI 仅保留必要兼容与基础回归。
+2. 等待用户授权后，按明确路径暂存 UI-1b-2 的源码、测试、配置、许可、文档及全部 dist 资源替换，检查暂存区，再提交、推送并创建 PR。已有验证结果见下文；本轮只改文档，不重复完整 verify 或人工验收。PR 阶段仍需 GitHub CI verify 与代码审查，合并遵守 AGENTS.md 及后续授权。
+3. Electron Development 入口为 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`；Development 发布目录是 WinUI 测试版。UI-1b-3 尚未开始，需另行授权，不提前处理 Electron 标题栏。阶段边界只在 [PLAN.md](PLAN.md) 维护，WinUI 仅保留必要兼容与基础回归。
 4. UI-2 实施前确认日报能力范围；不能把 SD-8c 开放创建/保存模板视为预览、发送、启停等完整链路已迁移。
 
 ## 待决策
 
-- UI-1b-1 用户人工验收已通过，当前等待提交后的 PR 审查；本轮禁止合并。官方缓存缺失或损坏时原生 Electron 安装器仍可能尝试下载，DX-1 没有引入阻断机制。
+- UI-1b-2 等待 Git 提交及 PR 流程授权；辅助 DOM 检查和本轮上游源码逐行对照未完成，限制见下文，不表述为检查通过。官方缓存缺失或损坏时原生 Electron 安装器仍可能尝试下载，DX-1 没有引入阻断机制。
 - 已知 Electron 深色标题栏窗口控制按钮对比度不足，按用户反馈列入 UI-1b-3，尚未修复。不处理 WinUI 白色标题栏及“视图”菜单视觉问题，不再要求双宿主视觉一致性验收。
 - UI-2 按已开放接口分批交付，或先另行授权补齐接口后完整验收，见 UI-0 第 5 节。
 
-## UI-1b-1 验证（2026-11-05）
+## UI-1b-2 实现与验证（2026-11-06）
+
+- 唯一 ThemeProvider 从 AppLayout 内上移到 App，覆盖 AppLayout 与 SettingsModal；保留 UI-1b-1 的 localStorage 持久化、light / dark / system 和系统主题监听，不向 html / body 添加全局 dark。
+- 全局设置使用 shadcn/ui Dialog 与 Radix primitives；PortalSurface 仅把同一主题变量和 reset 边界带到 body 下的 Portal，不另建 Portal、焦点管理或状态系统。旧设置 overlay、独立关闭按钮及手写 Escape 监听已移除，设置加载错误边界也使用同一 Dialog 组件。
+- 原设置加载、保存、凭据遮罩与空值保留语义、异常提示、操作名称、payload 和数据结构保留；未修改七个业务页面、query/loadId 路由实现、Bridge、IPC、Sidecar、Electron 标题栏或 .NET 源码，未执行正式业务数据写入。
+- settings-modal.css 自行限定在设置 Dialog 作用域内，Vite 仅将该文件排除出旧业务 CSS 包装层。Vitest 通过 test-setup.ts 补齐 jsdom 缺失的 ResizeObserver 最小 API，无新增依赖；该替身不提供尺寸回调，不进入生产构建，尺寸变化断言需另用可触发回调的替身。
+- 定向测试 175/175 通过，覆盖真实 Dialog、设置行为、Portal 主题、主题持久化、焦点约束及恢复、Escape、遮罩点击、七个入口和 query/loadId；受影响测试另有 73/73、AppLayout 8/8 通过记录。git diff --check、TypeScript 与 Vite 构建通过。
+- 完整 `pwsh -NoProfile -File .\scripts\verify.ps1`（不带 SkipRestore / SyncRelease）退出 0：全量前端 317 通过 / 1 跳过（符号链接权限），Desktop 81/81，xUnit 355/355；字体检查、Release 构建与 Development 发布成功。保留 Release 构建 1 个 PRI249 警告、0 错误，以及 npm 审计 32 项、esbuild 安装脚本提示和 Vite 大块提示，未自动升级依赖。
+- dist 已同步：基线和当前均为 120 个文件，11 组哈希资源替换及入口更新；与 Development 的 120 个文件路径集合及全部 SHA256 一致。9 个业务 / 图标 JS chunk 在规范化资源名引用后与基线一致，无缺失文本资源引用，未混入测试初始化代码。
+- Electron Development 已成功启动并显示首页；verify 后使用包内官方 install.js 从既有缓存恢复 Electron 45.0.0，日志为 Cache hit、退出 0，没有新增运行时管理器。用户已明确确认本阶段 Electron 人工验收通过；该结论来自用户确认，不以 jsdom 或启动截图代替。
+- 辅助自动化 DOM 检查未完整执行：Node 会话加载现有 ws 包时报 `The requested module './lib/permessage-deflate.js' does not provide an export named 'default'`。这是辅助工具异常，尚未证明是应用问题；本阶段不继续开发或修复该工具，不声称该项检查通过。
+- 本轮官方 Dialog 上游源码逐行对照未完成：固定提交源码链接获取发生网络 `Cache miss`。本地组件结构及 MIT 许可证已检查；来源与适配见 [组件移植说明](docs/third-party/shadcn-admin.md)，不将本地检查表述为上游逐行对照通过。
+- 实现、自动化验证与用户人工验收已通过，Git 提交、推送、PR、GitHub CI 和合并尚未完成；UI-1b-3 尚未开始，稳定版、版本号与 Release 未修改。
+
+## UI-1b-1 验证归档（2026-11-05，授权描述仅指当时阶段）
 
 - main 干净并执行 `git pull --ff-only` 确认已同步后建立本批分支；仅使用主工作目录。当前获准提交、推送和创建 PR；未更新稳定版或修改业务数据。
 - ThemeProvider 保留原接口与 matchMedia 监听；唯一 localStorage 键为 `production-assistant-ui-theme-v1`，惰性恢复并校验三种选择，读写异常均不阻断当前会话。新表面分别声明 light / dark color-scheme，旧内容仍直接声明 light；不向 html / body 添加 dark。

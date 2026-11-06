@@ -21,7 +21,7 @@
 ## 隔离与必要偏离
 
 - `vite.config.ts` 的 PostCSS 边界把现有平级业务 CSS 包在 `@scope (body) to ([data-shadcn-surface])` 中，将原 `:root` 定义保留为作用域根变量；旧规则（包括 `!important` 和 `all: revert`）无法进入新 Sidebar、Header 或新 portal。
-- Tailwind 实际 preflight/base 限于 `@scope ([data-shadcn-surface])`，不对旧业务输入、表格、设置和 iframe 施加新 reset。不是仅给 utilities 加前缀。
+- Tailwind 实际 preflight/base 限于 `@scope ([data-shadcn-surface])`，不对旧业务输入、表格和 iframe 施加新 reset；UI-1b-2 的全局设置 Dialog 位于新主题表面内。不是仅给 utilities 加前缀。
 - 新主题沿用上游颜色；旧内容根局部恢复原 `--primary`、`--border` 等值，避免同名变量串用。旧 portal 继续使用旧 body 变量；新 Radix portal 的 `PortalSurface` 携带同一套主题与 reset。
 - `operation-sidebar.css` 已移除原 222px 导航视觉，仅保留宿主几何与旧内容适配：WinUI 可信 HTTPS 来源预留原生 48px 标题栏，Electron 的 `pa:` 文档不留此空白。该判断不读取宿主对象或发送 IPC。
 - 保留上游 16rem 侧栏、3rem 图标宽度变量、inset 间距/边框/阴影/圆角、导航 14px 与分组 12px 字号。中文使用现有离线 Inter Variable / Noto Sans SC Variable 字体。
@@ -31,7 +31,15 @@
 - UI-1b-1 使用唯一 localStorage 键 `production-assistant-ui-theme-v1` 保存 `light`、`dark` 或 `system`。React 状态惰性初始化读取并校验，无记录、非法值或读取异常均回退 `system`；写入异常时仍更新当前会话状态。系统主题继续通过 matchMedia 监听，卸载时移除监听，不经过 Bridge / IPC，也不新增依赖。
 - 不直接复制上游 cookie 和 html 全局主题方案：尚未迁移的页面有固定浅色色值、独立 iframe 和旧 portal；给 html / body 添加全局 dark 会突破现有兼容边界。保留唯一 ThemeProvider、`.pa-shell-theme` 与 `.pa-shell-theme.dark`，仅在新主题表面声明对应 `color-scheme`；旧 `.pa-legacy-content` 的直接浅色声明继续优先于祖先继承值。
 - Electron 与 WinUI 复用主题代码，但 localStorage 受来源及浏览器 profile 隔离，主题偏好在各自宿主与运行环境独立保存，不自动同步。后续以 Electron 实际界面验收为主，WinUI 只保留过渡期必要兼容及基础回归，不要求长期视觉一致性；存储失败时当前会话有效不代表重启后能够保留。
-- 旧业务内部、iframe 和旧设置弹窗仍保持浅色；主要面向 Electron 的全局设置迁移（UI-1b-2）、Electron 宿主兼容性及 UI 收尾（UI-1b-3）与后续业务控件替换另行实施，具体边界见 [PLAN.md](../../PLAN.md)。ThemeSwitch 的 theme-color meta effect 本批保持原样。浏览器布局检查不代表 Electron 或 Sidecar 真实业务验收。
+- 旧业务内部与 iframe 仍保持浅色；UI-1b-2 已将全局设置接入共享主题，其他业务弹窗保留原样。Electron 宿主兼容性及 UI 收尾（UI-1b-3）与后续业务控件替换另行授权，具体边界见 [PLAN.md](../../PLAN.md)。ThemeSwitch 的 theme-color meta effect 保持原样。浏览器布局检查不代表 Electron 或 Sidecar 真实业务验收。
+
+## UI-1b-2 官方 Dialog
+
+- 组件来源为 shadcn/ui，源码声明固定提交 `c257f688cf4de7ec10cc1be84cad29cd4631182c`，对应 [apps/v4/registry/new-york-v4/ui/dialog.tsx](https://github.com/shadcn-ui/ui/blob/c257f688cf4de7ec10cc1be84cad29cd4631182c/apps/v4/registry/new-york-v4/ui/dialog.tsx)，本地文件为 `components/ui/dialog.tsx`。适用 MIT 许可；版权声明保留，完整文本见 [shadcn-ui-LICENSE.txt](shadcn-ui-LICENSE.txt)。
+- 本地适配：使用现有 `@radix-ui/react-dialog` 包及相对导入；在 Radix Portal 内复用现有 PortalSurface 承载主题与 reset；关闭文案中文化并提供 closeLabel。Root、Overlay、Content、Title、Description、Close 仍委托 Radix，焦点约束、Escape 和外部点击关闭沿用其机制。
+- 唯一 ThemeProvider 移至 App，外壳和设置共享主题。SettingsModal 仅通过官方 onCloseAutoFocus 回调恢复到实际打开入口；内部滚动和业务布局由限定作用域的 settings-modal.css 保留，按钮、输入框复用现有官方组件。设置错误边界同样使用此 Dialog，不保留第二套全局弹窗基础设施。
+- 无新增依赖或锁文件变更；现有 `@radix-ui/react-dialog` 声明为 `^1.1.15`、锁定安装版本为 `1.1.23`，相关 DismissableLayer 为 `1.1.19`，沿用 React 19 / Vite 6 / Vitest 2。
+- 本地组件结构和许可证已检查；本轮固定提交的官方源码逐行对照因网络 Cache miss 未完成，不声称已通过。自动化、Electron 人工验收和辅助 DOM 检查的实际状态只在根目录 STATUS.md 记录。
 
 ## 依赖与验证边界
 

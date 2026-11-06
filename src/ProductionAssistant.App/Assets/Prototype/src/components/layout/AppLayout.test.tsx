@@ -78,8 +78,11 @@ describe('transplanted shadcn application shell', () => {
     }
     const query = location.search
     await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="打开设置"]')!.click())
-    expect(container.querySelector('[role="dialog"][aria-label="设置"]')?.closest('.pa-shell-theme')).toBeNull()
-    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click())
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect(dialog.closest('.pa-shell-theme')?.classList.contains('dark')).toBe(true)
+    expect(dialog.closest('[data-shadcn-surface]')).not.toBeNull()
+    expect(container.contains(dialog)).toBe(false)
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click())
     expect(location.search).toBe(query)
     expect(shell.classList.contains('dark')).toBe(true)
     expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'document-one')
@@ -135,10 +138,18 @@ describe('transplanted shadcn application shell', () => {
     window.addEventListener('production-settings-updated', updated)
     try {
       for (const selector of ['[aria-label="打开设置"]', '.sidebar-bottom button']) {
-        await act(async () => container.querySelector<HTMLButtonElement>(selector)!.click())
-        expect(container.querySelector('[role="dialog"][aria-label="设置"]')).not.toBeNull()
-        await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click())
-        expect(container.querySelector('[role="dialog"]')).toBeNull()
+        const trigger = container.querySelector<HTMLButtonElement>(selector)!
+        await act(async () => { trigger.focus(); trigger.click() })
+        const dialog = document.querySelector('[role="dialog"]')!
+        expect(container.getAttribute('aria-hidden')).toBe('true')
+        expect(dialog.closest('[aria-hidden="true"]')).toBeNull()
+        expect(dialog.contains(document.activeElement)).toBe(true)
+        expect(document.getElementById(dialog.getAttribute('aria-labelledby')!)?.textContent).toBe('设置')
+        await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click())
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+        expect(document.querySelector('[role="dialog"]')).toBeNull()
+        expect(document.activeElement).toBe(trigger)
+        expect(container.hasAttribute('aria-hidden')).toBe(false)
         expect(location.search).toBe('?loadId=document-one')
       }
       expect(invoke.mock.calls.filter(([operation]) => operation === 'settings.open')).toHaveLength(2)

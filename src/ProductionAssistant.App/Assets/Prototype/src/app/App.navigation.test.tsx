@@ -150,14 +150,14 @@ describe('App host navigation compatibility', () => {
     window.addEventListener('production-settings-updated', updated)
     try {
       await act(async () => { sidebarButton('设置').click() })
-      expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull()
       invoke.mockImplementation(() => Promise.resolve({}))
 
-      await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
+      await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
 
       expect(order).toEqual(['production-settings-updated'])
       expect(invoke.mock.calls.filter(([operation]) => operation === 'settings.close')).toEqual([])
-      expect(container.querySelector('[role="dialog"]')).toBeNull()
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
       expect(navigationCalls()).toEqual([])
     } finally {
       window.removeEventListener('production-settings-updated', updated)
@@ -351,11 +351,11 @@ describe('App host navigation contracts', () => {
       const settings = [...container.querySelectorAll<HTMLButtonElement>('.sidebar button')]
         .find(button => button.textContent?.trim() === '设置')!
       await act(async () => { settings.click() })
-      expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull()
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
 
-      await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
-      expect(container.querySelector('[role="dialog"]')).toBeNull()
+      await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click() })
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
     } finally {
       await act(async () => root.unmount())

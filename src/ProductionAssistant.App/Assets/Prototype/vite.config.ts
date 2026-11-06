@@ -7,7 +7,7 @@ const isolateStyles: Plugin = {
   postcssPlugin: 'production-assistant-style-boundaries',
   OnceExit(root) {
     const file = root.source?.input.file?.replaceAll('\\', '/') ?? ''
-    const legacy = /\/src\/[^/]+\.css$/.test(file) && !file.endsWith('/typography.css') && !file.endsWith('/operation-sidebar.css')
+    const legacy = /\/src\/[^/]+\.css$/.test(file) && !file.endsWith('/typography.css') && !file.endsWith('/operation-sidebar.css') && !file.endsWith('/settings-modal.css')
     if (legacy) {
       root.walkRules(rule => { rule.selector = rule.selector.replaceAll(':root', ':scope') })
       const scope = postcss.atRule({ name: 'scope', params: '(body) to ([data-shadcn-surface])' })
