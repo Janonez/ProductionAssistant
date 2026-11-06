@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../app/App'
 import { SIDEBAR_MODULES } from '../../routes/routeTable'
-import { hasNativeTitleBar } from './AppLayout'
+import { hasNativeTitleBar, hasElectronTitleBar } from './AppLayout'
 
 const { invoke, notifyReady } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
@@ -178,6 +178,11 @@ describe('transplanted shadcn application shell', () => {
   })
   it('reserves the native title-bar inset only for WinUI', async () => {
     expect(container.querySelector('[data-winui]')?.getAttribute('data-winui')).toBe('false')
+    expect(container.querySelector('[data-electron]')?.getAttribute('data-electron')).toBe('false')
+    expect(container.querySelector('.pa-electron-titlebar')).toBeNull()
+    expect(hasElectronTitleBar({ protocol: 'pa:', hostname: 'app' })).toBe(true)
+    expect(hasElectronTitleBar({ protocol: 'https:', hostname: 'prototype.production-assistant.local' })).toBe(false)
+    expect(hasElectronTitleBar({ protocol: 'https:', hostname: 'example.com' })).toBe(false)
     expect(hasNativeTitleBar({ protocol: 'https:', hostname: 'prototype.production-assistant.local' })).toBe(true)
     expect(hasNativeTitleBar({ protocol: 'pa:', hostname: 'app' })).toBe(false)
     expect(hasNativeTitleBar({ protocol: 'http:', hostname: 'localhost' })).toBe(false)

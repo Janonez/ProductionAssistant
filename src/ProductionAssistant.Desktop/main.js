@@ -211,8 +211,16 @@ function start() {
         if (ms > 200) log('resource-slow', { file, ms });
       }
     });
+    // sRGB equivalents of shadcn-theme.css --background / --foreground tokens.
+    const titleBarColors = () => nativeTheme.shouldUseDarkColors
+      ? { color: '#020618', symbolColor: '#f8fafc' }
+      : { color: '#ffffff', symbolColor: '#020618' };
     window = new BrowserWindow({
       width: 1400, height: 860, minWidth: 960, minHeight: 600, title: '生产助手',
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { ...titleBarColors(), height: 32 },
+      backgroundColor: titleBarColors().color,
+      autoHideMenuBar: true,
       webPreferences: {
         contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true,
         preload: path.join(__dirname, 'preload.js'),
@@ -222,6 +230,10 @@ function start() {
     window.on('unresponsive', () => log('window-unresponsive'));
     window.on('responsive', () => log('window-responsive'));
     const contents = window.webContents;
+    const updateTitleBar = () => {
+      if (window && !window.isDestroyed()) window.setTitleBarOverlay(titleBarColors());
+    };
+    nativeTheme.on('updated', updateTitleBar);
     contents.on('did-start-loading', () => log('did-start-loading'));
     contents.on('dom-ready', () => log('dom-ready'));
     contents.on('did-finish-load', () => {
@@ -273,10 +285,12 @@ function start() {
       { label: '重新加载', accelerator: 'F5', click: reload },
       { label: '重新加载', accelerator: 'CmdOrCtrl+R', visible: false, acceleratorWorksWhenHidden: true, click: reload },
     ];
-    if (environment !== 'Production') viewMenu.push({ label: '开发者工具', role: 'toggleDevTools' });
+    if (environment !== 'Production') viewMenu.push({ label: '开发者工具', role: 'toggleDevTools', accelerator: 'CmdOrCtrl+Shift+I' });
     Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: '视图', submenu: viewMenu }]));
+    window.setMenuBarVisibility(false);
     window.on('closed', () => {
       ipcMain.removeListener('bridge:message', onBridgeMessage);
+      nativeTheme.removeListener('updated', updateTitleBar);
       window = null;
     });
     loadDocument('initial');

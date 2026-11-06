@@ -13,12 +13,17 @@ import { ThemeSwitch } from './ThemeSwitch'
 export function hasNativeTitleBar(location: Pick<Location, 'protocol' | 'hostname'>) {
   return location.protocol === 'https:' && location.hostname === 'prototype.production-assistant.local'
 }
+export function hasElectronTitleBar(location: Pick<Location, 'protocol' | 'hostname'>) {
+  return location.protocol === 'pa:' && location.hostname === 'app'
+}
 export function AppLayout({ route, navigate, openSettings, children }: { route: string; navigate: (route: string) => void; openSettings: () => void; children: ReactNode }) {
   const { resolvedTheme } = useTheme()
-  // WinUI's 48px native title bar overlays the document; Electron's frame does not.
+  // Each host reserves its own native title-bar area; browser previews reserve none.
   const winui = hasNativeTitleBar(window.location)
+  const electron = hasElectronTitleBar(window.location)
   const title = SIDEBAR_MODULES.find(module => module.route === route)?.name ?? SIDEBAR_MODULES[0].name
-  return <SidebarProvider className={`desktop-shell pa-shell-theme h-svh min-h-0 overflow-hidden ${resolvedTheme === 'dark' ? 'dark' : ''}`} data-winui={winui}>
+  return <SidebarProvider className={`desktop-shell pa-shell-theme h-svh min-h-0 overflow-hidden ${resolvedTheme === 'dark' ? 'dark' : ''}`} data-winui={winui} data-electron={electron}>
+    {electron && <div className="pa-electron-titlebar" aria-hidden="true">生产助手</div>}
     <OperationSidebar active={route} navigate={navigate} openSettings={openSettings} />
     <SidebarInset className="@container/content min-h-0 min-w-0 overflow-hidden">
       <Header className="shrink-0" data-shadcn-surface="" aria-label="页面工具栏">

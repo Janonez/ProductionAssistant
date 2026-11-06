@@ -9,8 +9,10 @@ const vm = require('node:vm');
 
 // Execute the real main entry and IPC handler with inert Electron/Sidecar objects.
 // This checks wiring and security, not native Windows painting.
-async function fixture() {
+async function fixture(environment = 'Development') {
   const ipcMain = new EventEmitter();
+  const loaded = [], overlays = [], menuVisibility = [];
+  let menu;
   const app = Object.assign(new EventEmitter(), {
     setPath() {}, requestSingleInstanceLock: () => true, whenReady: () => Promise.resolve(),
     getGPUFeatureStatus: () => ({}), quit() {}, exit() {},
@@ -19,20 +21,31 @@ async function fixture() {
     destroyed: false, isDestroyed() { return this.destroyed; },
     mainFrame: { url: 'pa://app/index.html?loadId=current' },
     session: { setPermissionRequestHandler() {}, setPermissionCheckHandler() {} },
-    send() {}, setWindowOpenHandler() {},
+    send() {}, setWindowOpenHandler() {}, getURL: () => loaded.at(-1),
   });
   const window = Object.assign(new EventEmitter(), {
     webContents: contents, destroyed: false, isDestroyed() { return this.destroyed; },
-    loadURL: () => Promise.resolve(),
+    loadURL: url => { loaded.push(url); return Promise.resolve(); },
+    setTitleBarOverlay: value => overlays.push(JSON.parse(JSON.stringify(value))),
+    setMenuBarVisibility: value => menuVisibility.push(value),
   });
-  const nativeTheme = { themeSource: 'system' };
+  let themeSource = 'system', systemDark = false;
+  const nativeTheme = new EventEmitter();
+  Object.defineProperties(nativeTheme, {
+    themeSource: {
+      get: () => themeSource,
+      set(value) { themeSource = value; nativeTheme.emit('updated'); },
+    },
+    shouldUseDarkColors: { get: () => themeSource === 'dark' || themeSource === 'system' && systemDark },
+  });
+  const setSystemDark = value => { systemDark = value; nativeTheme.emit('updated'); };
   const forwarded = [], errors = [];
   let options;
   const electron = {
     app, ipcMain, nativeTheme,
     BrowserWindow: function (value) { options = value; return window; },
     dialog: { showErrorBox: (...args) => errors.push(args) },
-    Menu: { buildFromTemplate: value => value, setApplicationMenu() {} },
+    Menu: { buildFromTemplate: value => value, setApplicationMenu(value) { menu = value; } },
     protocol: { registerSchemesAsPrivileged() {}, handle() {} },
   };
   const desktopRoot = path.join(__dirname, '..');
@@ -47,7 +60,7 @@ async function fixture() {
         statSync: () => ({ size: 0, isDirectory: () => true, isFile: () => true }),
       };
       if (name === './lib/environment') return {
-        parseEnvironment: () => 'Development', resolveUserDataDir: () => 'fixture',
+        parseEnvironment: () => environment, resolveUserDataDir: () => 'fixture',
         resolveDistRoot: () => 'fixture', resolveSidecarPath: () => 'fixture',
       };
       if (name === './lib/sidecar-client') return { SidecarClient: class {
@@ -62,7 +75,7 @@ async function fixture() {
   assert.ok(options);
   const event = { sender: contents, senderFrame: contents.mainFrame };
   const send = (message, source = event) => ipcMain.emit('bridge:message', source, message);
-  return { ipcMain, contents, window, nativeTheme, forwarded, options, event, send };
+  return { ipcMain, contents, window, nativeTheme, forwarded, options, event, send, loaded, overlays, menu, menuVisibility, setSystemDark };
 }
 
 test('main applies all theme choices without forwarding them and preserves business routing', async () => {
@@ -113,15 +126,60 @@ test('main ignores destroyed windows or contents and removes its IPC handler on 
   f.send({ type: 'app.theme', theme: 'dark' });
   f.window.emit('closed');
   assert.equal(f.ipcMain.listenerCount('bridge:message'), 0);
+  assert.equal(f.nativeTheme.listenerCount('updated'), 0);
   assert.doesNotThrow(() => handler(f.event, { type: 'app.theme', theme: 'dark' }));
   assert.equal(f.nativeTheme.themeSource, 'system');
 });
 
-test('window retains its default native frame, immediate display and security settings', async () => {
+test('window enables official native controls overlay with immediate display and unchanged security', async () => {
   const { options } = await fixture();
-  for (const key of ['frame', 'titleBarStyle', 'titleBarOverlay', 'show']) assert.equal(options[key], undefined);
+  for (const key of ['frame', 'show']) assert.equal(options[key], undefined);
+  assert.equal(options.titleBarStyle, 'hidden');
+  assert.deepEqual(JSON.parse(JSON.stringify(options.titleBarOverlay)), { color: '#ffffff', symbolColor: '#020618', height: 32 });
+  assert.equal(options.backgroundColor, '#ffffff');
+  assert.equal(options.autoHideMenuBar, true);
   assert.equal(options.webPreferences.contextIsolation, true);
   assert.equal(options.webPreferences.sandbox, true);
   assert.equal(options.webPreferences.nodeIntegration, false);
   assert.equal(options.webPreferences.webSecurity, true);
+});
+
+test('overlay uses the same palette for explicit dark and system dark and follows system changes', async () => {
+  const f = await fixture();
+  f.send({ type: 'app.theme', theme: 'dark' });
+  const dark = f.overlays.at(-1);
+  assert.deepEqual(dark, { color: '#020618', symbolColor: '#f8fafc' });
+  f.setSystemDark(true);
+  f.send({ type: 'app.theme', theme: 'system' });
+  assert.equal(f.nativeTheme.themeSource, 'system');
+  assert.deepEqual(f.overlays.at(-1), dark);
+  f.setSystemDark(false);
+  assert.deepEqual(f.overlays.at(-1), { color: '#ffffff', symbolColor: '#020618' });
+  f.send({ type: 'app.theme', theme: 'light' });
+  f.setSystemDark(true);
+  assert.deepEqual(f.overlays.at(-1), { color: '#ffffff', symbolColor: '#020618' });
+  const count = f.overlays.length;
+  f.window.destroyed = true;
+  f.setSystemDark(false);
+  assert.equal(f.overlays.length, count);
+});
+
+test('hidden menu retains both reload accelerators and the development debugging shortcut', async () => {
+  const f = await fixture();
+  assert.deepEqual(f.menuVisibility, [false]);
+  const items = f.menu[0].submenu;
+  assert.equal(items[0].accelerator, 'F5');
+  assert.equal(items[1].accelerator, 'CmdOrCtrl+R');
+  assert.equal(items[1].acceleratorWorksWhenHidden, true);
+  assert.equal(items[2].role, 'toggleDevTools');
+  assert.equal(items[2].accelerator, 'CmdOrCtrl+Shift+I');
+  const first = f.loaded[0];
+  items[0].click();
+  items[1].click();
+  assert.equal(f.loaded.length, 3);
+  assert.notEqual(f.loaded[1], first);
+  assert.notEqual(f.loaded[2], f.loaded[1]);
+  const production = await fixture('Production');
+  assert.equal(production.menu[0].submenu.length, 2);
+  assert.deepEqual(production.menuVisibility, [false]);
 });
