@@ -1,6 +1,7 @@
 // Adapted from satnaing/shadcn-admin @ e16c87f; Copyright (c) 2024 Sat Naing; MIT.
 // Scope the theme to the shell and its portals; legacy business pages remain light.
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { notifyTheme } from '../../bridge/index'
 type Theme = 'light' | 'dark' | 'system'
 const STORAGE_KEY = 'production-assistant-ui-theme-v1'
 const ThemeContext = createContext<{
@@ -23,6 +24,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       // Keep the current session usable when browser storage is unavailable.
     }
   }
+  useEffect(() => { notifyTheme(theme) }, [theme])
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false)
   useEffect(() => {
     const query = window.matchMedia?.('(prefers-color-scheme: dark)')

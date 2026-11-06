@@ -8,6 +8,24 @@ body:has([data-slot='sidebar-wrapper']) { margin: 0; min-width: 0; overflow: hid
   background: var(--sidebar);
 }
 .pa-shell-theme[data-winui='true'] { --host-titlebar: 48px; }
+.pa-shell-theme[data-electron='true'] { --host-titlebar: env(titlebar-area-height, 32px); }
+/* Only this reserved strip drags the window. All React controls stay below it;
+   Electron owns hit-testing and Snap Layouts for the native window buttons. */
+.pa-shell-theme[data-electron='true'] .pa-electron-titlebar {
+  position: fixed;
+  top: env(titlebar-area-y, 0px);
+  left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, 100%);
+  height: var(--host-titlebar);
+  display: flex;
+  align-items: center;
+  padding-inline: 12px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 12px;
+  user-select: none;
+  -webkit-app-region: drag;
+}
 .pa-shell-theme [data-slot='sidebar-container'] {
   top: var(--host-titlebar);
   height: calc(100svh - var(--host-titlebar));

@@ -18,6 +18,7 @@ describe('theme preference', () => {
   let root: Root | undefined
   let media: MediaQueryList
   let savedPreference: string | null
+  const postMessage = vi.fn()
   const state = () => {
     const output = container.querySelector('output')!
     return [output.dataset.theme, output.dataset.resolvedTheme]
@@ -34,6 +35,9 @@ describe('theme preference', () => {
   }
 
   beforeEach(() => {
+    postMessage.mockReset()
+    vi.stubGlobal('chrome', undefined)
+    vi.stubGlobal('paHost', { postMessage })
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     savedPreference = localStorage.getItem(storageKey)
     localStorage.removeItem(storageKey)
@@ -56,12 +60,14 @@ describe('theme preference', () => {
     await render()
     expect(state()).toEqual(['system', 'light'])
     expect(localStorage.getItem(storageKey)).toBeNull()
+    expect(postMessage.mock.calls).toEqual([[{ type: 'app.theme', theme: 'system' }]])
   })
   it.each(['light', 'dark', 'system'])('restores saved %s', async value => {
     localStorage.setItem(storageKey, value)
     Reflect.set(media, 'matches', true)
     await render()
     expect(state()).toEqual([value, value === 'light' ? 'light' : 'dark'])
+    expect(postMessage.mock.calls).toEqual([[{ type: 'app.theme', theme: value }]])
   })
   it.each(['', 'invalid', 'DARK', 'null'])('falls back to system for invalid value %j', async value => {
     localStorage.setItem(storageKey, value)
@@ -97,6 +103,24 @@ describe('theme preference', () => {
     expect(state()).toEqual(['system', 'dark'])
     await systemDark(false)
     expect(state()).toEqual(['system', 'light'])
+    expect(postMessage.mock.calls).toEqual([[{ type: 'app.theme', theme: 'system' }]])
+  })
+  it('synchronizes light to dark to light without resending an unchanged selection', async () => {
+    localStorage.setItem(storageKey, 'light')
+    await render()
+    await select('dark')
+    await select('light')
+    await select('light')
+    expect(postMessage.mock.calls).toEqual(['light', 'dark', 'light'].map(theme => [{ type: 'app.theme', theme }]))
+  })
+  it('sends system unchanged when leaving a forced dark theme and responds to media changes', async () => {
+    localStorage.setItem(storageKey, 'dark')
+    Reflect.set(media, 'matches', true)
+    await render()
+    await select('system')
+    await systemDark(false)
+    expect(state()).toEqual(['system', 'light'])
+    expect(postMessage.mock.calls).toEqual(['dark', 'system'].map(theme => [{ type: 'app.theme', theme }]))
   })
   it.each(['light', 'dark'])('keeps explicit %s despite system changes', async value => {
     await render()
@@ -124,5 +148,6 @@ describe('theme preference', () => {
     root = createRoot(container)
     await render()
     expect(state()).toEqual(['dark', 'dark'])
+    expect(postMessage.mock.calls).toEqual(['system', 'dark', 'dark'].map(theme => [{ type: 'app.theme', theme }]))
   })
 })

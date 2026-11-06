@@ -6,7 +6,7 @@ import type { Draft } from '../lib/types'
 const invoke = vi.fn();
 const notifyReady = vi.fn();
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-vi.mock('../bridge/index', () => ({ invoke, notifyReady }))
+vi.mock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
 vi.mock('motion/react', () => ({
   AnimatePresence: ({ children }: { children: unknown }) => children,
   motion: {
@@ -412,14 +412,14 @@ describe('production message Demo UI', () => {
 describe('shared operation sidebar', () => {
   afterEach(() => {
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
   })
 
   it('renders daily weld as a React route with the shared sidebar selected', async () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
 
     history.replaceState({}, '', '?route=daily-weld&loadId=weld')
     const container = document.createElement('div')
@@ -443,7 +443,7 @@ describe('shared operation sidebar', () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
 
     history.replaceState({}, '', '?route=daily-weld&loadId=weld')
     const container = document.createElement('div')
@@ -466,7 +466,7 @@ describe('shared operation sidebar', () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
 
     history.replaceState({}, '', '?route=navigation:production-message&loadId=settings-modal')
     const container = document.createElement('div')
@@ -524,7 +524,7 @@ describe('shared operation sidebar', () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
 
     history.replaceState({}, '', '?route=navigation:production-message&loadId=settings-modal')
     const container = document.createElement('div')
@@ -573,7 +573,7 @@ describe('shared operation sidebar', () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
 
     const order: string[] = []
     invoke.mockImplementation((operation: string) => {

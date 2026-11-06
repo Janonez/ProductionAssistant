@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SettingsModal from './SettingsModal'
 import { ThemeProvider, useTheme } from '../components/layout/ThemeProvider'
 const { invoke, clearDailyFieldCache } = vi.hoisted(() => ({ invoke: vi.fn(), clearDailyFieldCache: vi.fn() }))
-vi.mock('../bridge/index', () => ({ invoke }))
+vi.mock('../bridge/index', () => ({ invoke, notifyTheme: vi.fn() }))
 vi.mock('../features/daily-report/dailyFieldCache', () => ({ clearDailyFieldCache }))
 it('opens the real settings form immediately and retains it when local settings arrive', async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true

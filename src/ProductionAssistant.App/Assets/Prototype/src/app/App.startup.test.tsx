@@ -21,7 +21,7 @@ it('opens the default production message page and reports its first readiness', 
   const invoke = vi.fn().mockResolvedValue({})
   const delayed = { resolve: undefined as undefined | ((value: { DailyWeldPage: () => React.ReactNode }) => void) }
   vi.resetModules()
-  vi.doMock('../bridge/index', () => ({ notifyReady, invoke }))
+  vi.doMock('../bridge/index', () => ({ notifyReady, invoke, notifyTheme: vi.fn() }))
   vi.doMock('../features/daily-weld/DailyWeldPage', () => new Promise<{ DailyWeldPage: () => React.ReactNode }>(resolve => { delayed.resolve = resolve }))
 
   history.replaceState({}, '', '?loadId=start')
@@ -54,7 +54,7 @@ it('[nav-switch] keeps readiness stable while a delayed route module loads', asy
   const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
   const postMessage = vi.fn()
   Object.assign(window, { chrome: { webview: { postMessage, addEventListener: () => undefined } } })
-  vi.doMock('../bridge/index', () => ({ notifyReady, invoke }))
+  vi.doMock('../bridge/index', () => ({ notifyReady, invoke, notifyTheme: vi.fn() }))
   notifyReady.mockImplementation(sendReady)
   const readyMessages = () => postMessage.mock.calls.filter(([message]) => message.type === 'app.ready')
   vi.doMock('../features/daily-weld/DailyWeldPage', () => new Promise<{ DailyWeldPage: () => React.ReactNode }>(resolve => { delayed.resolve = resolve }))

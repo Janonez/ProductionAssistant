@@ -45,6 +45,19 @@ test('normalizes ready fields and keeps finite timing values', () => {
   assert.equal(classify({ type: 'app.ready', moduleEntryMs: NaN, readyMs: -Infinity }).readyMs, 0);
 });
 
+test('routes all three theme preferences locally without a business request identifier', () => {
+  for (const theme of ['light', 'dark', 'system'])
+    assert.deepEqual(classify({ type: 'app.theme', theme, id: 'unused', operation: 'settings.open' }), { kind: 'theme', theme });
+});
+
+test('rejects invalid theme values instead of forwarding them as business operations', () => {
+  for (const theme of [undefined, null, '', 'Dark', ' dark ', 'auto', 1, true, [], {}]) {
+    assert.deepEqual(classify({ type: 'app.theme', theme }), { kind: 'invalid', reason: 'invalid-theme' });
+    assert.deepEqual(classify({ type: 'app.theme', theme, id: 'id', operation: 'settings.open' }),
+      { kind: 'invalid', reason: 'invalid-theme', id: 'id' });
+  }
+});
+
 test('routes both local dialogs and preserves their payloads', () => {
   for (const operation of LOCAL_OPERATIONS)
     assert.deepEqual(classify({ id: 'id', operation, payload: { value: 3 } }), { kind: 'local', id: 'id', operation, payload: { value: 3 } });
