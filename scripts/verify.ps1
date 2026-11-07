@@ -25,6 +25,8 @@ try {
     Assert-NativeSuccess 'Teable data conversion checks'
     pwsh -NoProfile -File scripts/test-teable-views.ps1
     Assert-NativeSuccess 'Teable view conversion checks'
+    node tests/tencent-sheet/check-frame-detached.cjs
+    Assert-NativeSuccess 'TencentSheet detached frame checks'
     if (-not $SkipRestore) {
         Push-Location $prototype
         try { npm.cmd ci; Assert-NativeSuccess 'Prototype npm ci' } finally { Pop-Location }
