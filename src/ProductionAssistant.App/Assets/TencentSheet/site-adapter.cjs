@@ -287,12 +287,18 @@ async function recordControl(page, kind) {
 
 async function assertNoLogin(page) {
   if(!page || page.isClosed())return;
-  for(const frame of page.frames()) {
-    if(frame.parentFrame() && !await (await frame.frameElement()).isVisible())continue;
-    const login=await frame.locator('[role="dialog"]:visible,[aria-modal="true"]:visible,dialog:visible,[class*="modal" i]:visible,[class*="overlay" i]:visible,[class*="mask" i]:visible,[class*="login" i]:visible,[id*="login" i]:visible')
-      .filter({hasText:/请先登录|扫码|QQ\s*登录|微信\s*登录|登录/}).count();
-    const loginFrame=frame.parentFrame() && /login|qrcode|passport/i.test(frame.url()) && /登录|扫码/.test(await frame.locator('body').innerText().catch(()=>''));
-    if(login || loginFrame) {const error=Error('请重新扫码登录，然后重新测试控件或检查填报位置。');error.code='LoginRequired';throw error;}
+  for(let attempt=0;;attempt++)try {
+    for(const frame of page.frames()) {
+      if(frame.parentFrame() && !await (await frame.frameElement()).isVisible())continue;
+      const login=await frame.locator('[role="dialog"]:visible,[aria-modal="true"]:visible,dialog:visible,[class*="modal" i]:visible,[class*="overlay" i]:visible,[class*="mask" i]:visible,[class*="login" i]:visible,[id*="login" i]:visible')
+        .filter({hasText:/请先登录|扫码|QQ\s*登录|微信\s*登录|登录/}).count();
+      const loginFrame=frame.parentFrame() && /login|qrcode|passport/i.test(frame.url()) && /登录|扫码/.test(await frame.locator('body').innerText().catch(()=>''));
+      if(login || loginFrame) {const error=Error('请重新扫码登录，然后重新测试控件或检查填报位置。');error.code='LoginRequired';throw error;}
+    }
+    return;
+  } catch(error) {
+    // Refresh only this read-only scan, never navigation, input or submission.
+    if(attempt>=2 || !/\bframe (?:was|has been) detached\b/i.test(error.message))throw error;
   }
 }
 

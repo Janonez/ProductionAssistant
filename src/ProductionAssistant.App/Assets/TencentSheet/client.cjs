@@ -269,7 +269,7 @@ class TencentSheetClient {
       await this.page?.keyboard.press('Escape').catch(()=>{});
       if(completed.length===plan.rows.length && !attempted) {
         const reason=error.message;
-        error=Object.assign(Error(`已填写 ${completed.length} 项，刷新后的保存确认未完成。${error.code==='LoginRequired'?'请完成登录后检查网页。':'请检查网页中的数值及保存状态。'}不会重复写入。`),{code:'SaveConfirmationPending',details:reason});
+        error=Object.assign(Error(`已输入并本地回读 ${completed.length} 项，云端保存尚未确认。${error.code==='LoginRequired'?'请完成登录后检查网页。':'请检查网页中的数值及保存状态。'}不会重复写入。`),{code:'SaveConfirmationPending',details:reason});
       }
       error.completed = completed;
       error.uncertainAddress = attempted;
@@ -292,28 +292,39 @@ class TencentSheetClient {
   async confirmSaved(config,plan,rows) {
     const deadline=Date.now()+30000;
     let sawSaving=false;
-    // A saved label already present before this batch is never sufficient evidence.
-    for(let attempt=0;attempt<3;attempt++) {
-      const settledAfter=Date.now()+[2000,2000,4000][attempt];
-      let status=await this.saveState(config);
-      while(Date.now()<settledAfter || status==='saving' || (config.webControls?.saveStatus && !['saved','idle'].includes(status))) {
-        sawSaving ||= status==='saving';
-        if(Date.now()>=deadline)throw Error(config.webControls?.saveStatus?'等待录制的保存状态确认超过 30 秒，请检查控件和网页保存状态；不会重复写入。':'保存等待超过 30 秒，结果待确认；不会重复写入。');
-        await this.page.waitForTimeout(Math.min(250,deadline-Date.now()));
-        status=await this.saveState(config);
+    const remaining=()=>{
+      const timeout=deadline-Date.now();
+      if(timeout<=0)throw Error('保存确认超时，结果待确认；不会重复写入。');
+      this.page.setDefaultTimeout(timeout);
+      return {...config,timeout:timeout/1000};
+    };
+    try {
+      // Modification history is not a save acknowledgement. Even a saved label
+      // still requires a fresh reload/readback before reporting success.
+      for(let attempt=0;attempt<3;attempt++) {
+        const settledAfter=Date.now()+[2000,2000,4000][attempt];
+        let status=await this.saveState(remaining());
+        while(Date.now()<settledAfter || status!=='saved') {
+          sawSaving ||= status==='saving';
+          if(Date.now()>=deadline)throw Error(status==='idle'
+            ? '保存控件仅显示上次修改时间，30 秒内未确认已保存。请重新录制实际保存状态控件；未刷新或重复写入。'
+            : '30 秒内未确认已保存，请检查网页保存状态；未刷新或重复写入。');
+          await this.page.waitForTimeout(Math.min(250,deadline-Date.now()));
+          if(Date.now()<deadline)status=await this.saveState(remaining());
+        }
+        await this.page.reload({waitUntil:'domcontentloaded',timeout:Math.max(1,deadline-Date.now())});
+        await this.waitForReloadControls(remaining(),deadline);
+        await this.selectSheet(remaining(),plan.sheet);
+        let consistent=true;
+        for(const row of rows) {
+          if(!sameNumber(await this.read(remaining(),row.address),row.value))consistent=false;
+        }
+        if(consistent)return {transitionObserved:sawSaving};
       }
-      if(Date.now()>=deadline)break;
-      await this.page.reload({waitUntil:'domcontentloaded',timeout:Math.max(1,deadline-Date.now())});
-      await this.waitForReloadControls(config,deadline);
-      await this.selectSheet(config,plan.sheet);
-      let consistent=true;
-      for(const row of rows) {
-        if(Date.now()>=deadline)throw Error('保存确认超时，结果待确认；不会重复写入。');
-        if(!sameNumber(await this.read(config,row.address),row.value))consistent=false;
-      }
-      if(consistent)return {transitionObserved:sawSaving};
+      throw Error('刷新后回读不一致，服务端保存尚未确认；不会重复写入。');
+    } finally {
+      if(this.page&&!this.page.isClosed())this.page.setDefaultTimeout(config.timeout*1000);
     }
-    throw Error('刷新后回读不一致，服务端保存尚未确认；不会重复写入。');
   }
   async waitForReloadControls(config,deadline) {
     let lastError;
@@ -327,6 +338,12 @@ class TencentSheetClient {
         try {
           await this.ready(probe,{readOnly:true});
           await this.one(probe,'activeSheet');
+          const name=await this.control(probe,'nameBox',{requireAddress:false});
+          try {await name.click({trial:true,timeout:Math.max(1,Math.min(500,deadline-Date.now()))});}
+          catch(error) {
+            if(error.name!=='TimeoutError')throw error;
+            throw fieldError('nameBox','名称框可见但尚不可点击，等待表格恢复。',error.message);
+          }
           return;
         } catch(error) {
           if(error.code!=='ControlUnavailable' && !['nameBox','valueBox','activeSheet','ready'].includes(error.field))throw error;

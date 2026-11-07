@@ -25,6 +25,19 @@ public sealed class TencentSheetTests
     }
 
     [Fact]
+    public void Completed_cells_do_not_claim_cloud_save_confirmation()
+    {
+        var response = new JsonObject { ["ok"] = false, ["error"] = "云端保存尚未确认", ["code"] = "SaveConfirmationPending",
+            ["completed"] = new JsonArray(new JsonObject { ["address"] = "D4" }), ["uncertainAddress"] = null };
+        using var json = System.Text.Json.JsonDocument.Parse(response.ToJsonString());
+        var error = Assert.Throws<InvalidOperationException>(() => TencentSheetService.ReadResponse(json.RootElement));
+        Assert.Contains("本地回读通过：D4", error.Message);
+        Assert.DoesNotContain("已提交", error.Message);
+        Assert.Contains("SaveConfirmationPending", error.Message);
+        Assert.IsNotType<TencentSheetPreflightException>(error);
+    }
+
+    [Fact]
     public void Worker_error_preserves_code_and_redacts_details_urls()
     {
         var response = new JsonObject { ["ok"] = false, ["error"] = "failure", ["code"] = "SaveConfirmationPending",

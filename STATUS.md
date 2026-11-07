@@ -2,6 +2,8 @@
 
 ## 当前状态
 
+- 腾讯文档填报：**未解决，暂缓修复，后续重新梳理**。用户授权合并 [PR #87](https://github.com/Janonez/ProductionAssistant/pull/87) 的防御性修改，不代表 Development 真实填报验收通过；稳定版、版本号和 Release 不更新。修改包括只读登录预检遇到 Frame detached 后重新获取 frames（最多三次）、明确保存前不刷新、刷新后名称框试点击及剩余超时预算、本地回读与云端保存状态分开；不增加导航、输入或提交重试。
+- 未解决证据：用户人工确认应填零值的目标单元格和公式栏均为空白；测试版扫码窗口曾提示登录成功，只读冷启动诊断在 3/10/30 秒仍检测到登录按钮，未检测到账户标记，页面呈未登录状态。登录成功判定与会话复用、保存状态录制与零值保存均需重新梳理，尚未证实完整原因。保留不确定写入记录，不重跑整批、不自动补写、不弱化登录阻断。现有本地 iframe、遮罩、保存确认及 localhost 表格回归通过；完整 verify 退出 0（前端 330 通过/1 跳过、Desktop 90、xUnit 356，Release 0 警告/0 错误），Development 已生成；这些结果不替代真实网页验收。本机测试副本已按授权恢复，调度关闭。
 - 项目包含 WinUI / WebView2 应用、React 前端、共享 Bridge、Sidecar 和 Electron Desktop；长期方向明确为 Electron 优先，WinUI 仅作业务迁移期过渡，维护边界见 [PLAN.md](PLAN.md)。现阶段不删除 WinUI，不改变构建与发布流程；结构和运行方式见 [README.md](README.md)。
 - SD-8c 已完成：日报本地配置迁移通过 [PR #77](https://github.com/Janonez/ProductionAssistant/pull/77) 合并，提交 `fe4c08c`。这是后端迁移，不代表新 UI 已实现。
 - UI-0 接入方案已通过 [PR #79](https://github.com/Janonez/ProductionAssistant/pull/79) 合并，提交 `90b8406636ea1057fe6d532a212d95163f572ffe`。
@@ -17,6 +19,7 @@
 ## 下次入口
 
 1. 只读检查 `git status -sb`、`git worktree list`、分支和最近提交，按实际状态更新判断。
+   - 腾讯填报保持“未解决／暂缓修复”；本次仅按用户授权合并 PR #87。后续从登录成功判据、专用浏览器冷启动会话复用、控件录制、零值写入与云端保存确认的完整流程重新梳理，先只读取证并制定方案；未经重新授权，不继续真实填报、补写或清除防重记录。
 2. 从 UI-1b-3 第二批的 PR / CI 和移动 Sheet 人工验收接续，等用户明确回复“通过”及 CI verify pass 才可 squash 合并。第一批已经通过并合并，不重复验收；用户要求人工验收，不自动操控电脑。
 3. Electron Development 入口为 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`；Development 发布目录是 WinUI 测试版。人工检查项目见下文。本批以外的 UI-1b-3 内容需另行授权；WinUI 仅保留必要兼容与基础回归。
 4. 第二批结束后优先进入 UI-2，实施前确认日报能力范围；不能把 SD-8c 开放创建/保存模板视为预览、发送、启停等完整链路已迁移。独立 DX-2 冷启动调查不阻碍 UI-1b-3 或 UI-2。
