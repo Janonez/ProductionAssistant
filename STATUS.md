@@ -3,6 +3,7 @@
 ## 当前状态
 
 - 腾讯文档 iframe 预检修复位于 `codex/tencent-frame-preflight`：只在 `assertNoLogin` 的只读扫描遇到 Frame detached 时重新获取 frames，最多扫描三次；不重试导航、输入或提交。新增回归检查已接入 verify；纯逻辑、Edge 本地真实 iframe 替换/新登录阻断、既有控件就绪回归均通过。完整 verify 退出 0（前端 330 通过/1 跳过、Desktop 90、xUnit 355，Release 0 警告/0 错误），Development 已生成且脚本哈希与源码一致；真实腾讯填报待用户验收，稳定版与版本号未修改。
+- PR #87 的 Development 验收仍未通过：后续已进入保存确认，用户确认部分目标未保留零值。按反馈追加“旧修改时间不作为已保存证据、明确保存前不刷新、刷新后名称框试点击及剩余超时预算、错误地址列表仅表示本地回读”修正。新增无浏览器回归、Edge 本地遮罩回归和既有 localhost 完整表格回归均通过；追加完整 verify 退出 0（前端 330 通过/1 跳过、Desktop 90、xUnit 356，Release 0 警告/0 错误），Development 已重新生成。当前录制的旧修改时间需改为实际保存提示；保留不确定写入记录，不重跑整批或自动补写。本机测试副本已按授权恢复，调度关闭，真实任务仍由用户验收。
 - 项目包含 WinUI / WebView2 应用、React 前端、共享 Bridge、Sidecar 和 Electron Desktop；长期方向明确为 Electron 优先，WinUI 仅作业务迁移期过渡，维护边界见 [PLAN.md](PLAN.md)。现阶段不删除 WinUI，不改变构建与发布流程；结构和运行方式见 [README.md](README.md)。
 - SD-8c 已完成：日报本地配置迁移通过 [PR #77](https://github.com/Janonez/ProductionAssistant/pull/77) 合并，提交 `fe4c08c`。这是后端迁移，不代表新 UI 已实现。
 - UI-0 接入方案已通过 [PR #79](https://github.com/Janonez/ProductionAssistant/pull/79) 合并，提交 `90b8406636ea1057fe6d532a212d95163f572ffe`。
@@ -18,7 +19,7 @@
 ## 下次入口
 
 1. 只读检查 `git status -sb`、`git worktree list`、分支和最近提交，按实际状态更新判断。
-   - 本次先接续 `codex/tencent-frame-preflight` 的 PR/CI 与 Development 人工验收；定向检查和完整 verify 已通过。腾讯真实填报仍由用户确认，不自动重跑正式任务。
+   - 本次先接续 `codex/tencent-frame-preflight` 的 PR #87 / CI 与 Development 人工验收；保存确认追加回归和完整 verify 已通过。验收前须重新录制实际保存状态，不能把旧修改时间当作已保存。腾讯真实填报仍由用户确认，不自动重跑正式任务。
 2. 从 UI-1b-3 第二批的 PR / CI 和移动 Sheet 人工验收接续，等用户明确回复“通过”及 CI verify pass 才可 squash 合并。第一批已经通过并合并，不重复验收；用户要求人工验收，不自动操控电脑。
 3. Electron Development 入口为 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`；Development 发布目录是 WinUI 测试版。人工检查项目见下文。本批以外的 UI-1b-3 内容需另行授权；WinUI 仅保留必要兼容与基础回归。
 4. 第二批结束后优先进入 UI-2，实施前确认日报能力范围；不能把 SD-8c 开放创建/保存模板视为预览、发送、启停等完整链路已迁移。独立 DX-2 冷启动调查不阻碍 UI-1b-3 或 UI-2。

@@ -41,7 +41,7 @@ public sealed class TencentSheetService
         {
             var message = root.GetProperty("error").GetString();
             if (root.TryGetProperty("completed", out var completed) && completed.GetArrayLength() > 0)
-                message += " 已提交：" + string.Join("、", completed.EnumerateArray().Select(row => row.GetProperty("address").GetString()));
+                message += " 本地回读通过：" + string.Join("、", completed.EnumerateArray().Select(row => row.GetProperty("address").GetString()));
             if (root.TryGetProperty("uncertainAddress", out var uncertain) && uncertain.ValueKind == JsonValueKind.String)
                 message += "；结果待确认：" + uncertain.GetString();
             message += BuildDiagnosticSuffix(root);
