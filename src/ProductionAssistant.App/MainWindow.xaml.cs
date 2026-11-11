@@ -8,6 +8,8 @@ namespace ProductionAssistant;
 
 public sealed partial class MainWindow : Window
 {
+    private bool _closing;
+    private bool _closeReady;
     public MainWindow()
     {
         InitializeComponent();
@@ -32,5 +34,14 @@ public sealed partial class MainWindow : Window
         }
 
         ShellFrame.Navigate(typeof(PrototypePage));
+        AppWindow.Closing += async (_, args) =>
+        {
+            if (_closeReady) return;
+            args.Cancel = true;
+            if (_closing) return;
+            _closing = true;
+            try { await AutomationLauncher.ShutdownAsync(); }
+            finally { _closeReady = true; Close(); }
+        };
     }
 }

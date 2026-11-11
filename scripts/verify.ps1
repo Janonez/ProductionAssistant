@@ -12,6 +12,7 @@ $desktop = Join-Path $root 'src\ProductionAssistant.Desktop'
 $debugPublish = Join-Path $root 'deployments\development'
 $releasePublish = Join-Path $root 'deployments\production'
 $env:npm_config_cache = Join-Path $root '.npm-cache'
+$previousNodePath = $env:NODE_PATH
 
 function Assert-NativeSuccess([string]$operation) {
     if ($LASTEXITCODE -ne 0) { throw "$operation failed with exit code $LASTEXITCODE." }
@@ -25,10 +26,6 @@ try {
     Assert-NativeSuccess 'Teable data conversion checks'
     pwsh -NoProfile -File scripts/test-teable-views.ps1
     Assert-NativeSuccess 'Teable view conversion checks'
-    node tests/tencent-sheet/check-frame-detached.cjs
-    Assert-NativeSuccess 'TencentSheet detached frame checks'
-    node tests/tencent-sheet/check-save-confirmation.cjs
-    Assert-NativeSuccess 'TencentSheet save confirmation checks'
     if (-not $SkipRestore) {
         Push-Location $prototype
         try { npm.cmd ci; Assert-NativeSuccess 'Prototype npm ci' } finally { Pop-Location }
@@ -40,6 +37,15 @@ try {
         Assert-NativeSuccess 'dotnet restore'
     }
 
+    # Tests outside the asset package use the same locked Playwright installation.
+    $env:NODE_PATH = Join-Path $tencent 'node_modules'
+    node tests/tencent-sheet/check-frame-detached.cjs
+    Assert-NativeSuccess 'TencentSheet detached frame checks'
+    node tests/tencent-sheet/check-save-confirmation.cjs
+    Assert-NativeSuccess 'TencentSheet save confirmation checks'
+    node tests/tencent-sheet/check-session.cjs
+    Assert-NativeSuccess 'TencentSheet session contract checks'
+
     Push-Location $prototype
     try {
         npm.cmd run lint:font-weights
@@ -49,6 +55,9 @@ try {
         npm.cmd run build
         Assert-NativeSuccess 'Prototype build'
     } finally { Pop-Location }
+
+    node tests/tencent-sheet/check-ui.cjs
+    Assert-NativeSuccess 'TencentSheet UI browser checks'
 
     Push-Location $desktop
     try {
@@ -72,5 +81,6 @@ try {
     }
 }
 finally {
+    $env:NODE_PATH = $previousNodePath
     Pop-Location
 }

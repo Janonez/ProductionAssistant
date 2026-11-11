@@ -8,6 +8,7 @@ import { invoke } from "../../bridge/index";
 import { AutomationSkeleton, SkeletonLines } from '../../components/layout/LoadingSkeleton';
 import type { AutomationTaskSummary } from "../../lib/types";
 import { automationTaskTypes, findAutomationTaskType, type AutomationRunView, type AutomationTaskTypeDefinition } from "./automationTaskTypes";
+import { ROUTES, navigationModule, type AutomationTaskFilter } from "../../routes/routeTable";
 
 type NoticeValue = { tone: string; title: string; message: string };
 
@@ -17,7 +18,7 @@ const errorNotice = (error: unknown): NoticeValue => ({
   message: error instanceof Error ? error.message : String(error),
 });
 
-export function AutomationPage({ openSettings }: { openSettings?: () => void }) {
+export function AutomationPage({ openSettings, taskType = "" }: { openSettings?: () => void; taskType?: AutomationTaskFilter }) {
   const [tasks, setTasks] = useState<AutomationTaskSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AutomationTaskSummary>();
@@ -29,6 +30,9 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
   const [createOpen, setCreateOpen] = useState(false);
   const [createType, setCreateType] = useState("");
   const [availableTypes, setAvailableTypes] = useState(["daily_report", "notion_fill"]);
+  const visibleTasks = taskType ? tasks.filter(task => task.taskType === taskType) : tasks;
+  const creatableTypes = automationTaskTypes.filter(definition => availableTypes.includes(definition.taskType) && (!taskType || definition.taskType === taskType));
+  const title = navigationModule(ROUTES.dailyReport, taskType)!.name;
   const refresh = () => invoke<{ tasks: AutomationTaskSummary[]; availableTaskTypes?: string[] }>("automation.list").then((value) => {
     if (value.availableTaskTypes) setAvailableTypes(value.availableTaskTypes);
     const nextTasks = Array.isArray(value.tasks) ? value.tasks : tasks;
@@ -40,6 +44,10 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
   });
 
   useEffect(() => { refresh().catch((error) => setNotice(errorNotice(error))).finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    setSelected(undefined); setFocusStep(""); setNotice(undefined);
+    setMenu(undefined); setDeleteTarget(undefined); setCreateOpen(false); setCreateType("");
+  }, [taskType]);
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(undefined);
@@ -102,14 +110,14 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
 
   return <div className="page daily-page automation-list-page">
     <header>
-      <div><h1>自动化任务</h1><p>管理定时推送与自动填报，查看任务配置和运行情况。</p></div>
+      <div><h1>{title}</h1><p>{taskType === "tencent_sheet_fill" ? "先新建任务并保存文档链接，再打开浏览器登录和检查；网页控件、业务字段及定时配置保留在任务详情中。" : "管理定时推送与自动填报，查看任务配置和运行情况。"}</p></div>
       <div className="header-actions">
-        <button className="primary" onClick={() => setCreateOpen(true)}><Plus />新建任务</button>
+        <button className="primary" disabled={!creatableTypes.length} onClick={() => { setCreateType(taskType); setCreateOpen(true); }}><Plus />新建任务</button>
       </div>
     </header>
     {notice && <div className={`notice ${notice.tone}`} role="status"><div><strong>{notice.title}</strong><span>{notice.message}</span></div></div>}
     <section className="daily-job-list" aria-label="任务列表">
-      {tasks.map((task) => <article className={`daily-job-card${["incomplete", "pending-test", "schedule-error"].includes(task.status) ? " needs-attention" : ""}`} key={`${task.taskType}:${task.id}`}
+      {visibleTasks.map((task) => <article className={`daily-job-card${["incomplete", "pending-test", "schedule-error"].includes(task.status) ? " needs-attention" : ""}`} key={`${task.taskType}:${task.id}`}
         onClick={() => setSelected(task)} onContextMenu={(event) => {
           event.preventDefault();
           setMenu({ task, x: Math.min(event.clientX, window.innerWidth - 176), y: Math.min(event.clientY, window.innerHeight - 58) });
@@ -123,9 +131,9 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
           onChange={() => toggle(task)} /><span /></label><button type="button" className="automation-task-more" aria-label={`${task.name || "未命名任务"}的更多操作`} aria-haspopup="menu" onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); setMenu({ task, x: Math.min(rect.left, window.innerWidth - 176), y: Math.min(rect.bottom + 4, window.innerHeight - 58) }); }}><Ellipsis /></button></div>
         <div className="automation-card-footer">最近运行：{task.lastRun}</div>
       </article>)}
-      {!tasks.length && <div className="empty-state"><FileText /><h2>还没有自动化任务</h2><p>选择一种任务类型，新建后进入对应的专用配置界面。</p></div>}
+      {!visibleTasks.length && <div className="empty-state"><FileText /><h2>{taskType ? `暂无${title}任务` : "还没有自动化任务"}</h2><p>{creatableTypes.length ? "新建任务后进入对应的专用配置界面。" : "当前环境尚未开放此类任务创建。"}</p></div>}
     </section>
-    {!!tasks.length && <p className="automation-list-help">点击任务名称进入配置。日报配置通知后即可开启，执行结果见运行记录。</p>}
+    {!!visibleTasks.length && <p className="automation-list-help">点击任务名称进入配置、运行与定时设置。</p>}
     {menu && <div className="job-context-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
       <button className="danger-quiet" role="menuitem" disabled={menu.task.isEnabled || busy === menu.task.id}
         onClick={() => { setDeleteTarget(menu.task); setMenu(undefined); }}><Trash2 />{menu.task.isEnabled ? "停用后可删除" : "删除任务"}</button>
@@ -136,7 +144,7 @@ export function AutomationPage({ openSettings }: { openSettings?: () => void }) 
       </Dialog.Content></Dialog.Portal></Dialog.Root>
     <Dialog.Root open={createOpen} onOpenChange={open => { setCreateOpen(open); if (!open) setCreateType(""); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" />
       <Dialog.Content className="dialog automation-create-dialog"><Dialog.Title>新建自动化任务</Dialog.Title><Dialog.Description>{createType ? "填写任务信息，创建后可随时通过 Tab 修改。" : "先选择任务类型，后续配置由对应任务自己提供。"}</Dialog.Description>
-        {!createType ? <div className="automation-create-types">{automationTaskTypes.filter(definition => availableTypes.includes(definition.taskType)).map(definition => <button key={definition.taskType} onClick={() => setCreateType(definition.taskType)}><strong>{definition.name}</strong><span>{definition.description}</span></button>)}</div>
+        {!createType ? <div className="automation-create-types">{creatableTypes.map(definition => <button key={definition.taskType} onClick={() => setCreateType(definition.taskType)}><strong>{definition.name}</strong><span>{definition.description}</span></button>)}</div>
           : findAutomationTaskType(createType)?.renderCreate({ onCreated: result => created(createType, result), onBack: () => setCreateType(""), onCancel: () => { setCreateOpen(false); setCreateType(""); } })}
       </Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>;

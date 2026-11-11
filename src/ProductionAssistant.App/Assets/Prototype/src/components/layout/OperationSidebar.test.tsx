@@ -19,21 +19,23 @@ describe('operation sidebar compatibility', () => {
         category: section.querySelector('.sidebar-section-label')?.textContent,
         names: Array.from(section.querySelectorAll('button')).map(button => button.textContent),
       }))).toEqual([
-        { category: '数据同步', names: ['生产消息 Teable 入库', '每日焊接数据模拟', '数据库查看'] },
-        { category: '数据文件处理', names: ['挂网计划 PDF 导出', '生产会资料拆分', '文件统计汇总'] },
-        { category: '自动化', names: ['自动化任务'] },
+        { category: '生产数据', names: ['生产消息', '每日焊接', '原材料入库'] },
+        { category: '报表与资料', names: ['生产日报', '机加工统计', '挂网计划', '生产会资料'] },
+        { category: '数据报送', names: ['集团填报'] },
+        { category: '工作管理', names: ['任务清单'] },
+        { category: '数据管理', names: ['数据浏览'] },
       ])
       const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('.sidebar-nav button'))
-      expect(buttons.map(button => button.getAttribute('aria-current'))).toEqual([null, 'page', null, null, null, null, null])
-      expect(buttons.map(button => button.getAttribute('data-active'))).toEqual(['false', 'true', 'false', 'false', 'false', 'false', 'false'])
+      expect(buttons.map(button => button.getAttribute('aria-current'))).toEqual([null, 'page', null, null, null, null, null, null, null, null])
+      expect(buttons.map(button => button.getAttribute('data-active'))).toEqual(['false', 'true', 'false', 'false', 'false', 'false', 'false', 'false', 'false', 'false'])
       await act(async () => { buttons.forEach(button => button.click()) })
       expect(navigate.mock.calls).toEqual([
-        ['production-message'], ['daily-weld'], ['database-viewer'], ['plan-pdf'],
-        ['production-meeting'], ['report-center'], ['daily-report'],
+        ['production-message'], ['daily-weld'], ['daily-report:notion_fill'], ['daily-report:daily_report'],
+        ['report-center'], ['plan-pdf'], ['production-meeting'], ['daily-report:tencent_sheet_fill'], ['daily-report'], ['database-viewer'],
       ])
       await act(async () => container.querySelector<HTMLButtonElement>('.sidebar-bottom button')!.click())
       expect(openSettings).toHaveBeenCalledTimes(1)
-      expect(navigate).toHaveBeenCalledTimes(7)
+      expect(navigate).toHaveBeenCalledTimes(10)
     } finally {
       await act(async () => root.unmount())
     }

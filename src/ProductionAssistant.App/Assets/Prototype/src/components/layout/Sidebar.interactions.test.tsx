@@ -58,7 +58,7 @@ it('keeps the mobile Sheet themed, traps focus, and restores its Header trigger 
 it('closes after selecting a module and returns focus without replacing the business slot', async () => {
   const editor = container.querySelector('textarea')
   await open()
-  await act(async () => sheet()!.querySelector<HTMLButtonElement>('[aria-label="数据库查看"]')!.click())
+  await act(async () => sheet()!.querySelector<HTMLButtonElement>('[aria-label="数据浏览"]')!.click())
   await settleFocus()
   expect(navigate.mock.calls).toEqual([['database-viewer']])
   expect(sheet()).toBeNull()

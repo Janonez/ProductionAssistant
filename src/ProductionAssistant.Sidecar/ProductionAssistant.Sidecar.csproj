@@ -9,4 +9,12 @@
     <ProjectReference Include="..\ProductionAssistant.Bridge\ProductionAssistant.Bridge.csproj" />
     <InternalsVisibleTo Include="ProductionAssistant.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\ProductionAssistant.App\Assets\TencentSheet\*.cjs;..\ProductionAssistant.App\Assets\TencentSheet\*.js"
+             Link="Assets\TencentSheet\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\ProductionAssistant.App\Assets\TencentSheet\node_modules\playwright\**\*"
+             Link="Assets\TencentSheet\node_modules\playwright\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\ProductionAssistant.App\Assets\TencentSheet\node_modules\playwright-core\**\*"
+             Link="Assets\TencentSheet\node_modules\playwright-core\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

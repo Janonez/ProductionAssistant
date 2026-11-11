@@ -48,7 +48,7 @@ it('reserves one Electron drag strip outside all existing React controls', async
   const trigger = container.querySelector<HTMLButtonElement>('[data-slot="sidebar-trigger"]')!
   await act(async () => trigger.click())
   expect(trigger.getAttribute('aria-expanded')).toBe('false')
-  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="数据库查看"]')!.click())
+  await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="数据浏览"]')!.click())
   expect(navigate).toHaveBeenCalledWith('database-viewer')
 })
 

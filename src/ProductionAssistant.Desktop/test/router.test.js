@@ -17,6 +17,17 @@ test('creates distinct 32 character lowercase hexadecimal load identifiers', () 
   assert.notEqual(first, newLoadId());
 });
 
+test('reload and retry preserve each React task category without creating a host route', () => {
+  for (const taskType of ['daily_report', 'notion_fill', 'tencent_sheet_fill']) {
+    const current = `pa://app/index.html?route=daily-report&taskType=${taskType}&loadId=old`;
+    const result = new URL(buildDocumentUrl(current, 'next'));
+    assert.equal(result.searchParams.get('route'), 'daily-report');
+    assert.equal(result.searchParams.get('taskType'), taskType);
+    assert.equal(result.searchParams.get('loadId'), 'next');
+    assert.equal(result.host, 'app');
+  }
+});
+
 test('matches nonblank load identifiers exactly without trimming or case folding', () => {
   assert.equal(isCurrentLoad(' a ', ' a '), true);
   for (const [value, expected] of [[' a ', 'a'], ['A', 'a'], ['', ''], [' \t\r\n', ' \t\r\n'], [null, null], [1, 1], [undefined, undefined], ['a', 1]])

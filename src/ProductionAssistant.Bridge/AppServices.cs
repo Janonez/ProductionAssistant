@@ -12,6 +12,7 @@ internal static class AppServices
     internal static DailyReportTaskHandler DailyReportTasks { get; } = new();
     internal static NotionFillTaskHandler NotionFillTasks { get; } = new();
     internal static TencentSheetTaskHandler TencentSheetTasks { get; } = new(TencentNotion);
+    internal static TencentSessionService TencentSessions { get; } = new(TencentSheetTasks.Service);
     internal static AutomationTaskHandlerRegistry AutomationTaskHandlers { get; } = new([DailyReportTasks, NotionFillTasks, TencentSheetTasks]);
     internal static AutomationTaskRunner AutomationTasks { get; } = new(AutomationTaskHandlers);
     internal static PlanPdfService PlanPdf { get; } = new();

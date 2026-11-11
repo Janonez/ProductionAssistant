@@ -127,4 +127,20 @@ describe('navigateInDocument', () => {
 
     expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'popstate')).toBe(false)
   })
+
+  it.each(['daily_report', 'notion_fill', 'tencent_sheet_fill'])('keeps %s in the existing route query and removes it when leaving the category', taskType => {
+    history.replaceState(null, '', '?route=daily-report&loadId=host&foo=keep')
+    expect(navigateInDocument(`daily-report:${taskType}`)).toBe(true)
+    const query = new URLSearchParams(location.search)
+    expect(query.get('route')).toBe('daily-report')
+    expect(query.get('taskType')).toBe(taskType)
+    expect(query.get('loadId')).toBe('host')
+    expect(query.get('foo')).toBe('keep')
+    expect(navigateInDocument(`daily-report:${taskType}`)).toBe(false)
+    expect(navigateInDocument('daily-report')).toBe(true)
+    expect(new URLSearchParams(location.search).has('taskType')).toBe(false)
+    expect(navigateInDocument(`daily-report:${taskType}`)).toBe(true)
+    expect(navigateInDocument('daily-weld')).toBe(true)
+    expect(new URLSearchParams(location.search).has('taskType')).toBe(false)
+  })
 })

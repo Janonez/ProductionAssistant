@@ -8,6 +8,7 @@ import { AppLayout } from '../components/layout/AppLayout'
 import { ThemeProvider } from '../components/layout/ThemeProvider'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import ProductionMessagePage from '../features/production-message/ProductionMessagePage'
+import { GroupSubmissionPage } from '../features/group-submission/GroupSubmissionPage'
 const AutomationPage = lazy(() => import('../features/daily-report/AutomationPage').then(module => ({ default: module.AutomationPage })))
 const DailyWeldPage = lazy(() => import('../features/daily-weld/DailyWeldPage').then(module => ({ default: module.DailyWeldPage })))
 const PlanPdfPage = lazy(() => import('../features/plan-pdf/PlanPdfPage').then(module => ({ default: module.PlanPdfPage })))
@@ -29,7 +30,8 @@ class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void
 
 
 export function App() {
-  const { route, loadId } = useHostRoute()
+  const { route, loadId, taskType } = useHostRoute()
+  const groupSubmission = route === ROUTES.dailyReport && taskType === 'tencent_sheet_fill'
   const [settingsOpen, setSettingsOpen] = useState(false)
 
 
@@ -41,16 +43,17 @@ export function App() {
   }, [])
 
   return <ThemeProvider>
-    <AppLayout route={route} navigate={goTo} openSettings={() => setSettingsOpen(true)}>
+    <AppLayout route={route} taskType={taskType} navigate={goTo} openSettings={() => setSettingsOpen(true)}>
       <div
-        key={route}
-        className={`pa-legacy-content ${route === ROUTES.productionMessage || route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}`}
+        key={`${route}:${taskType}`}
+        className={groupSubmission ? 'min-w-0' : `pa-legacy-content ${route === ROUTES.productionMessage || route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}`}
+        data-shadcn-surface={groupSubmission ? '' : undefined}
         data-page-route={route}
       >
         <LoadBoundary>
           <Suspense fallback={<RouteSkeleton route={route} />}>
             <RouteReady route={route} loadId={loadId} />
-            {route === ROUTES.productionMessage ? <ProductionMessagePage /> : route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : route === ROUTES.planPdf ? <PlanPdfPage /> : route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : route === ROUTES.dailyReport ? <AutomationPage openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+            {taskType === null ? <p role="alert">任务分类无效，请从左侧重新选择业务分类。</p> : route === ROUTES.productionMessage ? <ProductionMessagePage /> : route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : route === ROUTES.planPdf ? <PlanPdfPage /> : route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : groupSubmission ? <GroupSubmissionPage /> : route === ROUTES.dailyReport ? <AutomationPage taskType={taskType} openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
 
           </Suspense>
         </LoadBoundary>

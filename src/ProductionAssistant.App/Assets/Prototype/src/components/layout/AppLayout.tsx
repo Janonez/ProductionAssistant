@@ -2,7 +2,7 @@
 // Copyright (c) 2024 Sat Naing. MIT; see docs/third-party/shadcn-admin-LICENSE.txt.
 import type { ReactNode } from 'react'
 import { Settings2 } from 'lucide-react'
-import { SIDEBAR_MODULES } from '../../routes/routeTable'
+import { ROUTES, SIDEBAR_MODULES, navigationKey, navigationModule, type AutomationTaskFilter } from '../../routes/routeTable'
 import { SidebarInset, SidebarProvider } from '../ui/sidebar'
 import { Button } from '../ui/button'
 import { Header } from './AppHeader'
@@ -16,15 +16,16 @@ export function hasNativeTitleBar(location: Pick<Location, 'protocol' | 'hostnam
 export function hasElectronTitleBar(location: Pick<Location, 'protocol' | 'hostname'>) {
   return location.protocol === 'pa:' && location.hostname === 'app'
 }
-export function AppLayout({ route, navigate, openSettings, children }: { route: string; navigate: (route: string) => void; openSettings: () => void; children: ReactNode }) {
+export function AppLayout({ route, taskType = '', navigate, openSettings, children }: { route: string; taskType?: AutomationTaskFilter | null; navigate: (route: string) => void; openSettings: () => void; children: ReactNode }) {
   const { resolvedTheme } = useTheme()
   // Each host reserves its own native title-bar area; browser previews reserve none.
   const winui = hasNativeTitleBar(window.location)
   const electron = hasElectronTitleBar(window.location)
-  const title = SIDEBAR_MODULES.find(module => module.route === route)?.name ?? SIDEBAR_MODULES[0].name
+  const module = taskType === null ? undefined : navigationModule(route, taskType)
+  const title = taskType === null ? '无效任务分类' : module?.name ?? SIDEBAR_MODULES[0].name
   return <SidebarProvider className={`desktop-shell pa-shell-theme h-svh min-h-0 overflow-hidden ${resolvedTheme === 'dark' ? 'dark' : ''}`} data-winui={winui} data-electron={electron}>
     {electron && <div className="pa-electron-titlebar" aria-hidden="true">生产助手</div>}
-    <OperationSidebar active={route} navigate={navigate} openSettings={openSettings} />
+    <OperationSidebar active={taskType === null ? '' : module ? navigationKey(module) : route} navigate={navigate} openSettings={openSettings} />
     <SidebarInset className="@container/content min-h-0 min-w-0 overflow-hidden">
       <Header className="shrink-0" data-shadcn-surface="" aria-label="页面工具栏">
         <span className="min-w-0 truncate text-sm font-medium" data-current-page-title="">{title}</span>
@@ -33,7 +34,7 @@ export function AppLayout({ route, navigate, openSettings, children }: { route: 
           <Button variant="ghost" size="icon" aria-label="打开设置" aria-haspopup="dialog" onClick={openSettings}><Settings2 /></Button>
         </div>
       </Header>
-      <div className="pa-page-scroll min-h-0 flex-1 overflow-auto">
+      <div className="pa-page-scroll min-h-0 flex-1 overflow-auto" style={{ scrollbarGutter: route === ROUTES.dailyReport && taskType === 'tencent_sheet_fill' ? 'stable' : undefined }}>
         <PageContainer fluid className="min-w-0">{children}</PageContainer>
       </div>
     </SidebarInset>

@@ -1,5 +1,52 @@
 # ProductionAssistant 交接状态
 
+## T1 / T1-A / T2.1 第一阶段 Git 交付入口（2026-11-11）
+
+- Git 交付起点为 `codex/tencent-session-vertical-slice`，HEAD `ed3f8e19e7992acd3ca970d435f1d2533f0df815`。用户已确认第一阶段真实 Electron 人工验收通过，并授权将全部 T1/T1-A/T2.1 修改作为一次逻辑提交推送、创建 PR，CI 与仓库保护规则通过后 Squash Merge 到 main；保留功能分支，不更新稳定版、版本号或 Release。
+- 闪现根因是 Group 页面单独 lazy 加载时，Suspense 按 `daily-report` 选择了旧 AutomationSkeleton，用户看到的文案与该占位逐字一致，并非额外的旧页面保持状态。App 改为直接导入 GroupSubmissionPage，连接列表/配置异步读取期间用已有 shadcn Skeleton 组成四指标占位；其他 lazy 页面和通用任务清单保持。
+- 水平偏移已用显示真实滚动条的 localhost 浏览器复现：1600px 下短页 `left=412`，长设置页滚动条占 10px 后 `left=407`。仅集团填报的 `.pa-page-scroll` 设置 `scrollbar-gutter: stable`，修复后两者均为 `407`，卡片/Tab 左边缘和容器宽度也相同；未发现 Tab 内容位移动画，不固定卡片宽度或补偿 margin。
+- 本轮修改文件：`src/.../Prototype/src/app/{App.tsx,App.startup.test.tsx}`、`components/layout/{AppLayout.tsx,AppLayout.test.tsx}`、`features/group-submission/{GroupSubmissionPage.tsx,SubmissionWorkbench.tsx}`、`tests/tencent-sheet/check-ui.cjs`、`docs/tencent-sheet-development.md`、本 STATUS 和随源码重生成的 dist。旧 dist 现场保存在 `artifacts/t2-1-validation-20261111/dist-before-stability`。
+- 新增覆盖：从生产消息进入集团时，列表/配置分别等待的全过程不出现旧自动化占位；三标签与四指标 Skeleton；仅集团滚动容器保留 gutter；浏览器从任务清单冷进入，监听瞬时旧正文；在 1600/960px 下以空/60 条历史及长设置执行历史→设置→填报循环，等待字体与有限动画结束后核对页面、卡片、Tab 左边缘及宽度；原任务清单完整回归保留。
+- 本轮命令均退出 0（日志在 `artifacts/t2-1-validation-20261111/`）：React 专项 `npm.cmd --prefix src/ProductionAssistant.App/Assets/Prototype test -- src/app/App.startup.test.tsx src/components/layout/AppLayout.test.tsx src/components/layout/LoadingSkeleton.test.tsx src/features/group-submission/GroupSubmissionPage.test.tsx src/features/daily-report/AutomationPage.categories.test.tsx`，39/39（`ui-stability-react.log`）；`npm.cmd --prefix src/ProductionAssistant.App/Assets/Prototype run build`（`ui-stability-build.log`）；`node tests/tencent-sheet/check-ui.cjs`（临时 NODE_PATH，结束恢复，`ui-stability-browser.log`）；React 全量 362 通过/1 既有跳过（`ui-stability-react-full.log`）。修复前的布局实测保留在 `ui-layout-before.log`。
+- 完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 不带 SkipRestore / SyncRelease，退出 0（`ui-stability-verify.log`）：React 362 通过/1 项既有符号链接 EPERM 跳过、TypeScript/Vite、浏览器稳定性与旧任务回归、Electron 91/91、.NET 370/370、Release 构建和 Development 发布通过。npm 32 项审计、Vite 大块、PRI249 既有警告保持，不自动升级或弱化检查。
+- 发布后读取文件集合与 SHA256 核对退出 0：源码 dist 和 `deployments/development/Assets/Prototype` 的 119 个文件全部一致，6 个 Worker 脚本一致。使用包自带 `node src/ProductionAssistant.Desktop/node_modules/electron/install.js` 恢复锁定的官方 Electron 45.0.0，退出 0（`ui-stability-electron-runtime.log`），已核对 version 与 exe，供用户手动启动；本轮不操控或启动桌面。
+- 用户已确认 Development 更新后的第一阶段真实 Electron 人工验收通过，包括集团入口旧内容闪现及三标签水平偏移、抖动修复；自动验证和 Development 发布也已完成，现进入 Git 交付阶段。该确认不等于生产填报、云端保存或调度能力验收。本轮无生产单元格写入、Profile 删除/重置或稳定版更新，`--no-sandbox` 保持独立安全待办，仍需评估 Sandbox 与扫码兼容性。
+
+## T2.1 第一阶段此前验证记录（2026-11-11，历史）
+
+- 继续 `codex/tencent-session-vertical-slice`，HEAD `ed3f8e19e7992acd3ca970d435f1d2533f0df815`，保留全部 T1/T1-A/T2.1 未提交与未跟踪文件；不提交、推送、创建 PR、合并或更新稳定版。
+- 正式集团填报已由 App 直接加载独立 `GroupSubmissionPage`，三标签为填报/历史记录/设置；旧任务详情、录制和自定义能力由任务清单保留，不嵌入新工作台。
+- 链接、会话、历史复用已有 Bridge/Sidecar 允许操作；新页面不调用未开放的取数、写入或调度，不编造成功。补上文档配置响应身份校验与回归，避免切换连接时显示旧配置。
+- 上轮文档补丁上下文错误已按当前原文修复；当前三标签规范、旧五 Tab 消费者、迁移边界、组件来源及人工验收步骤见 [腾讯文档开发说明](docs/tencent-sheet-development.md) 和 [组件来源](docs/third-party/shadcn-admin.md)。
+- 本轮 `git diff --check` 退出 0。React 专项 `npm.cmd --prefix src/ProductionAssistant.App/Assets/Prototype test -- src/features/group-submission/GroupSubmissionPage.test.tsx src/features/daily-report/AutomationPage.categories.test.tsx src/features/daily-report/tencent-sheet/TencentSessionPanel.test.tsx src/app/App.navigation.test.tsx src/routes` 退出 0，7 文件 / 135 项通过。
+- AppLayout 两项失败已关闭，仅修改 `AppLayout.test.tsx`：集团填报正式入口按设计使用 shadcn 表面，其余页面保留 `.pa-legacy-content`；`data-business-page` 只由本测试的旧页面替身生成，没有运行时消费者。改为核对真实集团页面三标签和主题边界，并增加 URL 直达、返回任务清单和侧栏实例保留回归；生产布局和路由未改。原失败日志 `react-full.log` 保留。
+- 本轮命令与结果（均保存到 `artifacts/t2-1-validation-20261111/`）：`npm.cmd --prefix src/ProductionAssistant.App/Assets/Prototype test -- src/components/layout/AppLayout.test.tsx src/components/layout/AppLayout.electron.test.tsx src/components/layout/Sidebar.interactions.test.tsx` 退出 0，16/16（`applayout-fixed.log`）；上述 T2.1 专项重跑退出 0，135/135（`react-targeted-fixed.log`）；`npm.cmd --prefix src/ProductionAssistant.App/Assets/Prototype test` 退出 0，361 通过 / 1 项既有符号链接 EPERM 跳过（`react-full-fixed.log`）。
+- TypeScript 命令 `& 'src/ProductionAssistant.App/Assets/Prototype/node_modules/.bin/tsc.cmd' --noEmit --project 'src/ProductionAssistant.App/Assets/Prototype/tsconfig.json'` 退出 0（`typescript.log`）；`npm.cmd --prefix src/ProductionAssistant.App/Assets/Prototype run build` 退出 0（`vite-build.log`）；`npm.cmd --prefix src/ProductionAssistant.Desktop test` 退出 0，91/91（`electron-tests.log`）；`dotnet test tests/ProductionAssistant.Tests/ProductionAssistant.Tests.csproj -c Release -p:Platform=x64 --filter 'FullyQualifiedName~Tencent|FullyQualifiedName~SidecarLocalConfigurationTests|FullyQualifiedName~ArchitectureTests'` 退出 0，103/103（`dotnet-related.log`）。
+- 旧任务清单浏览器失败已修复，仅改 `tests/tencent-sheet/check-ui.cjs`：无 taskType 的任务清单先展示类型选择器，旧脚本漏选“腾讯文档填报”；现断言选类型前无链接字段，选中后等待真实配置区域，再填写链接。未改生产组件、加超时、删断言或跳过旧流程。原失败日志 `verify-full.log` 保留。
+- 专项命令 `node tests/tencent-sheet/check-ui.cjs`（按开发说明临时设置 NODE_PATH，结束恢复）退出 0，完整保留新工作台和旧录制/自定义/示范/前后台模拟执行检查，日志 `ui-browser-fixed.log`。随后完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 不带 SkipRestore / SyncRelease，退出 0，日志 `verify-after-ui-fix.log`：Teable、Node 会话/保存/Frame、字体 lint、React 361 通过 / 1 项既有符号链接权限跳过、TypeScript/Vite、新旧 UI 浏览器回归、Electron 91/91、.NET 370/370、Release 构建及 Development 发布均通过。
+- Development 已由完整 verify 发布，无需重复发布。源码 `Assets/Prototype/dist` 与 `deployments/development/Assets/Prototype` 的 122 个文件路径集合和 SHA256 全部一致，6 个 Worker 脚本也一致，核对命令退出 0。dist 是本轮前端真实构建差异，不还原或提交；原始副本 `dist-before` 保留。npm 既有 32 项审计、Vite 大块及 PRI249 警告保留，不自动升级。
+- 已执行用户指定 `npm.cmd --prefix src/ProductionAssistant.Desktop start -- --environment Development`，官方包原生安装器恢复 Electron 运行时，启动会话保持运行。用户明确要求自行手动验收，已停止电脑控制；窗口检查请求未获准，未执行点击或输入。附加读取 Development 启动日志遭沙箱 Access denied，已停止读取，不影响上述自动验证结果。
+- 当前停在用户人工验收节点：检查正式导航三标签、链接保存/放弃/刷新恢复、真实打开/重新检查/关闭、状态与恢复建议和任务清单旧入口。真实扫码/冷启动会话仍待验收；自动检查使用 localhost / 模拟 Bridge，不代表生产填报成功。本轮未写生产单元格、删除或重置 Profile，Edge `--no-sandbox` 保持独立待办；不提交、推送、PR、合并或更新稳定版。
+
+## T1-A 自动验证记录（2026-11-10，非 T2.1 验证结果）
+
+- 当前分支 `codex/tencent-session-vertical-slice`，HEAD `ed3f8e19e7992acd3ca970d435f1d2533f0df815`；全部 T1 / T1-A 修改未提交。本轮不提交、推送、创建 PR、合并、更新稳定版或实施 T2—T6。
+- 导航已按 Metis 分类组织，集团填报位于数据报送；七个既有路由保留，任务分类使用 `daily-report` 的 `taskType` 参数。任务清单仍展示全部类型，规划入口隐藏，Teable、自定义录制、执行和定时消费者保留。
+- 文档链接使用任务已有 `config.documentUrl` 和本地存储；显式保存／放弃草稿，未保存时阻止检查新目标，无效链接不能覆盖原配置。真实 Sidecar 进程重启后配置与三类任务身份恢复测试通过。
+- 会话页自动读取状态，提供“打开并检查”“重新检查”“关闭浏览器”，继续复用原四个 Bridge 操作及持久化 Context。当前状态、历史检查时间、身份与文档访问分别表达，关闭浏览器不清除登录资料。
+- 类型边界统一为 `AutomationTaskFilter`；外部 URL 无效或重复分类明确报错，不回退到其他业务列表。Sidecar 精确集合为协议 81 / 允许 29 / 未迁移 52；T1-A 仅增加本地配置 `tencentSheet.create/save`，退役及未知接口仍在分发前拒绝。
+- 本轮完整 `pwsh -NoProfile -File .\scripts\verify.ps1`（不带跳过还原或稳定版参数）退出 0：Teable 三组转换、Node Frame／保存／会话、字体 lint、React 349 通过／1 项既有符号链接 EPERM 跳过、TypeScript / Vite、完整 UI 浏览器回归、Electron 91/91、.NET 370/370、Release 构建和 Development 发布均通过。
+- UI 严格模式修复只改测试：状态提示限定到会话 region / status / paragraph，详情以 definition 单独核对，保留关闭、登录、访问、未知和恢复断言；未使用 first/nth、固定 sleep 或扩大超时。
+- verify 后源码 dist 与 Development 的 120 个文件路径及 SHA256 全部一致，六个 Worker 脚本也一致。Electron 45.0.0 官方运行时已在依赖重装后恢复，未启动应用。191 个运行源码文件的退役登录接口扫描无消费者。
+- 保留既有 npm 审计 32 项、弃用提示、Vite 大块提示及 PRI249 构建警告，未自动升级依赖。Edge Sandbox 启动参数未改，`--no-sandbox` 提示与独立测试 Profile 的 Sandbox／扫码兼容性评估仍待完成；不得据本轮自动验证宣称已解决。
+- 详细行为与人工验收步骤见[腾讯文档开发说明](docs/tencent-sheet-development.md)，导航契约见[导航设计](docs/navigation-contract-design.md)。下列旧模块状态及历史记录不替代当前 T1-A 入口。
+
+## 下次入口
+
+1. 第一阶段代码、完整自动验证、Development 发布及用户真实 Electron 人工验收均已完成。先核对 Git 现场，再审查全部已跟踪和未跟踪交付文件，按路径暂存，执行一次逻辑提交。
+2. 推送当前功能分支，按实际 PR 模板创建到 main 的 PR；检查完整变更、CI、冲突和阻塞审查意见，满足保护规则后 Squash Merge，不绕过审批。CI 未完成时遵守 AGENTS.md 的等待规则。
+3. 合并后核对 PR、合并 SHA、main 与 origin/main 及工作区；保留功能分支，不进入第二、第三阶段，不控制桌面、不写生产数据、不重置 Profile、不更新稳定版或发布 Release。Edge `--no-sandbox` 独立安全评估仍未完成。
+
 ## 当前状态
 
 - 腾讯文档填报：**未解决，暂缓修复，后续重新梳理**。用户授权合并 [PR #87](https://github.com/Janonez/ProductionAssistant/pull/87) 的防御性修改，不代表 Development 真实填报验收通过；稳定版、版本号和 Release 不更新。修改包括只读登录预检遇到 Frame detached 后重新获取 frames（最多三次）、明确保存前不刷新、刷新后名称框试点击及剩余超时预算、本地回读与云端保存状态分开；不增加导航、输入或提交重试。
@@ -16,7 +63,7 @@
 - 字体试验保留原版 Inter Variable → Noto Sans SC Variable → sans-serif，将新外壳内 Tailwind 默认字体变量统一到现有 `--font-ui`；没有改变上游布局、字号、字重、平滑或旧页面。长期组件复用规则见 [前端规范](docs/frontend-ui-standards.md)，AGENTS.md 已强制引用；字体继续作为试验方案记录，尚未正式定稿。
 - 核查结论：保留现有 React/Vite、查询参数路由和统一桥接，渐进接入 shadcn-admin；日报完整工作流仍有 Sidecar 接口缺口。详细事实、能力表和验收边界只在 UI-0 文档维护。
 
-## 下次入口
+## UI 阶段历史入口（非本轮接续）
 
 1. 只读检查 `git status -sb`、`git worktree list`、分支和最近提交，按实际状态更新判断。
    - 腾讯填报保持“未解决／暂缓修复”；本次仅按用户授权合并 PR #87。后续从登录成功判据、专用浏览器冷启动会话复用、控件录制、零值写入与云端保存确认的完整流程重新梳理，先只读取证并制定方案；未经重新授权，不继续真实填报、补写或清除防重记录。
@@ -118,3 +165,16 @@
 ## 归档
 
 历史实现和验证证据以 git log、对应 PR 和专题文档为准。
+
+### T1-A 前的收尾记录（历史）
+
+- 当前分支 `codex/tencent-session-vertical-slice`，基线 `ed3f8e19e7992acd3ca970d435f1d2533f0df815`；现有 T1 修改未提交，不提交、推送、开 PR 或合并，不更新稳定版。
+- 已实现：React 四个会话操作经 Bridge / Sidecar、.NET 服务和 Worker 调用 Playwright 原生持久化 Context；沿用环境专用 Profile、单一 Worker 租约和原生 Context 关闭，不增加 MCP、CDP 探针或会话框架。源码接通不代表宿主调用链已验收。
+- 已验证：`node tests/tencent-sheet/check-session.cjs` 和同文件 `--browser` 均退出 0，`git diff --check` 通过。公开 API 实测 Edge `157.0.4341.46`、登录有头模式；原 `:has()` / `login-required`、持久 Cookie、关闭重开、独立进程复用、失效、无权限、只读及真实启动/导航取消通过。
+- 自动验证收尾通过：完整 `pwsh -NoProfile -File .\scripts\verify.ps1`（无跳过还原、无稳定版参数）退出 0；三组 Teable 转换检查、Node 状态/保存/Frame 回归、字体 lint、React 329 通过 / 1 项既有跳过（符号链接 EPERM）、TypeScript / Vite、完整 UI 浏览器回归、Electron 90/90、.NET 368/368、Release 构建和 Development 发布均通过。此前 15 项 Node 回归保留为已有证据；未无理由重跑 Edge 生命周期。保留 npm 审计 32 项、弃用提示、Vite 大块提示及 PRI249 构建警告，未自动升级依赖。
+- 依赖问题已定位：Playwright 及 playwright-core 1.62.1 原已安装于腾讯文档资产包，外部测试目录的 CommonJS 查找范围不包含该位置；上一轮直接命令缺少文档要求的 `NODE_PATH`。verify 现统一在还原依赖后设置临时路径，结束时恢复原值，并在前端构建后运行 UI 回归。后台模拟提交已验证一次请求、成功响应、可见完成提示及操作恢复；提示包含关闭按钮文本，原精确文本定位不适配。
+- 产物核对通过：源码 dist 与 Development 的 120 个文件路径及 SHA256 全部一致，且与本轮前基线一致；Sidecar Release 与 Development 的 6 个 Worker 脚本均与源码一致、无额外脚本，两份 Playwright 包均为 1.62.1。官方 Electron 45.0.0 安装器恢复运行时成功（缓存未命中，官方下载并校验）；未启动应用。
+- 当前下一步：按开发说明执行真实 Electron Development 人工验收，不继续实现 T2—T6。分层证据包括 UI 模拟 Bridge、实际 Sidecar 四操作协议/权限测试、Worker 生命周期测试和此前真实 Edge 本地测试，尚不代表真实腾讯扫码的完整宿主调用链已验收。独立环境探针已废弃。
+- 尚待人工验收：真实 Electron Development 扫码、状态检查、正常退出、应用冷启动复用、失效恢复、无权限/未知反馈和多实例独占。全过程不输入生产业务单元格；自动测试和本地 Cookie 不替代这些验收。
+- 详细设计、验证边界与操作步骤见 [腾讯文档开发说明](docs/tencent-sheet-development.md)。下列历史模块状态保留，不作为当前 T1 的接续入口。
+- 自动化配置设计校准已记录于[前端规范](docs/frontend-ui-standards.md#自动化配置设计原则)，PLAN 与开发说明均已引用；后续设计与审查按该原则执行，本次文档更新不扩大 T1 收尾范围。
