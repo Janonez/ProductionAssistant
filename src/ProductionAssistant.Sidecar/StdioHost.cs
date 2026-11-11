@@ -16,10 +16,16 @@ internal sealed class StdioHost : IBridgeHost
         "database.getSchema",
         "database.inspect",
         "tencentSheet.get",
+        "tencentSheet.create",
+        "tencentSheet.save",
         "tencentSheet.runs",
         "tencentSheet.sources",
         "tencentSheet.schema",
         "tencentSheet.views",
+        "tencentSheet.sessionStatus",
+        "tencentSheet.sessionOpen",
+        "tencentSheet.sessionVerify",
+        "tencentSheet.sessionClose",
         "notionFill.runs",
         "settings.open",
         "settings.saveNotification",
@@ -75,6 +81,7 @@ internal sealed class StdioHost : IBridgeHost
             var completion = Task.WhenAll(tasks);
             if (await Task.WhenAny(completion, Task.Delay(TimeSpan.FromSeconds(10))) != completion)
                 Mark("等待在途请求超过 10 秒，宿主结束。");
+            await AutomationLauncher.ShutdownAsync();
         }
         return 0;
     }

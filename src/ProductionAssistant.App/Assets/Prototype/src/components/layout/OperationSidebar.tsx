@@ -1,12 +1,12 @@
 // Adapted from AppSidebar/AppTitle in satnaing/shadcn-admin @ e16c87f.
 // Copyright (c) 2024 Sat Naing. MIT; see docs/third-party/shadcn-admin-LICENSE.txt.
 import { CalendarCheck, ChartNoAxesCombined, Command, Database, FileOutput, Files, Inbox, Settings2, Workflow } from 'lucide-react'
-import { SIDEBAR_MODULES } from '../../routes/routeTable'
+import { SIDEBAR_MODULES, navigationKey } from '../../routes/routeTable'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail } from '../ui/sidebar'
 import { NavGroup } from './NavGroup'
 
 export const modules = SIDEBAR_MODULES
-const icons = [Inbox, CalendarCheck, Database, FileOutput, Files, ChartNoAxesCombined, Workflow]
+const icons: Record<string, typeof Inbox> = { 'production-message': Inbox, 'daily-weld': CalendarCheck, 'database-viewer': Database, 'plan-pdf': FileOutput, 'production-meeting': Files, 'report-center': ChartNoAxesCombined, 'daily-report': Workflow }
 const categories = [...new Set(modules.map(module => module.category))]
 
 export function OperationSidebar({ active, navigate, openSettings }: {
@@ -25,7 +25,7 @@ export function OperationSidebar({ active, navigate, openSettings }: {
     </SidebarHeader>
     <SidebarContent id="business-navigation" className="sidebar-nav" role="navigation" aria-label="业务模块">
       {categories.map(category => <NavGroup key={category} title={category} active={active} navigate={navigate}
-        items={modules.map((module, index) => ({ ...module, icon: icons[index] })).filter(module => module.category === category)} />)}
+        items={modules.filter(module => module.category === category).map(module => ({ ...module, route: navigationKey(module), icon: icons[module.route] }))} />)}
     </SidebarContent>
     <SidebarFooter className="sidebar-bottom">
       <SidebarMenu><SidebarMenuItem><SidebarMenuButton tooltip="设置" aria-haspopup="dialog" onClick={openSettings}>

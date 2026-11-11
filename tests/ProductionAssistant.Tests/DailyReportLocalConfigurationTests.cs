@@ -34,24 +34,18 @@ public sealed class DailyReportLocalConfigurationTests : IDisposable
     }
 
     [Fact]
-    public async Task Real_host_has_exactly_twenty_three_operations_and_rejects_all_other_fifty_eight()
+    public async Task Real_host_only_allows_migrated_operations_and_rejects_unmigrated_and_retired_operations()
     {
-        string[] expected =
-        [
-            "production.cancel", "production.getBindings", "weld.getState", "weld.generate",
-            "database.getState", "database.getSchema", "database.inspect",
-            "tencentSheet.get", "tencentSheet.runs", "tencentSheet.sources", "tencentSheet.schema", "tencentSheet.views",
-            "notionFill.runs", "settings.open", "settings.saveNotification", "settings.saveNotificationRules",
-            "automation.list", "daily.list", "daily.get", "daily.runs", "report.getState", "daily.create", "daily.saveTemplate"
-        ];
-        Assert.Equal(23, StdioHost.AllowedOperations.Count);
+        var expected = SidecarLocalConfigurationTests.ExpectedAllowedOperations;
         Assert.True(StdioHost.AllowedOperations.SetEquals(expected));
+        Assert.Equal(expected.Length, StdioHost.AllowedOperations.Count);
         var blocked = PrototypeBridgeProtocol.AllowedOperations.Except(expected).ToArray();
-        Assert.Equal(58, blocked.Length);
+        Assert.Equal(SidecarLocalConfigurationTests.ExpectedUnmigratedOperations.Length, blocked.Length);
+        Assert.True(blocked.ToHashSet(StringComparer.Ordinal).SetEquals(SidecarLocalConfigurationTests.ExpectedUnmigratedOperations));
         foreach (var operation in new[] { "daily.saveBasics", "daily.setEnabled", "daily.delete", "daily.sendToday" })
             Assert.Contains(operation, blocked);
         await using var host = new HostSession();
-        foreach (var operation in blocked.Append("unknown.operation"))
+        foreach (var operation in blocked.Concat(SidecarLocalConfigurationTests.RetiredLoginOperations).Append("unknown.operation"))
         {
             var response = await host.SendAsync(operation);
             Assert.False(response.GetProperty("ok").GetBoolean());

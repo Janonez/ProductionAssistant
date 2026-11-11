@@ -1,5 +1,32 @@
 # 导航契约设计
 
+## 当前实现：Metis T1-A（2026-11-10）
+
+以下为当前开发分支的导航契约；后文保留早期迁移设计与当时证据，不以旧分类覆盖本节。未提交、未合并，尚待真实 Electron Development 人工验收。
+
+| 业务分类 | 当前入口 | 既有路由与筛选 |
+|---|---|---|
+| 生产数据 | 生产消息 | `production-message` |
+| 生产数据 | 每日焊接 | `daily-weld` |
+| 生产数据 | 原材料入库 | `daily-report&taskType=notion_fill` |
+| 报表与资料 | 生产日报 | `daily-report&taskType=daily_report` |
+| 报表与资料 | 机加工统计 | `report-center` |
+| 报表与资料 | 挂网计划 | `plan-pdf` |
+| 报表与资料 | 生产会资料 | `production-meeting` |
+| 数据报送 | 集团填报 | `daily-report&taskType=tencent_sheet_fill` |
+| 工作管理 | 任务清单 | `daily-report`，不指定分类，展示全部任务 |
+| 数据管理 | 数据浏览 | `database-viewer` |
+
+完整地址以 `?route=` 开头。设置继续使用既有弹窗。工作台、项目管理及其项目台账／项目计划／风险管控、内网同步保留在 `NAVIGATION_PLAN`，没有已实现目的地时不显示；不创建占位页。旧顶级分类“数据同步”“数据文件处理”“自动化”不再作为菜单分组。
+
+- `routeTable.ts` 集中维护规划和已实现入口，Sidebar 与 Header 共用。七个路由标签、旧 `navigation:` 前缀归一、默认页、`loadId`、RouteReady 和懒加载边界保留；分类入口没有增加宿主路由。
+- 任务分类沿用后端 `AutomationTaskSummary.TaskType`，不按任务名称匹配。`daily_report`、`notion_fill`、`tencent_sheet_fill` 来自各 Handler 的独立存储；`notion_fill` 是现有 93 系统至 Teable 业务的兼容名称，不表示恢复 Notion 依赖。新建、配置、启停及运行仍由原消费者负责，不复制 AutomationPage 或改变数据格式；既有 Electron 权限边界保持独立。
+- `AutomationTaskFilter` 是唯一分类类型，分类导航映射有穷尽类型约束。`useHostRoute` 明确返回该类型，外部 URL 在边界验证；缺省或空值表示全部任务，未知、大小写错误、空白变体及重复参数显示“任务分类无效”，不读取其他任务。
+- `navigation.ts` 在同一 URL 中写入或清除 `taskType`，保留 `loadId` 和其他参数。App 按路由和分类重新挂载任务页，侧栏高亮与列表标题一致；Electron 重载／重试保留分类查询参数。未新增跨进程的“记住最后页面”存储。
+- Demo 接收路由更新和 Document 带路由启动的测试共用精确菜单契约，并保留文档内切换、不调用原生导航、令牌及高亮断言。回归覆盖三类筛选、全部任务、空状态、新建、启停、有效／无效 URL、重挂载恢复、真实存储及 Sidecar 重启；完整 verify 与产物核对结果见 [STATUS.md](../STATUS.md)。这些证据不等于真实 Electron 人工验收。
+
+## 早期导航迁移设计（历史）
+
 日期：2026-10-15。状态：设计已评审；兼容段已实施（#43–#49）；切换段已实现并通过真实桌面验收（分支 codex/nav-switch，待合并，见 5.2.1）；删除段未实施。更新于 2026-10-20。
 
 源码基线：`285476f`。本轮在用户预建的 `codex/nav-contract-design` 分支抽查，HEAD 与基线一致；开始时工作区干净。本文路径均相对仓库根目录，行号对应该基线，不是后续重构后的永久定位。现有文档的本地行号另列于第 8 节。兼容段完成后 main 为 `7b4ad16`；第 3 节事实依据与行号仍对应设计基线 `285476f`，其中新增的兼容段状态说明另行标注。兼容段涉及的前端文件已变化，切换段开工前必须重新核对。
@@ -64,7 +91,7 @@
 | 导航 ID → 文档加载 ID | 旧 `_navigationId` 每次宿主切页和重试生成；ready 要求它与 route 同时匹配。`src/ProductionAssistant.App/Pages/PrototypePage.xaml.cs:47,119,160,173`；`src/ProductionAssistant.Core/Models/PrototypeBridgeProtocol.cs:89-96` | 兼容段保持旧语义；切换段后只标识宿主本次文档加载，完整重载/重试生成新代次，业务切页不生成；旧文档确认不能显示新文档。线上字段名在切换实现时明确，不把名称等同于业务路由 |
 | bridge 请求 ID | 对应单次请求、响应、进度及超时。`src/ProductionAssistant.App/Assets/Prototype/src/bridge/webview.ts:1-18,31-41` | 请求层继续持有；完成、超时或明确取消时结束，不因 route 变化替换其含义 |
 | auditId / resultId | 识别后端挂网检查和生产会导出结果。`src/ProductionAssistant.App/PrototypeBridge.PlanPdf.cs:33-38,80`；`src/ProductionAssistant.App/PrototypeBridge.Meeting.cs:27-33` | 业务会话层继续校验；按新检查/新导出替换和现有有效性规则失效，不按页面切换失效 |
-| 腾讯登录 sessionToken | 同一登录实例的 start/poll/cancel 使用同一 token；卸载清理仍排入串行队列。`src/ProductionAssistant.App/Assets/Prototype/src/features/daily-report/tencent-sheet/TencentLoginDialog.tsx:26-33,55-64` | 登录会话持有，继续按原登录生命周期清理；不是路由 ID，也不是通用请求 ID |
+| 腾讯文档浏览器会话 | T1 由共享业务服务持有，`TencentSessionPanel` 使用四个明确的会话操作；不再持有二维码登录 token | 离开页面不清除登录资料；显式结束会话或宿主退出时关闭浏览器。路由不充当登录凭据或浏览器所有权标识 |
 
 ## 3. 现状与事实依据
 

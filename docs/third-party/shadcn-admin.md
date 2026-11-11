@@ -42,6 +42,12 @@
 - 无新增依赖或锁文件变更；现有 `@radix-ui/react-dialog` 声明为 `^1.1.15`、锁定安装版本为 `1.1.23`，相关 DismissableLayer 为 `1.1.19`，沿用 React 19 / Vite 6 / Vitest 2。
 - 本地组件结构和许可证已检查；本轮固定提交的官方源码逐行对照因网络 Cache miss 未完成，不声称已通过。自动化、Electron 人工验收和辅助 DOM 检查的实际状态只在根目录 STATUS.md 记录。
 
+## Metis T2.1 业务页面组件
+
+- 新增 `components/ui/{tabs,card,table,alert}.tsx`，沿用同一固定提交 `e16c87f213a5ba5e45964e9b67c792105ec74d26` 的 `src/components/ui/` 同名源码，来自 shadcn-admin 的 shadcn/ui 组件。保留 JSX、data-slot、Tailwind 类和 Radix 交互；只改为现有 `../layout/utils` 相对导入并压缩排版，保留版权声明和既有 MIT 许可证。上轮已读取上述四个固定提交源文件和官方组件文档。
+- 没有覆盖已有 Button / Input / Dialog / DropdownMenu / Sheet 或 Portal 适配。项目没有 `components.json`，沿用固定源码集成方式，不重新初始化。唯一新增直接依赖是 `@radix-ui/react-tabs` 固定 `1.1.13`，peer 范围包含 React 19；Card / Table 无额外依赖，Alert 使用已有 CVA，未升级框架和工具链。锁文件包含 Tabs 的固定依赖与 npm 重写的可选平台元数据。
+- 正式集团填报使用实际 Tailwind 入口 `styles/shadcn-shell.css`、其导入的 `styles/shadcn-theme.css` 及 `typography.css`；App 为该入口设置 `data-shadcn-surface` 并移除旧 `pa-legacy-content`，继承外壳主题。不新增主题或业务 CSS，不使用旧 Demo 样式。自动与人工验收结果统一见 STATUS。
+
 ## 依赖与验证边界
 
 Tailwind CSS / Vite 插件锁定 `4.2.2`；插件声明支持 Vite `^5.2.0 || ^6 || ^7 || ^8`。保留现有 React 19、Vite 6、TypeScript 5 和 Vitest 2；仅增加实际组件使用的 Radix、CVA、clsx、tailwind-merge、tw-animate-css 及 PostCSS。完整锁定结果以 `package-lock.json` 为准。

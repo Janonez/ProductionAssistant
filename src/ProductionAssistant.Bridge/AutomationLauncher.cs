@@ -15,5 +15,8 @@ public static class AutomationLauncher
         {
             Environment.ExitCode = (int)Models.DailyReportExitCode.JobNotFound;
         }
+        finally { await ShutdownAsync(); }
     }
+
+    public static Task ShutdownAsync() => AppServices.TencentSheetTasks.Service.DisposeAsync().AsTask();
 }

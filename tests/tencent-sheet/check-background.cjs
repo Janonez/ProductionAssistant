@@ -39,9 +39,9 @@ async function main(){
     assert.equal(calls.filter(call=>call[0]==='write').length,0);
   }
   inspectionFailures=0;calls=[];
-  await dispatch({...request,operation:'open'});
-  assert.deepEqual(calls,[['open',undefined]]);
-  await dispatch({operation:'close'});
+  await dispatch({...request,operation:'sessionOpen'});
+  assert.deepEqual(calls,[['open',false]]);
+  await dispatch({operation:'sessionClose'});
   assert.deepEqual(calls.at(-1),['close']);
   console.log('PASS: transient preflight retries at most three times with fresh open, permanent failures stop, only preflight errors report check phase; write never retries');
 }

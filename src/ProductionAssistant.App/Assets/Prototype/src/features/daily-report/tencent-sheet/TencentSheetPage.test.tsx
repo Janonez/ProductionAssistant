@@ -6,13 +6,39 @@ vi.mock('../../../bridge/index', () => ({ invoke }));
 import { TencentSheetPage } from './TencentSheetPage';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | undefined;
+const closed = { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown', verifiedAt: null, message: '浏览器已关闭' };
 afterEach(() => { if (root) act(() => root!.unmount()); document.body.innerHTML = ''; });
-it('opens only on request and contains no manual value or old template controls', async () => {
-  const job = { id: 'job', config: { fields: [], rules: {}, documentUrl: 'https://docs.qq.com/sheet/test' } };
-  invoke.mockReset().mockResolvedValue(job);
+it('keeps control configuration opt-in and accessible after closing the login session', async () => {
+  const job = { id: 'job', config: { documentUrl: 'https://docs.qq.com/sheet/test', fields: [], rules: {} } };
+  invoke.mockReset().mockImplementation(async (operation: string) => {
+    if (operation === 'tencentSheet.sessionStatus') return closed;
+    if (operation === 'tencentSheet.sessionOpen') return { ...closed, state: 'login-required', browserOpen: true };
+    if (operation === 'tencentSheet.get') return job;
+    if (operation === 'tencentSheet.sessionClose') return { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown', verifiedAt: null, message: '会话已结束' };
+    return { message: '配置文档已打开' };
+  });
   const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
   await act(async () => root!.render(<TencentSheetPage id="job" changed={() => {}} />));
-  expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get']);
+  const button = (text: string) => [...container.querySelectorAll('button')].find(button => button.textContent === text);
+  await act(async () => button('打开并检查')!.click());
+  await act(async () => button('关闭浏览器')!.click());
+  await act(async () => button('网页控件')!.click());
+  expect(button('开始配置')).toBeUndefined();
+  expect(button('录制网页控件')).toBeDefined();
+  await act(async () => button('录制网页控件')!.click());
+  expect(container.querySelector<HTMLButtonElement>('#tencent-tab-doc')!.disabled).toBe(true);
+  await act(async () => button('开始配置')!.click());
+  expect(invoke.mock.calls.find(call => call[0] === 'tencentSite.open')?.[1]).toMatchObject({ id: 'job' });
+  expect(invoke.mock.calls.map(call => call[0])).toContain('tencentSheet.sessionClose');
+  expect(invoke.mock.calls.map(call => call[0])).not.toContain('tencentSheet.login');
+});
+
+it('opens only on request and contains no manual value or old template controls', async () => {
+  const job = { id: 'job', config: { fields: [], rules: {}, documentUrl: 'https://docs.qq.com/sheet/test' } };
+  invoke.mockReset().mockImplementation(async (operation: string) => operation === 'tencentSheet.sessionStatus' ? closed : job);
+  const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+  await act(async () => root!.render(<TencentSheetPage id="job" changed={() => {}} />));
+  expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get', 'tencentSheet.sessionStatus']);
   expect(container.textContent).not.toMatch(/沿用原模板|保留原任务|高级设置|CSS|起始列/);
   expect(container.querySelectorAll('input[placeholder="输入本次实际数据"]')).toHaveLength(0);
   expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(1);
@@ -21,12 +47,13 @@ it('opens only on request and contains no manual value or old template controls'
   await act(async () => container.querySelector<HTMLButtonElement>('#tencent-tab-control')!.click());
   expect(container.textContent).toContain('网页控件录制');
   expect(container.querySelector('input[type="url"]')).toBeNull();
-  expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get']);
+  expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get', 'tencentSheet.sessionStatus']);
 });
 
 it('starts without preset business and binds a custom data snapshot to inspection and writing', async () => {
   let job: any = { id: 'job', config: { documentUrl: 'https://docs.qq.com/sheet/test', fields: [], rules: {} } };
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
+    if (operation === 'tencentSheet.sessionStatus') return closed;
     if (operation === 'tencentSheet.get') return structuredClone(job);
     if (operation === 'tencentSheet.sources') return { sources: [] };
     if (operation === 'tencentSheet.addField') { job.config.fields.push({ id: 'custom', name: payload.name, unit: payload.unit }); return structuredClone(job); }
@@ -63,6 +90,9 @@ it('starts without preset business and binds a custom data snapshot to inspectio
   await act(async () => button('后台自动测试并填写').click());
   const background = invoke.mock.calls.find(call => call[0] === 'tencentSheet.backgroundTest');
   expect(background?.[1]).toEqual({ id: 'job', businessDate: undefined });
+  expect(container.querySelector('[role="status"]')?.textContent).toBe('已完成×');
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(button('后台自动测试并填写').disabled).toBe(false);
   await act(async () => button('测试与上线').click());
   await act(async () => button('前台测试').click());
   expect(button('确认填报以上 1 项')).toBeUndefined();
@@ -83,6 +113,7 @@ it('starts without preset business and binds a custom data snapshot to inspectio
 it('keeps rule edits across tabs and disables schedules through the real bridge', async () => {
   let job: any = { id: 'job', enabled: true, configRevision: 4, config: { documentUrl: 'https://docs.qq.com/sheet/test', fields: [] } };
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
+    if (operation === 'tencentSheet.sessionStatus') return closed;
     if (operation === 'automation.setEnabled') { job.enabled = payload.enabled; return { enabled: job.enabled }; }
     if (operation === 'tencentSheet.save') { job.config = payload.config; return structuredClone(job); }
     return structuredClone(job);
@@ -103,4 +134,44 @@ it('keeps rule edits across tabs and disables schedules through the real bridge'
   await click('保存任务配置');
   expect(invoke.mock.calls.find(call => call[0] === 'tencentSheet.save')?.[1]).toMatchObject({ configRevision: 4, config: { businessDateRule: { kind: 'relative', offsetDays: 0 } } });
   expect(container.querySelectorAll('[role=tabpanel]')).toHaveLength(1);
+});
+
+it('saves the business URL explicitly, restores it after navigation and never checks an unsaved URL', async () => {
+  let job = { id: 'persisted', configRevision: 3, config: { documentUrl: 'https://docs.qq.com/sheet/saved', fields: [] } };
+  invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
+    if (operation === 'tencentSheet.sessionStatus') return closed;
+    if (operation === 'tencentSheet.get') return structuredClone(job);
+    if (operation === 'tencentSheet.save') {
+      if (!payload.config.documentUrl.startsWith('https://docs.qq.com/')) throw new Error('请使用腾讯文档的 HTTPS 分享链接。');
+      job = { ...job, config: structuredClone(payload.config), configRevision: 4 };
+      return structuredClone(job);
+    }
+    return { ...closed, state: 'unverified', browserOpen: true };
+  });
+  const container = document.createElement('div'); document.body.append(container); root = createRoot(container);
+  const mount = (key: string) => act(async () => root!.render(<TencentSheetPage key={key} id="persisted" changed={() => {}} />));
+  const button = (label: string) => [...container.querySelectorAll('button')].find(item => item.textContent === label)!;
+  const editUrl = async (url: string) => act(async () => {
+    const input = container.querySelector('input[type=url]')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, url);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await mount('first');
+  await editUrl('https://docs.qq.com/sheet/new');
+  expect(button('打开并检查').disabled).toBe(true);
+  expect(container.textContent).toContain('链接尚未保存');
+  await act(async () => button('保存文档配置').click());
+  expect(job.config.documentUrl).toBe('https://docs.qq.com/sheet/new');
+  expect(invoke.mock.calls.some(call => /sessionOpen|sessionVerify/.test(call[0]))).toBe(false);
+  await mount('after-navigation');
+  expect(container.querySelector<HTMLInputElement>('input[type=url]')!.value).toBe(job.config.documentUrl);
+  await act(async () => button('重新检查').click());
+  expect(invoke).toHaveBeenLastCalledWith('tencentSheet.sessionVerify', { documentUrl: job.config.documentUrl }, 60000);
+  await editUrl('https://example.invalid/rejected');
+  await act(async () => button('保存文档配置').click());
+  expect(container.querySelector('[role=alert]')?.textContent).toContain('HTTPS');
+  expect(job.config.documentUrl).toBe('https://docs.qq.com/sheet/new');
+  expect(button('打开并检查').disabled).toBe(true);
+  await mount('after-rejected-save');
+  expect(container.querySelector<HTMLInputElement>('input[type=url]')!.value).toBe('https://docs.qq.com/sheet/new');
 });

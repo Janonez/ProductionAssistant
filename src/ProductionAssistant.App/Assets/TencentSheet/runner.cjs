@@ -6,8 +6,8 @@ const {TencentSheetClient,explainError}=require('./client.cjs');
 const core=require('./core.js');
 const site=require('./site-adapter.cjs');
 const browser=new TencentDocsBrowser(process.argv[2]);
-const {TencentLogin}=require('./login.cjs');
-const login=new TencentLogin(browser);
+const {TencentSession,documentUrl}=require('./session.cjs');
+const session=new TencentSession(browser);
 const client=new TencentSheetClient(browser);
 let confirmation=null;
 let teaching=null;
@@ -17,8 +17,7 @@ let siteTestCell=null;
 const signature=(config,plan,jobId)=>JSON.stringify({config,plan,jobId});
 function normalize(raw={}) {
   const config=core.validate(raw);
-  const url=new URL(config.documentUrl);
-  if(url.protocol!=='https:'||!['doc.weixin.qq.com','docs.qq.com'].includes(url.hostname))throw Error('请粘贴腾讯文档或企业微信文档的 HTTPS 分享链接。');
+  config.documentUrl=documentUrl(config.documentUrl);
   if(raw.webControls)config.webControls=site.normalizeControls(raw.webControls);
   return config;
 }
@@ -84,12 +83,12 @@ async function teach(request,config) {
 }
 async function dispatch(request) {
   const {operation}=request;
-  if(operation==='login') {
-    confirmation=null;teaching=null;siteValidation=null;sheetValidation=null;siteTestCell=null;
-    return login.run(request,request.stage==='cancel'?undefined:normalize(request.config));
+  if(['sessionStatus','sessionOpen','sessionVerify','sessionClose'].includes(operation)) {
+    if(operation!=='sessionStatus'){confirmation=null;teaching=null;siteValidation=null;sheetValidation=null;siteTestCell=null;}
+    const config={...request.config};
+    if(config.documentUrl)config.documentUrl=documentUrl(config.documentUrl);
+    return session.run(operation,config);
   }
-  await login.guard();
-  if(operation==='close'){confirmation=null;teaching=null;siteValidation=null;sheetValidation=null;siteTestCell=null;await browser.close();return {message:'已结束填报浏览器会话，登录状态已保留。'};}
   if(operation.startsWith('site')) {
     confirmation=null;teaching=null;
     const tested=siteValidation;siteValidation=null;
@@ -154,7 +153,6 @@ async function dispatch(request) {
   siteValidation=null;sheetValidation=null;siteTestCell=null;
   const config=normalize(request.config);
   if(operation==='validate'){confirmation=null;teaching=null;return {config};}
-  if(operation==='open'){confirmation=null;teaching=null;return browser.open(config);}
   if(operation==='recognize'){confirmation=null;teaching=null;return client.recognize(config);}
   if(operation==='teach')return teach(request,config);
   teaching=null;
@@ -196,11 +194,19 @@ async function dispatch(request) {
   throw Error('不支持的填报操作。');
 }
 async function main() {
-  for await(const line of readline.createInterface({input:process.stdin,crlfDelay:Infinity})) {
-    try {process.stdout.write(JSON.stringify({ok:true,data:await dispatch(JSON.parse(line))})+'\n');}
-    catch(error){process.stdout.write(JSON.stringify({ok:false,...explainError(error),phase:error.phase||null,completed:error.completed||[],uncertainAddress:error.uncertainAddress||null})+'\n');}
-  }
-  await browser.close();
+  const input=readline.createInterface({input:process.stdin,crlfDelay:Infinity});
+  let closing,ended=false;
+  // EOF must also interrupt an in-flight navigation, not wait for its timeout first.
+  input.once('close',()=>{ended=true;closing=browser.close();closing.catch(()=>{});});
+  process.stdout.once('error',()=>input.close());
+  const respond=value=>{if(!ended&&!process.stdout.destroyed)process.stdout.write(JSON.stringify(value)+'\n');};
+  try {
+    for await(const line of input) {
+      if(ended)break;
+      try {respond({ok:true,data:await dispatch(JSON.parse(line)),browserOpen:!!browser.context});}
+      catch(error){respond({ok:false,...explainError(error),phase:error.phase||null,completed:error.completed||[],uncertainAddress:error.uncertainAddress||null,browserOpen:!!browser.context});}
+    }
+  } finally {if(closing)await closing;else await browser.close();}
 }
 if(require.main===module)main().catch(()=>process.exitCode=1);
 module.exports={normalize,readRetry,dispatch};

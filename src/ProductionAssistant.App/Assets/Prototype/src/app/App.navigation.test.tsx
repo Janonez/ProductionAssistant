@@ -70,7 +70,7 @@ describe('App host navigation compatibility', () => {
 
   it('[nav-switch] switches once for consecutive clicks to the same module', async () => {
     // Every click used to request host navigation; document navigation now ignores repeated clicks on the displayed route.
-    const button = sidebarButton('自动化任务')
+    const button = sidebarButton('任务清单')
     const replaceState = vi.spyOn(window.history, 'replaceState')
 
     try {
@@ -86,7 +86,7 @@ describe('App host navigation compatibility', () => {
       expect(params.get('route')).toBe('daily-report')
       expect(params.get('loadId')).toBe('initial')
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
-      expect(sidebarButton('自动化任务').getAttribute('aria-current')).toBe('page')
+      expect(sidebarButton('任务清单').getAttribute('aria-current')).toBe('page')
       expect(navigationCalls()).toEqual([])
     } finally {
       replaceState.mockRestore()
@@ -98,7 +98,7 @@ describe('App host navigation compatibility', () => {
     const replaceState = vi.spyOn(window.history, 'replaceState')
 
     try {
-      await act(async () => { sidebarButton('生产消息 Teable 入库').click() })
+      await act(async () => { sidebarButton('生产消息').click() })
 
       expect(replaceState).not.toHaveBeenCalled()
       expect(window.location.search).toBe('?route=production-message&loadId=initial')
@@ -115,9 +115,9 @@ describe('App host navigation compatibility', () => {
 
     try {
       await act(async () => {
-        sidebarButton('自动化任务').click()
-        sidebarButton('自动化任务').click()
-        sidebarButton('生产消息 Teable 入库').click()
+        sidebarButton('任务清单').click()
+        sidebarButton('任务清单').click()
+        sidebarButton('生产消息').click()
       })
       await act(async () => { await vi.dynamicImportSettled() })
 
@@ -139,8 +139,8 @@ describe('App host navigation compatibility', () => {
     })
 
     expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
-    expect(container.querySelector('h1')?.textContent).toBe('自动化任务')
-    expect(sidebarButton('自动化任务').getAttribute('aria-current')).toBe('page')
+    expect(container.querySelector('h1')?.textContent).toBe('任务清单')
+    expect(sidebarButton('任务清单').getAttribute('aria-current')).toBe('page')
     expect(navigationCalls()).toEqual([])
   })
 
@@ -166,7 +166,25 @@ describe('App host navigation compatibility', () => {
 })
 
 describe('App host navigation contracts', () => {
-  it('[nav-switch] renders the Debug navigation taxonomy in the Demo sidebar and switches in document', async () => {
+  const expectMetisNavigation = (container: HTMLDivElement) => {
+    expect([...container.querySelectorAll('.sidebar-section')].map(section => ({
+      category: section.querySelector('.sidebar-section-label')?.textContent,
+      names: [...section.querySelectorAll('button')].map(button => button.textContent),
+    }))).toEqual([
+      { category: '生产数据', names: ['生产消息', '每日焊接', '原材料入库'] },
+      { category: '报表与资料', names: ['生产日报', '机加工统计', '挂网计划', '生产会资料'] },
+      { category: '数据报送', names: ['集团填报'] },
+      { category: '工作管理', names: ['任务清单'] },
+      { category: '数据管理', names: ['数据浏览'] },
+    ])
+    expect(container.querySelector('.sidebar-bottom button')?.textContent).toBe('设置')
+    const navigation = container.querySelector('.sidebar-nav')!.textContent
+    for (const unavailable of ['工作台', '项目管理', '项目台账', '项目计划', '风险管控', '内网同步', '数据文件处理', '数据同步', '自动化']) {
+      expect(navigation).not.toContain(unavailable)
+    }
+  }
+
+  it('[nav-switch] applies the Metis navigation contract after a Demo document route update', async () => {
     // The sidebar used to request the host; document navigation now changes route locally while preserving the token.
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const invoke = vi.fn()
@@ -190,28 +208,24 @@ describe('App host navigation contracts', () => {
         history.replaceState({}, '', '?route=navigation:production-message&loadId=sidebar')
         window.dispatchEvent(new PopStateEvent('popstate'))
       })
-      expect(container.textContent).toContain('数据文件处理')
-      expect(container.textContent).toContain('挂网计划 PDF 导出')
-      expect(container.textContent).toContain('生产会资料拆分')
-      expect(container.textContent).toContain('数据同步')
-      expect(container.textContent).toContain('每日焊接数据模拟')
-      expect(container.textContent).toContain('生产消息 Teable 入库')
-      expect(container.textContent).toContain('自动化任务')
-      expect(container.textContent).toContain('文件统计汇总')
-      expect(container.textContent).toContain('自动化任务')
+      expectMetisNavigation(container)
       expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
       expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
-      const dailyReport = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('自动化任务')) as HTMLButtonElement
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息')
+      await act(async () => { container.querySelector<HTMLButtonElement>('.sidebar-nav [aria-label="集团填报"]')!.click(); await vi.dynamicImportSettled() })
+      expect(new URLSearchParams(location.search).get('taskType')).toBe('tencent_sheet_fill')
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toBe('集团填报')
+      const dailyReport = [...container.querySelectorAll('button')].find(item => item.textContent?.includes('任务清单')) as HTMLButtonElement
       await act(async () => { dailyReport.click(); await Promise.resolve() })
       await act(async () => { await vi.dynamicImportSettled() })
 
       const params = new URLSearchParams(window.location.search)
       expect(params.get('route')).toBe('daily-report')
       expect(params.get('loadId')).toBe('sidebar')
+      expect(params.has('taskType')).toBe(false)
       expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
-      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('任务清单')
     } finally {
       await act(async () => root.unmount())
       vi.useRealTimers()
@@ -219,7 +233,7 @@ describe('App host navigation contracts', () => {
     }
   })
 
-  it('[nav-switch] shows only the module taxonomy, has no homepage, and switches in document', async () => {
+  it('[nav-switch] restores the same Metis navigation contract on Document startup', async () => {
     // The sidebar used to request the host; document navigation now preserves the token and updates the displayed module locally.
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const invoke = vi.fn()
@@ -238,32 +252,29 @@ describe('App host navigation contracts', () => {
       await act(async () => { root.render(<App />) })
       await act(async () => { await vi.dynamicImportSettled() })
 
-      expect(container.textContent).toContain('数据文件处理')
-      expect(container.textContent).toContain('挂网计划 PDF 导出')
-      expect(container.textContent).toContain('生产会资料拆分')
-      expect(container.textContent).toContain('数据同步')
-      expect(container.textContent).toContain('每日焊接数据模拟')
-      expect(container.textContent).toContain('生产消息 Teable 入库')
-      expect(container.textContent).toContain('自动化任务')
-      expect(container.textContent).toContain('文件统计汇总')
-      expect(container.textContent).toContain('自动化任务')
+      expectMetisNavigation(container)
       expect(container.textContent).not.toContain('首页')
       expect(container.textContent).not.toContain('概览')
       expect(container.querySelectorAll('.desktop-shell')).toHaveLength(1)
       expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息')
+
+      await act(async () => { container.querySelector<HTMLButtonElement>('.sidebar-nav [aria-label="集团填报"]')!.click(); await vi.dynamicImportSettled() })
+      expect(new URLSearchParams(location.search).get('taskType')).toBe('tencent_sheet_fill')
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toBe('集团填报')
 
       const dailyReport = [...container.querySelectorAll('button')]
-        .find(button => button.textContent?.includes('自动化任务')) as HTMLButtonElement
+        .find(button => button.textContent?.includes('任务清单')) as HTMLButtonElement
       await act(async () => { dailyReport.click(); await Promise.resolve() })
       await act(async () => { await vi.dynamicImportSettled() })
 
       const params = new URLSearchParams(window.location.search)
       expect(params.get('route')).toBe('daily-report')
       expect(params.get('loadId')).toBe('sidebar')
+      expect(params.has('taskType')).toBe(false)
       expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('daily-report')
-      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('自动化任务')
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('任务清单')
     } finally {
       await act(async () => { root.unmount() })
       container.remove()
@@ -298,7 +309,7 @@ describe('App host navigation contracts', () => {
       expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: 'first' })]])
 
       const openProduction = [...container.querySelectorAll('button')]
-        .find(button => button.textContent?.includes('生产消息 Teable 入库')) as HTMLButtonElement
+        .find(button => button.textContent?.includes('生产消息')) as HTMLButtonElement
       await act(async () => { openProduction.click() })
       await act(async () => { await vi.dynamicImportSettled() })
 
@@ -307,7 +318,7 @@ describe('App host navigation contracts', () => {
       expect(params.get('loadId')).toBe('first')
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
       expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
+      expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息')
       expect(invoke).not.toHaveBeenCalledWith('app.navigateNative', expect.anything())
       expect(notifyReady.mock.calls).toEqual([['plan-pdf', 'first'], ['production-message', 'first']])
       expect(readyMessages()).toEqual([[expect.objectContaining({ type: 'app.ready', route: 'plan-pdf', loadId: 'first' })]])
@@ -444,12 +455,12 @@ describe('legacy navigation prefix host contract', () => {
   })
 
   it.each([
-    ['daily-weld', '每日焊接数据模拟'],
-    ['database-viewer', '数据库查看'],
-    ['plan-pdf', '挂网计划 PDF 导出'],
-    ['production-meeting', '生产会资料拆分'],
-    ['report-center', '文件统计汇总'],
-    ['daily-report', '自动化任务'],
+    ['daily-weld', '每日焊接'],
+    ['database-viewer', '数据浏览'],
+    ['plan-pdf', '挂网计划'],
+    ['production-meeting', '生产会资料'],
+    ['report-center', '机加工统计'],
+    ['daily-report', '任务清单'],
   ] as const)('[nav-switch] switches to sidebar tag %s from a legacy URL without a host request', async (tag, label) => {
     // 旧契约要求宿主导航；文档内切页只更新 route 并保留 loadId。
     const { container, invoke } = await mountAppAt(`?route=${encodeURIComponent('navigation:production-message')}&loadId=first`)
@@ -479,13 +490,13 @@ describe('legacy navigation prefix host contract', () => {
     const replaceState = vi.spyOn(window.history, 'replaceState')
 
     try {
-      await act(async () => { sidebarButton(container, '生产消息 Teable 入库').click() })
+      await act(async () => { sidebarButton(container, '生产消息').click() })
       await act(async () => { await vi.dynamicImportSettled() })
 
       expect(replaceState).not.toHaveBeenCalled()
       expect(window.location.search).toBe(initialSearch)
       expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
-      expect(sidebarButton(container, '生产消息 Teable 入库').getAttribute('aria-current')).toBe('page')
+      expect(sidebarButton(container, '生产消息').getAttribute('aria-current')).toBe('page')
       const navigationCalls = invoke.mock.calls.filter(([operation]) => operation === 'app.navigateNative')
       expect(navigationCalls).toEqual([])
     } finally {
@@ -495,13 +506,13 @@ describe('legacy navigation prefix host contract', () => {
 
   // 旧 ready 保留带前缀 route；nav-switch 将已知后缀直接作为 ready 的页面路由。
   it.each([
-    ['production-message', '生产消息 Teable 入库'],
-    ['daily-weld', '每日焊接数据模拟'],
-    ['database-viewer', '数据库查看'],
-    ['plan-pdf', '挂网计划 PDF 导出'],
-    ['production-meeting', '生产会资料拆分'],
-    ['report-center', '文件统计汇总'],
-    ['daily-report', '自动化任务'],
+    ['production-message', '生产消息'],
+    ['daily-weld', '每日焊接'],
+    ['database-viewer', '数据浏览'],
+    ['plan-pdf', '挂网计划'],
+    ['production-meeting', '生产会资料'],
+    ['report-center', '机加工统计'],
+    ['daily-report', '任务清单'],
   ] as const)('[nav-switch][legacy-prefix:display] renders the known legacy suffix %s', async (tag, label) => {
     const route = `navigation:${tag}`
     const loadId = 'first'
@@ -520,14 +531,14 @@ describe('legacy navigation prefix host contract', () => {
     const { container, notifyReady } = await mountAppAt(`?route=${encodeURIComponent(route)}&loadId=${encodeURIComponent(loadId)}`)
 
     expect(container.querySelector('[data-page-route]')?.getAttribute('data-page-route')).toBe('production-message')
-    expect(sidebarButton(container, '生产消息 Teable 入库').getAttribute('aria-current')).toBe('page')
+    expect(sidebarButton(container, '生产消息').getAttribute('aria-current')).toBe('page')
     expect(notifyReady.mock.calls).toEqual([['production-message', loadId]])
   })
 
   // 旧 ready 使用原始路由；nav-switch 使用归一值，真实传输仍按令牌只发送一次。
   it.each([
-    ['plain to legacy', 'production-message', 'navigation:plan-pdf', 'plan-pdf', '挂网计划 PDF 导出', 'production-message', 'plan-pdf'],
-    ['legacy to plain', 'navigation:plan-pdf', 'production-message', 'production-message', '生产消息 Teable 入库', 'plan-pdf', 'production-message'],
+    ['plain to legacy', 'production-message', 'navigation:plan-pdf', 'plan-pdf', '挂网计划', 'production-message', 'plan-pdf'],
+    ['legacy to plain', 'navigation:plan-pdf', 'production-message', 'production-message', '生产消息', 'plan-pdf', 'production-message'],
   ] as const)('[nav-switch][legacy-prefix:display] updates on popstate from %s with one ready per token', async (_direction, firstRoute, nextRoute, displayRoute, label, firstReadyRoute, nextReadyRoute) => {
     const loadId = 'first'
     const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')

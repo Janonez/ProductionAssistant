@@ -8,12 +8,12 @@ import { hasNativeTitleBar, hasElectronTitleBar } from './AppLayout'
 const { invoke, notifyReady } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
 vi.mock('../../features/production-message/ProductionMessagePage', () => ({ default: () => <h1 data-business-page="production-message">生产消息入库</h1> }))
-vi.mock('../../features/daily-weld/DailyWeldPage', () => ({ DailyWeldPage: () => <h1 data-business-page="daily-weld">每日焊接数据模拟</h1> }))
-vi.mock('../../features/database-viewer/DatabaseViewerPage', () => ({ DatabaseViewerPage: () => <h1 data-business-page="database-viewer">数据库查看</h1> }))
+vi.mock('../../features/daily-weld/DailyWeldPage', () => ({ DailyWeldPage: () => <h1 data-business-page="daily-weld">每日焊接</h1> }))
+vi.mock('../../features/database-viewer/DatabaseViewerPage', () => ({ DatabaseViewerPage: () => <h1 data-business-page="database-viewer">数据浏览</h1> }))
 vi.mock('../../features/plan-pdf/PlanPdfPage', () => ({ PlanPdfPage: () => <h1 data-business-page="plan-pdf">挂网计划导出</h1> }))
-vi.mock('../../features/production-meeting/ProductionMeetingPage', () => ({ ProductionMeetingPage: () => <h1 data-business-page="production-meeting">生产会资料拆分</h1> }))
-vi.mock('../../features/report-center/ReportCenterPage', () => ({ ReportCenterPage: () => <h1 data-business-page="report-center">文件统计汇总</h1> }))
-vi.mock('../../features/daily-report/AutomationPage', () => ({ AutomationPage: () => <h1 data-business-page="daily-report">自动化任务</h1> }))
+vi.mock('../../features/production-meeting/ProductionMeetingPage', () => ({ ProductionMeetingPage: () => <h1 data-business-page="production-meeting">生产会资料</h1> }))
+vi.mock('../../features/report-center/ReportCenterPage', () => ({ ReportCenterPage: () => <h1 data-business-page="report-center">机加工统计</h1> }))
+vi.mock('../../features/daily-report/AutomationPage', () => ({ AutomationPage: () => <h1 data-business-page="daily-report">任务清单</h1> }))
 
 describe('transplanted shadcn application shell', () => {
   let container: HTMLDivElement
@@ -40,7 +40,7 @@ describe('transplanted shadcn application shell', () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => query === colorScheme.media ? colorScheme : desktop))
     Reflect.deleteProperty(window, 'chrome')
     history.replaceState({}, '', '?loadId=document-one')
-    invoke.mockReset().mockResolvedValue(settings)
+    invoke.mockReset().mockImplementation(async (operation: string) => operation === 'automation.list' ? { tasks: [] } : settings)
     notifyReady.mockReset()
     container = document.createElement('div')
     document.body.append(container)
@@ -71,9 +71,19 @@ describe('transplanted shadcn application shell', () => {
       await act(async () => { navButton(module.name).click(); await vi.dynamicImportSettled() })
       expect(container.querySelector('.pa-shell-theme')).toBe(shell)
       expect(shell.classList.contains('dark')).toBe(true)
-      const legacy = container.querySelector('.pa-legacy-content')!
-      expect(legacy.getAttribute('data-page-route')).toBe(module.route)
-      expect(legacy.hasAttribute('data-shadcn-surface')).toBe(false)
+      const content = container.querySelector('[data-page-route]')!
+      expect(content.getAttribute('data-page-route')).toBe(module.route)
+      if (module.taskType === 'tencent_sheet_fill') {
+        expect(container.querySelector<HTMLDivElement>('.pa-page-scroll')!.style.scrollbarGutter).toBe('stable')
+        expect(content.classList.contains('pa-legacy-content')).toBe(false)
+        expect(content.hasAttribute('data-shadcn-surface')).toBe(true)
+        expect(content.closest('.pa-shell-theme')).toBe(shell)
+        expect(content.querySelector('[aria-label="集团填报工作台"]')).not.toBeNull()
+      } else {
+        expect(container.querySelector<HTMLDivElement>('.pa-page-scroll')!.style.scrollbarGutter).toBe('')
+        expect(content.classList.contains('pa-legacy-content')).toBe(true)
+        expect(content.hasAttribute('data-shadcn-surface')).toBe(false)
+      }
       expect(new URLSearchParams(location.search).get('loadId')).toBe('document-one')
     }
     const query = location.search
@@ -85,7 +95,7 @@ describe('transplanted shadcn application shell', () => {
     await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="关闭设置"]')!.click())
     expect(location.search).toBe(query)
     expect(shell.classList.contains('dark')).toBe(true)
-    expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'document-one')
+    expect(notifyReady).toHaveBeenLastCalledWith('database-viewer', 'document-one')
   })
   it('gives the real theme-menu portal the resolved system theme', async () => {
     await act(async () => { Reflect.set(colorScheme, 'matches', true); colorScheme.dispatchEvent(new Event('change')) })
@@ -100,23 +110,59 @@ describe('transplanted shadcn application shell', () => {
     expect(portal.classList.contains('dark')).toBe(false)
     expect(container.querySelector('.pa-shell-theme')?.classList.contains('dark')).toBe(false)
   })
-  it('mounts all seven business slots using query navigation and keeps the document/sidebar alive', async () => {
+  it('mounts every navigation entry including the real group workbench and keeps the document/sidebar alive', async () => {
     const sidebar = container.querySelector('[data-slot="sidebar"]')
     const replace = vi.spyOn(history, 'replaceState')
     expect(container.querySelectorAll('[data-slot="sidebar-inset"]')).toHaveLength(1)
-    expect(container.querySelectorAll('[data-sidebar="content"] button')).toHaveLength(7)
+    expect(container.querySelectorAll('[data-sidebar="content"] button')).toHaveLength(10)
     for (const module of SIDEBAR_MODULES) {
       await act(async () => { navButton(module.name).click(); await vi.dynamicImportSettled() })
       expect(container.querySelector('[data-current-page-title]')?.textContent).toBe(module.name)
       expect(navButton(module.name).getAttribute('data-active')).toBe('true')
       expect(navButton(module.name).getAttribute('aria-current')).toBe('page')
-      expect(container.querySelector('[data-business-page]')?.getAttribute('data-business-page')).toBe(module.route)
+      if (module.taskType === 'tencent_sheet_fill') {
+        const workbench = container.querySelector('[aria-label="集团填报工作台"]')!
+        expect(workbench).not.toBeNull()
+        expect(workbench.querySelector('h1')!.textContent).toBe('集团填报')
+        expect([...workbench.querySelectorAll('[role="tab"]')].map(tab => tab.textContent)).toEqual(['填报', '历史记录', '设置'])
+        expect(container.querySelector('[data-business-page]')).toBeNull()
+      } else {
+        const business = container.querySelector('[data-business-page]')!
+        expect(business).not.toBeNull()
+        expect(business.getAttribute('data-business-page')).toBe(module.route)
+      }
       expect(new URLSearchParams(location.search).get('loadId')).toBe('document-one')
       expect(container.querySelector('[data-slot="sidebar"]')).toBe(sidebar)
     }
-    expect(replace).toHaveBeenCalledTimes(6)
-    expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'document-one')
+    expect(replace).toHaveBeenCalledTimes(9)
+    expect(notifyReady).toHaveBeenLastCalledWith('database-viewer', 'document-one')
     expect(invoke.mock.calls.some(([operation]) => operation === 'app.navigateNative')).toBe(false)
+  })
+  it('restores the independent group URL and switches back to the legacy task list without replacing the shell', async () => {
+    await act(async () => root.unmount())
+    history.replaceState({}, '', '?route=daily-report&taskType=tencent_sheet_fill&loadId=group-document')
+    root = createRoot(container)
+    await act(async () => { root.render(<App />); await vi.dynamicImportSettled() })
+    const shell = container.querySelector('.pa-shell-theme')!
+    const sidebar = container.querySelector('[data-slot="sidebar"]')!
+    const content = container.querySelector('[data-page-route]')!
+    expect(content.getAttribute('data-page-route')).toBe('daily-report')
+    expect(content.hasAttribute('data-shadcn-surface')).toBe(true)
+    expect(container.querySelector('.pa-legacy-content')).toBeNull()
+    expect(container.querySelector('[aria-label="集团填报工作台"]')).not.toBeNull()
+    expect(navButton('集团填报').getAttribute('aria-current')).toBe('page')
+    expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'group-document')
+    await act(async () => { navButton('任务清单').click(); await vi.dynamicImportSettled() })
+    const legacy = container.querySelector('.pa-legacy-content')!
+    expect(legacy).not.toBeNull()
+    expect(legacy.getAttribute('data-page-route')).toBe('daily-report')
+    expect(legacy.hasAttribute('data-shadcn-surface')).toBe(false)
+    expect(legacy.querySelector('[data-business-page="daily-report"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="集团填报工作台"]')).toBeNull()
+    expect(new URLSearchParams(location.search).get('taskType')).toBeNull()
+    expect(new URLSearchParams(location.search).get('loadId')).toBe('group-document')
+    expect(container.querySelector('.pa-shell-theme')).toBe(shell)
+    expect(container.querySelector('[data-slot="sidebar"]')).toBe(sidebar)
   })
   it('collapses the upstream sidebar with its trigger and restores it with Ctrl+B', async () => {
     const trigger = container.querySelector<HTMLButtonElement>('[data-slot="sidebar-trigger"]')!
@@ -125,13 +171,13 @@ describe('transplanted shadcn application shell', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(container.querySelector('[data-collapsible="icon"]')).not.toBeNull()
     expect(navButton(SIDEBAR_MODULES[0].name).getAttribute('aria-label')).toBe(SIDEBAR_MODULES[0].name)
-    await act(async () => { navButton('数据库查看').click(); await vi.dynamicImportSettled() })
-    expect(container.querySelector('[data-current-page-title]')?.textContent).toBe('数据库查看')
-    expect(navButton('数据库查看').getAttribute('aria-current')).toBe('page')
+    await act(async () => { navButton('数据浏览').click(); await vi.dynamicImportSettled() })
+    expect(container.querySelector('[data-current-page-title]')?.textContent).toBe('数据浏览')
+    expect(navButton('数据浏览').getAttribute('aria-current')).toBe('page')
     expect(new URLSearchParams(location.search).get('loadId')).toBe('document-one')
     await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true })))
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
-    expect(navButton('数据库查看').getAttribute('aria-current')).toBe('page')
+    expect(navButton('数据浏览').getAttribute('aria-current')).toBe('page')
   })
   it('opens the existing SettingsModal from Header and sidebar without changing the route', async () => {
     const updated = vi.fn()
@@ -172,7 +218,7 @@ describe('transplanted shadcn application shell', () => {
     root = createRoot(container)
     await act(async () => { root.render(<App />); await vi.dynamicImportSettled() })
     expect(container.querySelector('[data-business-page]')?.getAttribute('data-business-page')).toBe('plan-pdf')
-    expect(navButton('挂网计划 PDF 导出').getAttribute('aria-current')).toBe('page')
+    expect(navButton('挂网计划').getAttribute('aria-current')).toBe('page')
     expect(notifyReady).toHaveBeenLastCalledWith('plan-pdf', 'document-two')
     expect(container.querySelector('.pa-shell-theme')?.classList.contains('dark')).toBe(true)
   })

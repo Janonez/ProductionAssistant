@@ -208,7 +208,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
             ValidateBackgroundConfig(job["config"]!.AsObject());
             if ((string?)job["backgroundValidatedConfig"] != ConfigSignature(job["config"]!.AsObject()))
                 throw new InvalidOperationException("请先使用当前配置完成一次后台自动测试。");
-            await Service.CallAsync(new() { ["operation"] = "close" });
+            await Service.CloseSessionAsync();
             await TencentSheetTaskScheduler.InstallAsync(taskId, job["config"]!.AsObject());
             job["enabled"] = true;
             job["schedulerInstalled"] = true;

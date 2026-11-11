@@ -127,9 +127,12 @@ public sealed class ArchitectureTests
         Assert.False(PrototypeBridgeProtocol.IsAllowed("app.navigateNative"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("automation.list"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.backgroundTest"));
-        Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.close"));
-        Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.login"));
-        Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.loginAgreement"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.close"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.open"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.login"));
+        Assert.False(PrototypeBridgeProtocol.IsAllowed("tencentSheet.loginAgreement"));
+        foreach (var action in new[] { "Status", "Open", "Verify", "Close" })
+            Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSheet.session" + action));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSite.pick"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSite.testSheet"));
         Assert.True(PrototypeBridgeProtocol.IsAllowed("tencentSite.captureCell"));

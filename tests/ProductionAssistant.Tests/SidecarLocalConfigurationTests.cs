@@ -11,12 +11,95 @@ namespace ProductionAssistant.Tests;
 
 public sealed class SidecarLocalConfigurationTests : IDisposable
 {
+    // Independent test expectations; never derive these from the production allowlist.
+    internal static readonly string[] ExpectedAllowedOperations =
+    [
+        "production.cancel", "production.getBindings", "weld.getState", "weld.generate",
+        "database.getState", "database.getSchema", "database.inspect",
+        "tencentSheet.get", "tencentSheet.runs", "tencentSheet.sources", "tencentSheet.schema", "tencentSheet.views",
+        // T1-A migrates local document configuration; document writes remain blocked below.
+        "tencentSheet.create", "tencentSheet.save",
+        "notionFill.runs", "settings.open", "automation.list", "daily.list", "daily.get", "daily.runs", "report.getState",
+        "settings.saveNotification", "settings.saveNotificationRules", "daily.create", "daily.saveTemplate",
+        "tencentSheet.sessionStatus", "tencentSheet.sessionOpen", "tencentSheet.sessionVerify", "tencentSheet.sessionClose"
+    ];
+    internal static readonly string[] ExpectedUnmigratedOperations =
+    [
+        "automation.delete", "automation.setEnabled",
+        "daily.addField", "daily.delete", "daily.getProperties", "daily.preview", "daily.saveBasics",
+        "daily.sendToday", "daily.setEnabled", "daily.test",
+        "meeting.export", "meeting.openOutput", "meeting.pickFile",
+        "notionFill.create", "notionFill.get", "notionFill.runNow", "notionFill.save", "notionFill.test", "notionFill.testSource",
+        "plan.audit", "plan.export", "plan.openOutput", "plan.pickFolder", "plan.repair",
+        "production.check", "production.parse", "production.saveBindings", "production.write",
+        "report.authenticate", "report.run", "report.saveConfig",
+        "settings.refreshDataSources", "settings.saveConnection", "settings.testNotification",
+        "tencentSheet.addField", "tencentSheet.backgroundTest", "tencentSheet.deleteField", "tencentSheet.fetch",
+        "tencentSheet.inspect", "tencentSheet.recognize", "tencentSheet.teach", "tencentSheet.updateField", "tencentSheet.write",
+        "tencentSite.captureCell", "tencentSite.open", "tencentSite.pick", "tencentSite.save", "tencentSite.test", "tencentSite.testSheet",
+        "weld.check", "weld.saveBinding", "weld.write"
+    ];
+    internal static readonly string[] RetiredLoginOperations =
+    [
+        "tencentSheet.login", "tencentSheet.loginAgreement", "tencentSheet.open", "tencentSheet.close"
+    ];
+
     private const string FakeWebhook = "local-only-webhook-marker";
+
+    [Fact]
+    public async Task Task_categories_roundtrip_through_real_handler_storage_and_sidecar_restart()
+    {
+        var inbound = new NotionFillJob { Name = "分类测试任务" };
+        NotionFillSettingsStore.SaveJob(inbound);
+        string dailyId, tencentId;
+        await using (var sidecar = await SidecarSession.StartAsync(_folder))
+        {
+            var daily = await sidecar.SendAsync("daily.create", new { name = "分类测试任务", sendTime = "17:30" });
+            AssertSuccess(daily);
+            dailyId = daily.GetProperty("data").GetProperty("id").GetString()!;
+            var tencent = await sidecar.SendAsync("tencentSheet.create", new { documentUrl = "https://docs.qq.com/sheet/category-fixture" });
+            AssertSuccess(tencent);
+            tencentId = tencent.GetProperty("data").GetProperty("id").GetString()!;
+        }
+        await using var restarted = await SidecarSession.StartAsync(_folder);
+        var listed = await restarted.SendAsync("automation.list");
+        AssertSuccess(listed);
+        var tasks = listed.GetProperty("data").GetProperty("tasks").EnumerateArray().ToArray();
+        Assert.Equal("daily_report", tasks.Single(task => task.GetProperty("id").GetString() == dailyId).GetProperty("taskType").GetString());
+        Assert.Equal("notion_fill", tasks.Single(task => task.GetProperty("id").GetString() == inbound.Id).GetProperty("taskType").GetString());
+        Assert.Equal("tencent_sheet_fill", tasks.Single(task => task.GetProperty("id").GetString() == tencentId).GetProperty("taskType").GetString());
+        Assert.Equal(3, tasks.Length);
+        Assert.False(Directory.Exists(Path.Combine(_folder, "tencent-sheet-profile")));
+    }
     private const string FakeSecret = "local-only-secret-marker";
     private const string TestWebhook = "https://example.invalid/sd8b-notification-test";
     private readonly string? _original = Environment.GetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR");
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "SidecarLocalConfigurationTests", Guid.NewGuid().ToString("N"));
     private string SettingsPath => Path.Combine(RuntimeEnvironment.DataDirectory, "notification-settings.json");
+
+    [Fact]
+    public async Task T1_session_protocol_round_trips_without_a_task_or_business_document()
+    {
+        await using var sidecar = await SidecarSession.StartAsync(_folder);
+        foreach (var operation in new[] { "tencentSheet.sessionStatus", "tencentSheet.sessionClose" })
+        {
+            var response = await sidecar.SendAsync(operation);
+            AssertSuccess(response);
+            var state = response.GetProperty("data");
+            Assert.Equal("closed", state.GetProperty("state").GetString());
+            Assert.False(state.GetProperty("browserOpen").GetBoolean());
+            Assert.Equal("unknown", state.GetProperty("authentication").GetString());
+        }
+        foreach (var operation in new[] { "tencentSheet.sessionOpen", "tencentSheet.sessionVerify" })
+        {
+            var response = await sidecar.SendAsync(operation, new { documentUrl = "https://example.invalid/t1-fixture" });
+            AssertSuccess(response);
+            Assert.Equal("InvalidDocumentUrl", response.GetProperty("data").GetProperty("code").GetString());
+        }
+        var blocked = await sidecar.SendAsync("tencentSheet.write");
+        Assert.False(blocked.GetProperty("ok").GetBoolean());
+        Assert.False(Directory.Exists(Path.Combine(_folder, "tencent-sheet-profile")));
+    }
 
     // RuntimeEnvironment.Current is cached; select the test environment before any test loads it.
     [ModuleInitializer]
@@ -36,18 +119,45 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
     }
 
     [Fact]
-    public void Allowlist_is_exactly_the_original_nineteen_plus_four_local_saves()
+    public void Allowlist_includes_T1_session_and_local_document_configuration_only()
     {
-        string[] expected =
-        [
-            "production.cancel", "production.getBindings", "weld.getState", "weld.generate",
-            "database.getState", "database.getSchema", "database.inspect",
-            "tencentSheet.get", "tencentSheet.runs", "tencentSheet.sources", "tencentSheet.schema", "tencentSheet.views",
-            "notionFill.runs", "settings.open", "automation.list", "daily.list", "daily.get", "daily.runs", "report.getState",
-            "settings.saveNotification", "settings.saveNotificationRules", "daily.create", "daily.saveTemplate"
-        ];
-        Assert.Equal(23, StdioHost.AllowedOperations.Count);
-        Assert.True(StdioHost.AllowedOperations.SetEquals(expected));
+        Assert.True(StdioHost.AllowedOperations.SetEquals(ExpectedAllowedOperations));
+        Assert.Equal(ExpectedAllowedOperations.Length, StdioHost.AllowedOperations.Count);
+        Assert.All(ExpectedAllowedOperations, operation => Assert.Contains(operation, PrototypeBridgeProtocol.AllowedOperations));
+        Assert.Empty(ExpectedAllowedOperations.Intersect(ExpectedUnmigratedOperations));
+        Assert.True(PrototypeBridgeProtocol.AllowedOperations.SetEquals(ExpectedAllowedOperations.Concat(ExpectedUnmigratedOperations)));
+        Assert.All(RetiredLoginOperations, operation => Assert.DoesNotContain(operation, PrototypeBridgeProtocol.AllowedOperations));
+    }
+
+    [Fact]
+    public async Task Document_configuration_survives_sidecar_restart_and_invalid_save_without_opening_browser()
+    {
+        string id;
+        var firstUrl = "https://docs.qq.com/sheet/local-fixture";
+        var nextUrl = "https://docs.qq.com/sheet/saved-fixture";
+        await using (var sidecar = await SidecarSession.StartAsync(_folder))
+        {
+            var created = await sidecar.SendAsync("tencentSheet.create", new { documentUrl = firstUrl });
+            AssertSuccess(created);
+            id = created.GetProperty("data").GetProperty("id").GetString()!;
+            var saved = await sidecar.SendAsync("tencentSheet.save", new { id, configRevision = 0, config = new { documentUrl = nextUrl } });
+            AssertSuccess(saved);
+            Assert.Equal(nextUrl, saved.GetProperty("data").GetProperty("config").GetProperty("documentUrl").GetString());
+            var invalid = await sidecar.SendAsync("tencentSheet.save", new { id, configRevision = 1, config = new { documentUrl = "https://example.invalid/rejected" } });
+            Assert.False(invalid.GetProperty("ok").GetBoolean());
+            Assert.Contains("HTTPS", invalid.GetProperty("error").GetString());
+            Assert.False(Directory.Exists(Path.Combine(_folder, "tencent-sheet-profile")));
+        }
+        await using var restarted = await SidecarSession.StartAsync(_folder);
+        var restored = await restarted.SendAsync("tencentSheet.get", new { id });
+        AssertSuccess(restored);
+        Assert.Equal(nextUrl, restored.GetProperty("data").GetProperty("config").GetProperty("documentUrl").GetString());
+        var status = await restarted.SendAsync("tencentSheet.sessionStatus", new { documentUrl = nextUrl });
+        AssertSuccess(status);
+        Assert.False(status.GetProperty("data").GetProperty("browserOpen").GetBoolean());
+        Assert.False(Directory.Exists(Path.Combine(_folder, "tencent-sheet-profile")));
+        var write = await restarted.SendAsync("tencentSheet.write", new { id });
+        Assert.False(write.GetProperty("ok").GetBoolean());
     }
 
     [Fact]
@@ -515,12 +625,14 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
     }
 
     [Fact]
-    public async Task Every_unmigrated_protocol_operation_is_rejected_before_dispatch()
+    public async Task Unmigrated_and_retired_operations_are_rejected_before_dispatch()
     {
-        var blocked = PrototypeBridgeProtocol.AllowedOperations.Except(StdioHost.AllowedOperations).ToArray();
-        Assert.Equal(58, blocked.Length);
-        var responses = await RunHostAsync(blocked.Append("unknown.operation").Select(operation => Request(operation)).ToArray());
-        Assert.Equal(59, responses.Length);
+        var blocked = PrototypeBridgeProtocol.AllowedOperations.Except(ExpectedAllowedOperations).ToArray();
+        Assert.Equal(ExpectedUnmigratedOperations.Length, blocked.Length);
+        Assert.True(blocked.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedUnmigratedOperations));
+        var requests = blocked.Concat(RetiredLoginOperations).Append("unknown.operation").ToArray();
+        var responses = await RunHostAsync(requests.Select(operation => Request(operation)).ToArray());
+        Assert.Equal(requests.Length, responses.Length);
         Assert.All(responses, response =>
         {
             Assert.False(response.GetProperty("ok").GetBoolean());

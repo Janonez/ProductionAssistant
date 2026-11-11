@@ -56,7 +56,7 @@ describe('connected production message workflow', () => {
   it('keeps field edits local and only rechecks after the target date changes', async () => {
     expect(container.querySelector('.content-header h1')?.textContent).toBe('生产消息入库')
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息')
     expect(container.querySelector('.workspace-panel')).toBeTruthy()
     const textarea = container.querySelector('textarea')!
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '8.13下料2吨'); textarea.dispatchEvent(new Event('input', { bubbles: true })) })
@@ -433,7 +433,7 @@ describe('shared operation sidebar', () => {
     await act(async () => { await vi.dynamicImportSettled() })
 
     expect(container.querySelector('.production-message-content h1')?.textContent).toBe('每日焊接数据模拟')
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('每日焊接数据模拟')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('每日焊接')
 
     await act(async () => { root.unmount() })
     container.remove()
@@ -490,7 +490,7 @@ describe('shared operation sidebar', () => {
     expect(document.querySelector('[role="dialog"]')).toBeTruthy()
     expect(document.querySelector('.settings-page-header h1')?.textContent).toBe('连接')
     expect((document.querySelector('.settings-input[type="password"]') as HTMLInputElement).value).not.toBe('')
-    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息 Teable 入库')
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息')
     expect(invoke).toHaveBeenCalledWith('settings.open')
 
     const tab = (label: string) => [...document.querySelectorAll('.settings-nav-item')]
