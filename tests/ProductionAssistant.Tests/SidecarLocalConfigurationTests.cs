@@ -451,6 +451,41 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         var requests = defaults.Select(rule => Request("settings.saveNotificationRules", Rules(rule.EventType, !rule.Enabled)))
             .Append(Request("settings.saveNotification", Channel("concurrent channel"))).ToArray();
         var responses = await RunHostAsync(requests);
+        var failures = responses.Where(response => !response.GetProperty("ok").GetBoolean()).ToArray();
+        if (failures.Length > 0)
+        {
+            var operations = requests.Select(request =>
+            {
+                using var document = JsonDocument.Parse(request);
+                return (Id: document.RootElement.GetProperty("id").GetString()!,
+                    Operation: document.RootElement.GetProperty("operation").GetString()!);
+            }).ToDictionary(request => request.Id, request => request.Operation);
+            var details = new System.Text.StringBuilder();
+            const string diagnosticMarker = "诊断编号：";
+            foreach (var failure in failures)
+            {
+                var id = failure.GetProperty("id").GetString() ?? string.Empty;
+                var error = failure.GetProperty("error").GetString() ?? string.Empty;
+                var markerIndex = error.IndexOf(diagnosticMarker, StringComparison.Ordinal);
+                var diagnosticId = markerIndex < 0 ? "未提供" : error[(markerIndex + diagnosticMarker.Length)..].Split('；')[0];
+                var operation = operations.TryGetValue(id, out var requestedOperation) ? requestedOperation : "未匹配请求";
+                details.AppendLine($"requestId={id}; operation={operation}; diagnosticId={diagnosticId}");
+                details.AppendLine(failure.GetRawText());
+            }
+            var logPath = Path.Combine(RuntimeEnvironment.LogDirectory, "bridge-errors.log");
+            details.AppendLine($"Diagnostic log: {logPath}");
+            try
+            {
+                var log = File.ReadAllText(logPath);
+                details.AppendLine(string.IsNullOrWhiteSpace(log) ? "日志为空。" : log);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                var state = ex is FileNotFoundException or DirectoryNotFoundException ? "日志不存在" : "日志无法读取";
+                details.AppendLine($"{state}：{ex.GetType().FullName} HRESULT=0x{ex.HResult:X8}{Environment.NewLine}{ex}");
+            }
+            Assert.Fail(details.ToString());
+        }
         Assert.Equal(requests.Length, responses.Length);
         Assert.All(responses, AssertSuccess);
         var saved = NotificationSettingsStore.Load();
