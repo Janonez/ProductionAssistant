@@ -140,7 +140,9 @@ it.each(['unknown', 'DAILY_REPORT', ' daily_report '])('rejects an invalid URL c
   expect(container.querySelector('[role=alert]')?.textContent).toContain('任务分类无效')
   expect(container.querySelector('[data-current-page-title]')?.textContent).toBe('无效任务分类')
   expect(names()).toEqual([])
-  expect(container.querySelector('[aria-current=page]')).toBeNull()
+  const navigation = container.querySelector('[role=navigation][aria-label="业务模块"]')!
+  expect(navigation).not.toBeNull()
+  expect(navigation.querySelector('[aria-current=page]')).toBeNull()
   expect(invoke.mock.calls.some(([operation]) => operation === 'automation.list')).toBe(false)
   await navigate('集团填报')
   expect(container.querySelector('[role=alert]')).toBeNull()
