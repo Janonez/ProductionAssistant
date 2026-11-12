@@ -48,6 +48,13 @@
 - 没有覆盖已有 Button / Input / Dialog / DropdownMenu / Sheet 或 Portal 适配。项目没有 `components.json`，沿用固定源码集成方式，不重新初始化。唯一新增直接依赖是 `@radix-ui/react-tabs` 固定 `1.1.13`，peer 范围包含 React 19；Card / Table 无额外依赖，Alert 使用已有 CVA，未升级框架和工具链。锁文件包含 Tabs 的固定依赖与 npm 重写的可选平台元数据。
 - 正式集团填报使用实际 Tailwind 入口 `styles/shadcn-shell.css`、其导入的 `styles/shadcn-theme.css` 及 `typography.css`；App 为该入口设置 `data-shadcn-surface` 并移除旧 `pa-legacy-content`，继承外壳主题。不新增主题或业务 CSS，不使用旧 Demo 样式。自动与人工验收结果统一见 STATUS。
 
+## Metis 全局 Breadcrumb
+
+- `components/ui/breadcrumb.tsx` 来自 shadcn/ui 固定提交 `8ab27715521cbd4f87ae6886cd989cbb678f6de7` 的 [apps/v4/registry/new-york-v4/ui/breadcrumb.tsx](https://github.com/shadcn-ui/ui/blob/8ab27715521cbd4f87ae6886cd989cbb678f6de7/apps/v4/registry/new-york-v4/ui/breadcrumb.tsx)。沿用 MIT 许可及 [shadcn-ui-LICENSE.txt](shadcn-ui-LICENSE.txt)。提交、签名及本地 ZIP / 解压文件 / 官方内容在实施前已完成认证，不将本组件标记为旧 Dialog 的提交版本。
+- 保留全部七个官方导出、Props、语义结构、ARIA、data-slot 和 Tailwind 类；仅将 `cn` 改为现有 `../layout/utils`，将聚合包 `radix-ui` 的 `Slot.Root` 改为项目已有 `@radix-ui/react-slot` 的 `Slot`，并加入来源声明。继续使用现有 Lucide，不新增依赖或改锁文件。
+- 全局 Shell 直接使用 `navigationModule(route, taskType)` 的 `category` / `name`，与侧栏共享唯一导航配置。当前分组没有页面目标，只渲染弱化文字和官方默认分隔符，不伪装成 BreadcrumbLink；当前页使用 BreadcrumbPage。无分组时只显示当前页，未知 Shell 路由显示状态文案“未知页面”，无效任务分类保留既有反馈；默认与旧路由前缀继续由现有宿主路由解析处理。
+- 单行、收缩与截断仅在 AppLayout 的组合处通过 Tailwind 类约束，不改官方组件默认样式。删除被替代的标题 span，保留其 `data-current-page-title` 检测属性到 BreadcrumbPage，以兼容 T2.1 的冷进入闪现回归。AppHeader、侧栏、主题、窗口拖动区与页面内部标题保持；页内详情和 Tab 不增加路由层级。自动验证及人工验收进度见 STATUS。
+
 ## 依赖与验证边界
 
 Tailwind CSS / Vite 插件锁定 `4.2.2`；插件声明支持 Vite `^5.2.0 || ^6 || ^7 || ^8`。保留现有 React 19、Vite 6、TypeScript 5 和 Vitest 2；仅增加实际组件使用的 Radix、CVA、clsx、tailwind-merge、tw-animate-css 及 PostCSS。完整锁定结果以 `package-lock.json` 为准。

@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../app/App'
 import { SIDEBAR_MODULES } from '../../routes/routeTable'
-import { hasNativeTitleBar, hasElectronTitleBar } from './AppLayout'
+import * as routeTable from '../../routes/routeTable'
+import { AppLayout, hasNativeTitleBar, hasElectronTitleBar } from './AppLayout'
+import { ThemeProvider } from './ThemeProvider'
 
 const { invoke, notifyReady } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
@@ -23,6 +25,7 @@ describe('transplanted shadcn application shell', () => {
   const storageKey = 'production-assistant-ui-theme-v1'
   const chrome = Object.getOwnPropertyDescriptor(window, 'chrome')
   const navButton = (name: string) => container.querySelector<HTMLButtonElement>(`[data-sidebar="content"] button[aria-label="${name}"]`)!
+  const breadcrumbItems = () => [...container.querySelectorAll('[data-slot="breadcrumb"] [data-slot="breadcrumb-item"]')].map(item => item.textContent)
   const openThemeMenu = async () => {
     await act(async () => container.querySelector('[data-slot="dropdown-menu-trigger"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
   }
@@ -71,6 +74,7 @@ describe('transplanted shadcn application shell', () => {
       await act(async () => { navButton(module.name).click(); await vi.dynamicImportSettled() })
       expect(container.querySelector('.pa-shell-theme')).toBe(shell)
       expect(shell.classList.contains('dark')).toBe(true)
+      expect(breadcrumbItems()).toEqual([module.category, module.name])
       const content = container.querySelector('[data-page-route]')!
       expect(content.getAttribute('data-page-route')).toBe(module.route)
       if (module.taskType === 'tencent_sheet_fill') {
@@ -110,14 +114,26 @@ describe('transplanted shadcn application shell', () => {
     expect(portal.classList.contains('dark')).toBe(false)
     expect(container.querySelector('.pa-shell-theme')?.classList.contains('dark')).toBe(false)
   })
-  it('mounts every navigation entry including the real group workbench and keeps the document/sidebar alive', async () => {
+  it('[breadcrumb] mounts all ten navigation entries across seven query routes and keeps the document/sidebar alive', async () => {
     const sidebar = container.querySelector('[data-slot="sidebar"]')
+    const breadcrumb = container.querySelector('[data-slot="breadcrumb"]')
+    const errors = vi.spyOn(console, 'error')
     const replace = vi.spyOn(history, 'replaceState')
     expect(container.querySelectorAll('[data-slot="sidebar-inset"]')).toHaveLength(1)
     expect(container.querySelectorAll('[data-sidebar="content"] button')).toHaveLength(10)
     for (const module of SIDEBAR_MODULES) {
       await act(async () => { navButton(module.name).click(); await vi.dynamicImportSettled() })
       expect(container.querySelector('[data-current-page-title]')?.textContent).toBe(module.name)
+      expect(container.querySelectorAll('[data-slot="breadcrumb"]')).toHaveLength(1)
+      expect(container.querySelector('[data-slot="breadcrumb"]')).toBe(breadcrumb)
+      expect(breadcrumbItems()).toEqual([module.category, module.name])
+      expect(breadcrumb!.querySelectorAll('[data-slot="breadcrumb-separator"]')).toHaveLength(1)
+      expect(breadcrumb!.querySelector('a, [data-slot="breadcrumb-link"]')).toBeNull()
+      const current = breadcrumb!.querySelector('[data-slot="breadcrumb-page"]')!
+      expect(current.tagName).toBe('SPAN')
+      expect(current.getAttribute('aria-current')).toBe('page')
+      expect(current.getAttribute('aria-disabled')).toBe('true')
+      expect(current.hasAttribute('data-current-page-title')).toBe(true)
       expect(navButton(module.name).getAttribute('data-active')).toBe('true')
       expect(navButton(module.name).getAttribute('aria-current')).toBe('page')
       if (module.taskType === 'tencent_sheet_fill') {
@@ -137,6 +153,59 @@ describe('transplanted shadcn application shell', () => {
     expect(replace).toHaveBeenCalledTimes(9)
     expect(notifyReady).toHaveBeenLastCalledWith('database-viewer', 'document-one')
     expect(invoke.mock.calls.some(([operation]) => operation === 'app.navigateNative')).toBe(false)
+    expect(errors.mock.calls).toEqual([])
+  })
+  it.each([
+    ['?loadId=document-one', routeTable.DEFAULT_ROUTE],
+    ['?route=&loadId=document-one', routeTable.DEFAULT_ROUTE],
+    ['?route=unknown&loadId=document-one', routeTable.DEFAULT_ROUTE],
+    ['?route=navigation:plan-pdf&loadId=document-one', routeTable.ROUTES.planPdf],
+  ])('[breadcrumb] follows the existing default/legacy route resolution for %s', async (query, route) => {
+    await act(async () => {
+      history.replaceState({}, '', query)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+      await vi.dynamicImportSettled()
+    })
+    const module = SIDEBAR_MODULES.find(item => item.route === route && !item.taskType)!
+    expect(breadcrumbItems()).toEqual([module.category, module.name])
+    expect(navButton(module.name).getAttribute('aria-current')).toBe('page')
+    expect(new URLSearchParams(location.search).get('loadId')).toBe('document-one')
+  })
+  it('[breadcrumb] renders a top-level entry as only the current page', async () => {
+    // Current entries all have groups; exercise this boundary with an existing route.
+    const module = SIDEBAR_MODULES[0]
+    vi.spyOn(routeTable, 'navigationModule').mockReturnValue({ ...module, category: '' })
+    await act(async () => root.render(<ThemeProvider><AppLayout route={module.route} navigate={vi.fn()} openSettings={vi.fn()}><h1>{module.name}</h1></AppLayout></ThemeProvider>))
+    expect(breadcrumbItems()).toEqual([module.name])
+    expect(container.querySelector('[data-slot="breadcrumb-separator"]')).toBeNull()
+    expect(container.querySelector('[data-slot="breadcrumb-page"]')?.textContent).toBe(module.name)
+  })
+  it('[breadcrumb] safely labels an unmatched shell route without guessing a business name', async () => {
+    await act(async () => root.render(<ThemeProvider><AppLayout route="unmatched-route" navigate={vi.fn()} openSettings={vi.fn()}><p>未匹配内容</p></AppLayout></ThemeProvider>))
+    expect(breadcrumbItems()).toEqual(['未知页面'])
+    expect(container.querySelector('[data-slot="breadcrumb-separator"]')).toBeNull()
+    expect(container.querySelector('[data-slot="breadcrumb-link"]')).toBeNull()
+    expect(container.querySelector('[data-sidebar="content"] [aria-current="page"]')).toBeNull()
+  })
+  it.each([
+    '?route=daily-report&taskType=unknown',
+    '?route=daily-report&taskType=DAILY_REPORT',
+    '?route=daily-report&taskType=%20daily_report%20',
+    '?route=daily-report&taskType=daily_report&taskType=notion_fill',
+  ])('[breadcrumb] preserves invalid task-filter feedback for %s', async query => {
+    await act(async () => {
+      history.replaceState({}, '', query)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(breadcrumbItems()).toEqual(['无效任务分类'])
+    const current = container.querySelector('[data-slot="breadcrumb-page"]')!
+    expect(current.textContent).toBe('无效任务分类')
+    expect(current.getAttribute('role')).toBe('link')
+    expect(current.getAttribute('aria-current')).toBe('page')
+    expect(current.getAttribute('aria-disabled')).toBe('true')
+    expect(container.querySelector('[data-slot="breadcrumb-separator"]')).toBeNull()
+    expect(container.querySelector('[data-sidebar="content"] [aria-current="page"]')).toBeNull()
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('任务分类无效')
   })
   it('restores the independent group URL and switches back to the legacy task list without replacing the shell', async () => {
     await act(async () => root.unmount())
@@ -166,6 +235,7 @@ describe('transplanted shadcn application shell', () => {
   })
   it('collapses the upstream sidebar with its trigger and restores it with Ctrl+B', async () => {
     const trigger = container.querySelector<HTMLButtonElement>('[data-slot="sidebar-trigger"]')!
+    const breadcrumb = container.querySelector('[data-slot="breadcrumb"]')
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
     await act(async () => trigger.click())
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
@@ -173,11 +243,15 @@ describe('transplanted shadcn application shell', () => {
     expect(navButton(SIDEBAR_MODULES[0].name).getAttribute('aria-label')).toBe(SIDEBAR_MODULES[0].name)
     await act(async () => { navButton('数据浏览').click(); await vi.dynamicImportSettled() })
     expect(container.querySelector('[data-current-page-title]')?.textContent).toBe('数据浏览')
+    const module = SIDEBAR_MODULES.find(item => item.route === routeTable.ROUTES.databaseViewer)!
+    expect(breadcrumbItems()).toEqual([module.category, module.name])
+    expect(container.querySelector('[data-slot="breadcrumb"]')).toBe(breadcrumb)
     expect(navButton('数据浏览').getAttribute('aria-current')).toBe('page')
     expect(new URLSearchParams(location.search).get('loadId')).toBe('document-one')
     await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true })))
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
     expect(navButton('数据浏览').getAttribute('aria-current')).toBe('page')
+    expect(breadcrumbItems()).toEqual([module.category, module.name])
   })
   it('opens the existing SettingsModal from Header and sidebar without changing the route', async () => {
     const updated = vi.fn()

@@ -2,9 +2,10 @@
 // Copyright (c) 2024 Sat Naing. MIT; see docs/third-party/shadcn-admin-LICENSE.txt.
 import type { ReactNode } from 'react'
 import { Settings2 } from 'lucide-react'
-import { ROUTES, SIDEBAR_MODULES, navigationKey, navigationModule, type AutomationTaskFilter } from '../../routes/routeTable'
+import { ROUTES, navigationKey, navigationModule, type AutomationTaskFilter } from '../../routes/routeTable'
 import { SidebarInset, SidebarProvider } from '../ui/sidebar'
 import { Button } from '../ui/button'
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbPage, BreadcrumbSeparator } from '../ui/breadcrumb'
 import { Header } from './AppHeader'
 import { OperationSidebar } from './OperationSidebar'
 import { PageContainer } from './PageContainer'
@@ -22,13 +23,21 @@ export function AppLayout({ route, taskType = '', navigate, openSettings, childr
   const winui = hasNativeTitleBar(window.location)
   const electron = hasElectronTitleBar(window.location)
   const module = taskType === null ? undefined : navigationModule(route, taskType)
-  const title = taskType === null ? '无效任务分类' : module?.name ?? SIDEBAR_MODULES[0].name
+  const title = taskType === null ? '无效任务分类' : module?.name ?? '未知页面'
   return <SidebarProvider className={`desktop-shell pa-shell-theme h-svh min-h-0 overflow-hidden ${resolvedTheme === 'dark' ? 'dark' : ''}`} data-winui={winui} data-electron={electron}>
     {electron && <div className="pa-electron-titlebar" aria-hidden="true">生产助手</div>}
     <OperationSidebar active={taskType === null ? '' : module ? navigationKey(module) : route} navigate={navigate} openSettings={openSettings} />
     <SidebarInset className="@container/content min-h-0 min-w-0 overflow-hidden">
       <Header className="shrink-0" data-shadcn-surface="" aria-label="页面工具栏">
-        <span className="min-w-0 truncate text-sm font-medium" data-current-page-title="">{title}</span>
+        <Breadcrumb aria-label="页面路径" className="min-w-0 overflow-hidden">
+          <BreadcrumbList className="flex-nowrap">
+            {module?.category && <>
+              <BreadcrumbItem className="min-w-0"><span className="truncate">{module.category}</span></BreadcrumbItem>
+              <BreadcrumbSeparator className="shrink-0" />
+            </>}
+            <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="truncate" data-current-page-title="">{title}</BreadcrumbPage></BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
         <div className="ms-auto flex shrink-0 items-center gap-2">
           <ThemeSwitch />
           <Button variant="ghost" size="icon" aria-label="打开设置" aria-haspopup="dialog" onClick={openSettings}><Settings2 /></Button>

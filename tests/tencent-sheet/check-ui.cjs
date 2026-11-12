@@ -2,6 +2,16 @@
 const {chromium}=require('playwright');
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
 const dist=path.resolve(__dirname,'../../src/ProductionAssistant.App/Assets/Prototype/dist');
+async function checkBreadcrumbLayout(page){
+  const layout=await page.evaluate(()=>{
+    const header=document.querySelector('[aria-label="页面工具栏"]'),breadcrumb=header.querySelector('[data-slot="breadcrumb"]'),current=breadcrumb.querySelector('[data-slot="breadcrumb-page"]'),group=breadcrumb.querySelector('[data-slot="breadcrumb-item"] span'),actions=header.querySelector('[aria-label="打开设置"]').parentElement,style=getComputedStyle(breadcrumb);
+    return {count:header.querySelectorAll('[data-slot="breadcrumb"]').length,height:header.getBoundingClientRect().height,overflow:header.scrollWidth>header.clientWidth,breadcrumbRight:breadcrumb.getBoundingClientRect().right,actionsLeft:actions.getBoundingClientRect().left,border:parseFloat(style.borderTopWidth)+parseFloat(style.borderRightWidth)+parseFloat(style.borderBottomWidth)+parseFloat(style.borderLeftWidth),background:style.backgroundColor,shadow:style.boxShadow,currentColor:getComputedStyle(current).color,groupColor:getComputedStyle(group).color};
+  });
+  assert.equal(layout.count,1);assert.equal(layout.height,64);assert.equal(layout.overflow,false);
+  assert.ok(layout.breadcrumbRight<=layout.actionsLeft+1,'breadcrumb must not overlap Header actions');
+  assert.equal(layout.border,0);assert.equal(layout.background,'rgba(0, 0, 0, 0)');assert.equal(layout.shadow,'none');
+  assert.notEqual(layout.currentColor,layout.groupColor);
+}
 async function groupLayout(page){
   await page.evaluate(()=>document.fonts.ready);
   await page.waitForFunction(()=>![...document.querySelector('[aria-label="集团填报工作台"]').getAnimations({subtree:true})].some(animation=>animation.playState==='running'&&Number.isFinite(animation.effect?.getComputedTiming().endTime)));
@@ -67,6 +77,7 @@ async function main(){
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/?route=daily-report`);
     await page.getByRole('button',{name:'生产月报填报（本地测试数据）',exact:true}).waitFor();
+    assert.deepEqual(await page.locator('[data-slot="breadcrumb-item"]').allTextContents(),['工作管理','任务清单']);
     await page.evaluate(()=>{
       window.groupFlashes=[];
       window.groupObserver=new MutationObserver(()=>{
@@ -79,6 +90,8 @@ async function main(){
     });
     await page.getByRole('button',{name:'集团填报',exact:true}).click();
     await page.getByRole('heading',{name:'集团填报',exact:true}).waitFor();
+    assert.deepEqual(await page.locator('[data-slot="breadcrumb-item"]').allTextContents(),['数据报送','集团填报']);
+    assert.equal(await page.locator('[data-slot="breadcrumb"] a').count(),0,'navigation categories have no link target');
     assert.equal(await page.getByRole('button',{name:'集团填报',exact:true}).getAttribute('aria-current'),'page');
     const workbench=page.getByRole('region',{name:'集团填报工作台',exact:true});
     assert.deepEqual(await workbench.getByRole('tab').allTextContents(),['填报','历史记录','设置']);
@@ -128,6 +141,7 @@ async function main(){
             else await page.waitForFunction(count=>document.querySelector('[aria-label="集团填报历史"] tbody')?.rows.length===count,count);
           }
           const current=await groupLayout(page);
+          assert.deepEqual(await page.locator('[data-slot="breadcrumb-item"]').allTextContents(),['数据报送','集团填报'],'page tabs do not create route levels');
           for(const key of ['left','width','cardLeft','tabLeft','clientWidth'])assert.equal(current[key],reference[key],`${width}px / ${count} history rows / ${tab} / ${key}`);
           if(tab==='历史记录')assert.equal(current.overflow,count>0);
         }
@@ -140,8 +154,21 @@ async function main(){
     for(const width of [1100,960,720]){
       await page.setViewportSize({width,height:760});
       assert.equal(await workbench.evaluate(el=>el.scrollWidth>el.clientWidth),false,`group workbench overflow at ${width}`);
+      await checkBreadcrumbLayout(page);
     }
+    await page.setViewportSize({width:390,height:760});
+    await checkBreadcrumbLayout(page);
+    await page.locator('[aria-label="页面工具栏"]').screenshot({path:path.resolve(__dirname,'../../artifacts/global-breadcrumb-narrow.png')});
     await page.setViewportSize({width:1200,height:900});
+    await page.locator('[data-slot="sidebar-trigger"]').click();
+    await page.waitForFunction(()=>![...document.querySelector('[data-slot="sidebar-wrapper"]').getAnimations({subtree:true})].some(animation=>animation.playState==='running'&&Number.isFinite(animation.effect?.getComputedTiming().endTime)));
+    await checkBreadcrumbLayout(page);
+    assert.deepEqual(await page.locator('[data-slot="breadcrumb-item"]').allTextContents(),['数据报送','集团填报']);
+    await page.locator('[data-slot="sidebar-trigger"]').click();
+    await page.waitForFunction(()=>![...document.querySelector('[data-slot="sidebar-wrapper"]').getAnimations({subtree:true})].some(animation=>animation.playState==='running'&&Number.isFinite(animation.effect?.getComputedTiming().endTime)));
+    await checkBreadcrumbLayout(page);
+    await page.locator('[aria-label="页面工具栏"]').screenshot({path:path.resolve(__dirname,'../../artifacts/global-breadcrumb-desktop.png')});
+    console.log('PASS: official global Breadcrumb updates on navigation, ignores page tabs and fits 390/720/960/1100/1200px Headers with expanded/collapsed sidebar');
     await workbench.screenshot({path:path.resolve(__dirname,'../../artifacts/group-submission-workbench.png')});
     assert.equal((await page.evaluate(()=>window.operations)).some(operation=>['tencentSheet.fetch','tencentSheet.inspect','tencentSheet.write','tencentSheet.backgroundTest','automation.setEnabled'].includes(operation)),false);
     console.log('PASS: independent group business route, real-operation link save contract, draft retention, existing history snapshot and responsive shadcn surface');
