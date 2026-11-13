@@ -1,0 +1,86 @@
+'use strict';
+const assert = require('node:assert/strict');
+
+// Real React dist with the existing localhost Bridge fixture. Cell picks are isolated mocks.
+module.exports = async function checkBusinessConfiguration(page) {
+  const workbench = page.getByRole('region', { name: '集团填报工作台', exact: true });
+  await workbench.getByRole('tab', { name: '设置', exact: true }).click();
+  const settings = page.locator('[aria-label="集团填报设置"]');
+  // Modal dialogs aria-hide the background. Keep inspecting its committed list without changing modal behavior.
+  const business = settings.getByRole('region', { name: '业务配置', exact: true, includeHidden: true });
+  const rows = business.getByRole('table', { name: '业务列表', exact: true, includeHidden: true }).locator('tbody tr');
+  const stepOne = page.getByRole('dialog', { name: /^(新建业务|编辑业务)$/ });
+  const stepTwo = page.getByRole('dialog', { name: '设置填报位置', exact: true });
+  assert.equal(await settings.locator('nav').count(), 0);
+  assert.deepEqual(await settings.locator('h2').allTextContents(), ['网页配置', '业务配置', '执行规则']);
+  assert.equal(await settings.locator('[data-slot=separator]').count(), 2);
+  assert.equal(await business.getByRole('button', { name: '新建业务', exact: true }).count(), 1);
+  assert.equal(await business.locator('[data-slot=empty-title], [data-slot=empty-description]').count(), 0);
+  await business.getByRole('button', { name: '新建业务', exact: true }).click();
+  assert.equal(await stepOne.getByRole('button', { name: '下一步', exact: true }).isDisabled(), true);
+  const sources = stepOne.getByRole('combobox');
+  await sources.click(); await page.getByRole('option', { name: '设备运行时长（示例）', exact: true }).click();
+  assert.equal(await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).inputValue(), '设备运行时长（示例）');
+  await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).fill('自定义业务');
+  await sources.click(); await page.getByRole('option', { name: '成品入库量（示例）', exact: true }).click();
+  assert.equal(await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).inputValue(), '自定义业务');
+  await stepOne.getByRole('button', { name: '下一步', exact: true }).click(); await stepTwo.waitFor();
+  assert.equal(await rows.count(), 1);
+  assert.equal(await rows.first().getAttribute('aria-label'), '编辑业务：自定义业务');
+  await stepTwo.getByRole('alert').filter({ hasText: '请先完成网页配置并登录' }).waitFor();
+  for (const action of await stepTwo.getByRole('button', { name: '选择单元格', exact: true }).all()) assert.equal(await action.isDisabled(), true);
+  await stepTwo.getByRole('button', { name: '关闭', exact: true }).click();
+  await stepTwo.waitFor({ state: 'hidden' });
+  await business.getByRole('row', { name: '编辑业务：自定义业务', exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await rows.count(), 1);
+  assert.equal(await rows.first().getByRole('cell', { name: '自定义业务', exact: true }).count(), 1);
+  assert.ok((await rows.first().textContent()).includes('未设置位置'));
+  assert.equal(await rows.first().getByRole('switch').count(), 0);
+  assert.deepEqual(await business.locator('th').allTextContents(), ['业务', '数据来源', '填报位置', '操作']);
+  assert.equal(await business.getByRole('table').evaluate(table => {
+    const wrapper = table.parentElement.parentElement;
+    return getComputedStyle(wrapper).borderTopWidth === '1px' && parseFloat(getComputedStyle(wrapper).borderRadius) > 0;
+  }), true);
+  assert.equal(await settings.locator('[data-slot=input-group] [data-slot=input-group-addon]').count(), 2);
+  assert.equal(await settings.locator('[aria-label="文档名称"]').textContent(), '共享文档');
+  const writesBefore = await page.evaluate(() => [...window.operations]);
+  await settings.getByRole('button', { name: '检测连接', exact: true }).click();
+  await settings.locator('[data-connection-state=idle]').waitFor();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  assert.deepEqual(await page.evaluate(() => window.operations), writesBefore, 'local detection and focus never invoke a real session');
+  await rows.first().click(); await stepOne.waitFor();
+  assert.equal(await stepOne.getByRole('button', { name: '删除业务', exact: true }).count(), 0);
+  await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).fill('修改后业务');
+  await stepOne.getByRole('button', { name: '下一步', exact: true }).click(); await stepTwo.waitFor();
+  for (const action of await stepTwo.getByRole('button', { name: '选择单元格', exact: true }).all()) assert.equal(await action.isDisabled(), true);
+  await stepTwo.getByRole('button', { name: '关闭', exact: true }).click();
+  await stepTwo.waitFor({ state: 'hidden' });
+  assert.ok((await rows.first().textContent()).includes('修改后业务'));
+  assert.equal(await page.getByRole('dialog').count(), 0);
+  const actions = () => rows.first().getByRole('button', { name: '业务操作：修改后业务', exact: true });
+  await actions().click(); await page.getByRole('menuitem', { name: '重新选取位置', exact: true }).click(); await stepTwo.waitFor();
+  assert.equal(await stepTwo.getByRole('button', { name: '保存', exact: true }).isDisabled(), true);
+  await stepTwo.getByRole('button', { name: '关闭', exact: true }).click();
+  await stepTwo.waitFor({ state: 'hidden' });
+  await actions().click(); await page.getByRole('menuitem', { name: '删除', exact: true }).click();
+  const confirmation = page.getByRole('alertdialog', { name: '删除业务', exact: true });
+  await confirmation.waitFor(); assert.ok((await confirmation.textContent()).includes('修改后业务')); assert.equal(await rows.count(), 1);
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click(); await confirmation.waitFor({ state: 'hidden' });
+  await actions().click(); await page.getByRole('menuitem', { name: '删除', exact: true }).click();
+  await confirmation.getByRole('button', { name: '删除业务', exact: true }).click(); await confirmation.waitFor({ state: 'hidden' });
+  assert.equal(await rows.count(), 0);
+  await settings.getByRole('switch', { name: '自动填报', exact: true }).click();
+  await page.locator('[data-sonner-toast]').filter({ hasText: '仅保留在当前页面，尚未保存到后端' }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.operations), writesBefore.concat('tencentSheet.sessionStatus'), 'businesses and execution-rule preview issue no backend writes; enabling rules only reads the existing session status');
+  for (const width of [1600, 960, 720, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await settings.evaluate(element => ({ width: element.getBoundingClientRect().width, overflow: element.scrollWidth > element.clientWidth }));
+    const panelWidth = await settings.evaluate(element => element.parentElement.getBoundingClientRect().width);
+    assert.equal(layout.width, panelWidth); assert.equal(layout.overflow, false);
+    const group = settings.locator('[data-slot=input-group]');
+    assert.equal(await group.evaluate(element => element.scrollWidth > element.clientWidth), false);
+  }
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await workbench.getByRole('tab', { name: '概览', exact: true }).click();
+  console.log('PASS: shared settings width, unified input, honest idle detection, bordered business table, removed enable state, unchanged two-step editing, gated picks, deletion confirmation and local rule toast');
+};

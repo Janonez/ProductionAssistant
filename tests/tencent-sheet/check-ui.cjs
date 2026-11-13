@@ -16,8 +16,9 @@ async function groupLayout(page){
   await page.evaluate(()=>document.fonts.ready);
   await page.waitForFunction(()=>![...document.querySelector('[aria-label="集团填报工作台"]').getAnimations({subtree:true})].some(animation=>animation.playState==='running'&&Number.isFinite(animation.effect?.getComputedTiming().endTime)));
   return page.evaluate(()=>{
-    const workbench=document.querySelector('[aria-label="集团填报工作台"]'),scroll=document.querySelector('.pa-page-scroll'),card=workbench.querySelector('[role="tabpanel"][data-state="active"] [data-slot="card"]');
-    return {left:workbench.getBoundingClientRect().left,width:workbench.getBoundingClientRect().width,cardLeft:card.getBoundingClientRect().left,tabLeft:workbench.querySelector('[role="tablist"]').getBoundingClientRect().left,clientWidth:scroll.clientWidth,scrollWidth:scroll.offsetWidth,gutter:getComputedStyle(scroll).scrollbarGutter,overflow:scroll.scrollHeight>scroll.clientHeight};
+    const workbench=document.querySelector('[aria-label="集团填报工作台"]'),scroll=document.querySelector('.pa-page-scroll'),panel=workbench.querySelector('[role="tabpanel"][data-state="active"]');
+    // Compare the shared panel boundary and its immediate content across top-level tabs.
+    return {left:workbench.getBoundingClientRect().left,width:workbench.getBoundingClientRect().width,contentLeft:panel.getBoundingClientRect().left,contentWidth:panel.firstElementChild?.getBoundingClientRect().width,tabLeft:workbench.querySelector('[role="tablist"]').getBoundingClientRect().left,clientWidth:scroll.clientWidth,scrollWidth:scroll.offsetWidth,gutter:getComputedStyle(scroll).scrollbarGutter,overflow:scroll.scrollHeight>scroll.clientHeight};
   });
 }
 async function main(){
@@ -94,7 +95,7 @@ async function main(){
     assert.equal(await page.locator('[data-slot="breadcrumb"] a').count(),0,'navigation categories have no link target');
     assert.equal(await page.getByRole('button',{name:'集团填报',exact:true}).getAttribute('aria-current'),'page');
     const workbench=page.getByRole('region',{name:'集团填报工作台',exact:true});
-    assert.deepEqual(await workbench.getByRole('tab').allTextContents(),['填报','历史记录','设置']);
+    assert.deepEqual(await workbench.getByRole('tab').allTextContents(),['概览','记录','设置']);
     assert.equal(await workbench.locator('.automation-list-page').count(),0);
     assert.equal(await workbench.getByRole('button',{name:'新建任务',exact:true}).count(),0);
     assert.equal(await workbench.getByRole('table',{name:'本次填报数据'}).locator('tbody tr').count(),4);
@@ -106,47 +107,48 @@ async function main(){
     const tallLayout=await groupLayout(page);
     console.log('Group layout measurement:',JSON.stringify({shortLayout,tallLayout}));
     assert.equal(shortLayout.gutter,'stable');assert.equal(tallLayout.gutter,'stable');
-    assert.equal(shortLayout.overflow,false);assert.equal(tallLayout.overflow,true);
+    assert.equal(shortLayout.overflow,false);
     assert.equal(shortLayout.left,tallLayout.left);assert.equal(shortLayout.width,tallLayout.width);
-    await workbench.getByRole('tab',{name:'填报',exact:true}).click();
+    await workbench.getByRole('tab',{name:'概览',exact:true}).click();
     await page.setViewportSize({width:1200,height:900});
     assert.equal(await workbench.locator('[data-slot=table]').evaluate(el=>!!el.closest('[data-shadcn-surface]')&&!el.closest('.pa-legacy-content')),true);
     await workbench.getByRole('button',{name:'检查文档连接',exact:true}).click();
-    const connectionInput=workbench.getByLabel('目标腾讯文档链接',{exact:true});
+    const connectionInput=workbench.getByLabel('文档链接',{exact:true});
     await connectionInput.fill('https://docs.qq.com/sheet/t2-saved');
-    assert.equal(await workbench.getByRole('button',{name:'打开并检查',exact:true}).isDisabled(),true);
-    await workbench.getByRole('tab',{name:'填报',exact:true}).click();
+    assert.equal(await workbench.locator('[data-connection-state=idle]').count(),1);
+    assert.equal(await workbench.locator('[data-slot=input-group]').count(),1);
+    await workbench.getByRole('tab',{name:'概览',exact:true}).click();
     await workbench.getByRole('tab',{name:'设置',exact:true}).click();
     assert.equal(await connectionInput.inputValue(),'https://docs.qq.com/sheet/t2-saved');
-    await workbench.getByRole('button',{name:'保存文档链接',exact:true}).click();
-    await workbench.getByRole('status').filter({hasText:/^文档链接已保存。$/}).waitFor();
+    await workbench.getByRole('button',{name:'保存',exact:true}).click();
+    await workbench.getByRole('status').filter({hasText:/^已保存$/}).waitFor();
     assert.deepEqual(await page.evaluate(()=>window.savedConfig),{documentUrl:'https://docs.qq.com/sheet/t2-saved'});
-    await workbench.getByRole('tab',{name:'历史记录',exact:true}).click();
+    await workbench.getByRole('tab',{name:'记录',exact:true}).click();
     await workbench.getByRole('table',{name:'集团填报历史'}).getByRole('cell',{name:'失败或待确认',exact:true}).waitFor();
     await workbench.getByRole('button',{name:'查看 2026-08-31 08:30:00 的填报详情',exact:true}).click();
     const historyDialog=page.getByRole('dialog',{name:'填报详情',exact:true});
     await historyDialog.getByRole('cell',{name:'0 吨',exact:true}).waitFor();
     await historyDialog.getByText('刷新回读未确认',{exact:true}).waitFor();
     await historyDialog.getByRole('button',{name:'关闭',exact:true}).click();
-    await workbench.getByRole('tab',{name:'填报',exact:true}).click();
+    await workbench.getByRole('tab',{name:'概览',exact:true}).click();
     for(const width of [1600,960]){
       await page.setViewportSize({width,height:900});
       const reference=await groupLayout(page);
       for(const count of [0,60]){
         await page.evaluate(count=>window.historyCount=count,count);
-        for(const tab of ['历史记录','设置','填报']){
+        for(const tab of ['记录','设置','概览']){
           await workbench.getByRole('tab',{name:tab,exact:true}).click();
-          if(tab==='历史记录'){
+          if(tab==='记录'){
             if(count===0)await workbench.getByRole('cell',{name:'暂无执行记录。',exact:true}).waitFor();
             else await page.waitForFunction(count=>document.querySelector('[aria-label="集团填报历史"] tbody')?.rows.length===count,count);
           }
           const current=await groupLayout(page);
           assert.deepEqual(await page.locator('[data-slot="breadcrumb-item"]').allTextContents(),['数据报送','集团填报'],'page tabs do not create route levels');
-          for(const key of ['left','width','cardLeft','tabLeft','clientWidth'])assert.equal(current[key],reference[key],`${width}px / ${count} history rows / ${tab} / ${key}`);
-          if(tab==='历史记录')assert.equal(current.overflow,count>0);
+          for(const key of ['left','width','contentLeft','contentWidth','tabLeft','clientWidth'])assert.equal(current[key],reference[key],`${width}px / ${count} history rows / ${tab} / ${key}`);
+          if(tab==='记录')assert.equal(current.overflow,count>0);
         }
       }
-      console.log(`PASS: stable tab and card edges at ${width}px with empty/60-row history and tall settings, after finite animations finish`);
+      console.log(`PASS: stable tab and content edges at ${width}px with empty/60-row history and settings navigation, after finite animations finish`);
     }
     await page.evaluate(()=>delete window.historyCount);
     await page.setViewportSize({width:1200,height:900});
@@ -172,6 +174,7 @@ async function main(){
     await workbench.screenshot({path:path.resolve(__dirname,'../../artifacts/group-submission-workbench.png')});
     assert.equal((await page.evaluate(()=>window.operations)).some(operation=>['tencentSheet.fetch','tencentSheet.inspect','tencentSheet.write','tencentSheet.backgroundTest','automation.setEnabled'].includes(operation)),false);
     console.log('PASS: independent group business route, real-operation link save contract, draft retention, existing history snapshot and responsive shadcn surface');
+    await require('./check-business-configuration.cjs')(page);
     // Keep the full original recording, teaching and write-contract regression through its remaining consumer.
     await page.getByRole('button',{name:'任务清单',exact:true}).click();
     await page.getByRole('heading',{name:'任务清单',exact:true}).waitFor();

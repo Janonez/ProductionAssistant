@@ -140,7 +140,7 @@ describe('transplanted shadcn application shell', () => {
         const workbench = container.querySelector('[aria-label="集团填报工作台"]')!
         expect(workbench).not.toBeNull()
         expect(workbench.querySelector('h1')!.textContent).toBe('集团填报')
-        expect([...workbench.querySelectorAll('[role="tab"]')].map(tab => tab.textContent)).toEqual(['填报', '历史记录', '设置'])
+        expect([...workbench.querySelectorAll('[role="tab"]')].map(tab => tab.textContent)).toEqual(['概览', '记录', '设置'])
         expect(container.querySelector('[data-business-page]')).toBeNull()
       } else {
         const business = container.querySelector('[data-business-page]')!

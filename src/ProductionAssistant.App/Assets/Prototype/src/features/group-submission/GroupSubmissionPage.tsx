@@ -1,22 +1,26 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { invoke } from '../../bridge/index'
 import { Button } from '../../components/ui/button'
 import { Alert, AlertDescription } from '../../components/ui/alert'
+import { Spinner } from '../../components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs'
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '../../components/ui/dropdown-menu'
 import { SubmissionWorkbench, SubmissionWorkbenchSkeleton } from './SubmissionWorkbench'
 import { SubmissionHistory } from './SubmissionHistory'
-import { SubmissionSettings } from './SubmissionSettings'
+import { createSubmissionSettingsMock } from './submission-settings.mock'
 import type { SubmissionJob } from './types'
+
+const SubmissionSettings = lazy(() => import('./SubmissionSettings').then(module => ({ default: module.SubmissionSettings })))
 
 export function GroupSubmissionPage() {
   const [tab, setTab] = useState('submission')
+  const [settingsOpened, setSettingsOpened] = useState(false)
+  const [settingsAdapter] = useState(createSubmissionSettingsMock)
   const [documents, setDocuments] = useState<{ id: string; name: string }[]>([])
   const [selectedId, setSelectedId] = useState<string>()
   const [job, setJob] = useState<SubmissionJob>(), [loadingJob, setLoadingJob] = useState(false)
   const [listError, setListError] = useState(''), [jobError, setJobError] = useState('')
   const [listReload, setListReload] = useState(0), [jobReload, setJobReload] = useState(0)
-  const [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false)
+  const [busy, setBusy] = useState(false)
   useEffect(() => {
     let active = true
     setListError('')
@@ -30,7 +34,7 @@ export function GroupSubmissionPage() {
   }, [listReload])
   useEffect(() => {
     let active = true
-    setJob(undefined); setJobError(''); setBusy(false); setDirty(false)
+    setJob(undefined); setJobError(''); setBusy(false)
     if (!selectedId) { setLoadingJob(false); return }
     setLoadingJob(true)
     invoke<SubmissionJob>('tencentSheet.get', { id: selectedId }).then(value => {
@@ -44,22 +48,17 @@ export function GroupSubmissionPage() {
   }, [selectedId, jobReload])
   const ready = selectedId !== undefined && !listError && !loadingJob && !jobError && (!selectedId || job?.id === selectedId)
   return <section aria-label="集团填报工作台" className="mx-auto w-full max-w-5xl space-y-6">
-    <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold tracking-tight">集团填报</h1>
-      {(documents.length > 1 || (selectedId === '' && documents.length > 0)) && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={busy || dirty || loadingJob}>选择文档连接</Button></DropdownMenuTrigger>
-        <DropdownMenuContent align="end"><DropdownMenuRadioGroup value={selectedId} onValueChange={setSelectedId}>{documents.map((document, index) => <DropdownMenuRadioItem key={document.id} value={document.id}>{document.name} · {index + 1}</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuContent>
-      </DropdownMenu>}
-    </header>
+    <header><h1 className="text-2xl font-semibold tracking-tight">集团填报</h1></header>
     {listError && <Alert variant="destructive"><AlertDescription>{listError}<Button variant="outline" onClick={() => setListReload(value => value + 1)}>重新读取连接列表</Button></AlertDescription></Alert>}
     {jobError && <Alert variant="destructive"><AlertDescription>{jobError}<Button variant="outline" onClick={() => setJobReload(value => value + 1)}>重新读取文档配置</Button></AlertDescription></Alert>}
-    <Tabs value={tab} onValueChange={setTab} className="gap-5">
-      <TabsList aria-label="集团填报"><TabsTrigger value="submission" disabled={busy}>填报</TabsTrigger><TabsTrigger value="history" disabled={busy}>历史记录</TabsTrigger><TabsTrigger value="settings" disabled={busy}>设置</TabsTrigger></TabsList>
+    <Tabs value={tab} onValueChange={value => { if (value === 'settings') setSettingsOpened(true); setTab(value) }} className="gap-5">
+      <TabsList aria-label="集团填报"><TabsTrigger value="submission" disabled={busy}>概览</TabsTrigger><TabsTrigger value="history" disabled={busy}>记录</TabsTrigger><TabsTrigger value="settings" disabled={busy}>设置</TabsTrigger></TabsList>
       {!ready && !listError && !jobError && <SubmissionWorkbenchSkeleton />}
-      <TabsContent value="submission">{ready && <SubmissionWorkbench key={job?.id ?? 'new'} businessDate={job?.businessDate} connected={!!job} configure={() => setTab('settings')} />}</TabsContent>
+      <TabsContent value="submission">{ready && <SubmissionWorkbench key={job?.id ?? 'new'} businessDate={job?.businessDate} connected={!!job} configure={() => { setSettingsOpened(true); setTab('settings') }} />}</TabsContent>
       <TabsContent value="history">{ready && tab === 'history' && <SubmissionHistory key={job?.id ?? 'new'} id={job?.id} />}</TabsContent>
-      <TabsContent value="settings" forceMount hidden={tab !== 'settings'}>{ready && <div className="space-y-4">
-        <SubmissionSettings key={selectedId} job={job} onSaved={setJob} onCreated={setSelectedId} onActive={setBusy} onDirty={setDirty} />
-        {!!selectedId && <Button variant="outline" disabled={busy || dirty} onClick={() => setSelectedId('')}>添加文档连接</Button>}
-      </div>}</TabsContent>
+      <TabsContent value="settings" forceMount hidden={tab !== 'settings'}>{ready && settingsOpened && <Suspense fallback={<Spinner aria-label="正在加载设置" />}>
+        <SubmissionSettings key={selectedId} adapter={settingsAdapter} job={job} onSaved={setJob} onCreated={setSelectedId} onActive={setBusy} onDirty={() => {}} />
+      </Suspense>}</TabsContent>
     </Tabs>
   </section>
 }
