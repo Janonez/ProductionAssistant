@@ -1,5 +1,156 @@
 # ProductionAssistant 交接状态
 
+## 集团填报设置交付基线（2026-11-13，人工验收及完整 verify 通过）
+
+- 用户已验收集团填报设置界面，并再次明确授权提交、推送、创建 PR 和 Squash Merge。交付范围为本分支积累的网页配置与文档链接、业务两步配置 / 位置预览、执行规则、官方组件、测试、组件来源和 dist；不改后端 / Bridge / Sidecar / Electron 宿主，不更新版本、Production、标签或 Release。
+- 最新完整 verify 已退出 0：React 442 通过 / 1 既有跳过、TypeScript / Vite、浏览器集团填报及原录制 / 教学契约、Electron 91/91、.NET 370/370、Development 发布通过；123 个前端文件的清单及 SHA256 与 dist 全部一致。此后仅经用户授权清理 9 个新增文件末尾的多余空白行，功能代码不变，并更新 Git 交付记录。浏览器模态背景定位修复及其证据见下节。
+- 业务 / 执行规则仍为明确标注的本地预览；真实文档名称识别 / 七态检测 / 扫码登录以及新增规则的后端持久化、调度和真实写入不因 UI 验收而记为已完成。URL 保存和打开文档沿用原接口，执行历史与登录读取沿用真实只读接口。
+- Git 交付使用 codex/group-submission-settings → main 的 PR；保持单一主工作树，仅按本批路径暂存，提交前复核暂存区。合并仍以对应 head 的 CI verify pass 为前提，CI 未完成时停在功能分支并等待用户通知；对应 PR 的提交 / CI / 合并事实以 GitHub 和 Git log 为准。
+
+## 业务配置浏览器回归定位修复（2026-11-13，根因确认，完整 verify 通过）
+
+- 属于测试定位问题，非业务创建回归。复用既有 check-ui.cjs 的真实 React dist、Edge 与本地 Bridge fixture，在失败点只于内存插入诊断：位置 Dialog 打开时，实际 Table / tbody 有 1 行“自定义业务”，来源为成品入库量示例、状态未设置位置；业务 section 的祖先带 aria-hidden=true，原默认 getByRole('region') 返回 0，includeHidden 定位返回 1。关闭 Dialog 后，原定位恢复为 1 行，行可访问名称为“编辑业务：自定义业务”；Console error 与 pageerror 均为空。父组件已完成 items 更新并渲染 Table，没有业务过滤或创建丢失。
+- 仅修 tests/tencent-sheet/check-business-configuration.cjs：检查模态背景的业务 region / 业务列表 Table 时显式 includeHidden，保持语义名称和必须为 1 行的断言；新增精确业务行名称检查，并在 Dialog 关闭后等待关闭完成，验证新行可见及业务名称单元格存在。编辑、重选关闭同样等待 Dialog 隐藏，防止读取退出动画中的旧对话框。不修改 Dialog 的模态 / aria-hidden 行为，不改产品源码、网页配置、执行规则、两点标定、后端或依赖。
+- 按指定顺序全部退出 0：原失败业务浏览器专项（包括新行真实可见、创建 / 编辑 / 重选 / 删除与无业务写入）、完整 check-ui.cjs 集团填报及原录制 / 教学 / 填报契约回归、集团填报 React 6 文件 / 81 项、独立 TypeScript、前端全量 44 文件 / 442 通过 / 1 既有符号链接 EPERM 跳过，最后完整 `pwsh -NoProfile -File .\scripts\verify.ps1`（不带 SkipRestore / SyncRelease）。完整 verify 包括依赖重装、NuGet 还原、Teable / session / save / frame、字体 lint、React、TypeScript / Vite、浏览器、Electron 91/91、Release 构建、.NET 370/370 及 Development 发布；保留既有 npm 审计、Vite 大块和 PRI249 提示。
+- Development 与源码 dist 的 123 个文件清单和 SHA256 全部一致，缺失 / 差异 / 多余均为 0，环境为 Development。源文件指纹核对：除本轮测试脚本及本交接状态外，全部前序未提交源码保持，未丢失文件；已有人工验收的产品行为未改。
+- 保持 codex/group-submission-settings、唯一主工作树，全部修改未提交。本轮遵守用户明确限制，不切分支、不 stash、不提交、不推送、不合并，不修改 Production；等待用户通知后再接续 Git 交付。完整 npm ci 后如需启动 Electron，沿用项目官方安装器恢复包内运行时；本轮未另行恢复或启动实际窗口。
+
+## 集团填报设置 Git 交付（2026-11-13，人工验收通过，完整 verify 失败后停止）
+
+- 用户已明确验收通过并授权提交、推送和 Squash Merge；随后另行明确允许在保留全部未提交修改的情况下新建 `codex/group-submission-settings`，并正常退出 Metis 以运行完整 verify。分支已创建，基线 `fbba49e78ee16b60fe55c018f803fda8fc65aef1` 与 GitHub main 一致，唯一主工作树，全部 79 项待交付文件已留存指纹；未 stash / 丢弃或新增工作树。
+- 交付范围为本地积累且已验收的集团填报网页配置、业务两步配置 / 位置预览、执行规则、官方组件和对应测试 / 来源记录 / dist。依赖审查未发现原有包版本升级，44 个非 dist 待交付文件未检出常见密钥格式。业务 / 规则仍为明确的本地预览，不将真实文档检测、后端保存、调度或写入记为已完成。
+- 单次授权执行 `pwsh -NoProfile -File .\scripts\verify.ps1`，不带 SyncRelease。依赖重装、NuGet 还原、Teable 转换、Frame / save / session、字体 lint、React 全量 442 通过 / 1 既有跳过、TypeScript 和 Vite 全部通过。审查时仅将浏览器脚本的旧回退名称、旧 Mock Toast 及无写入断言同步为已验收语义；不改运行源码和已通过的 14 项执行规则测试。
+- 完整 verify 随后退出 1：`AssertionError [ERR_ASSERTION]: 0 !== 1 at checkBusinessConfiguration (tests/tencent-sheet/check-business-configuration.cjs:27:10)`；原始汇总 `TencentSheet UI browser checks failed with exit code 1.` 失败点为新建业务并打开位置步骤后，业务表格行数定位结果 0，预期 1；根因尚未确认。按失败即停规则未进一步修复或重跑，未执行后续 Electron / .NET / Development 发布步骤；此前实际 Electron 人工验收通过不替代这一浏览器自动回归。
+- 下次入口：在当前需求分支保留全部修改，先调查上述浏览器行数断言及 Dialog 可访问性 / 定位上下文，再按授权继续完整验证。verify 通过后按路径暂存、提交、推送、开 PR；仅在 CI verify pass 后按既有授权 squash 合并。当前未暂存、提交、推送、创建 PR 或合并，不修改 Production / 版本 / 标签 / Release。完整 npm ci 已移除 Electron 包内运行时，后续需启动时沿用官方安装器恢复，不能把当前状态记为可直接再次启动已验证。
+
+## Development NETSDK1112 恢复（2026-11-13，发布 / 哈希 / 启动检查通过，待人工视觉验收）
+
+- 原因经实际文件确认：global.json 为 8.0.420 / latestFeature，当前实际 SDK 为 8.0.428；该 SDK 的 BundledVersions 要求 net8.0 Runtime Pack 8.0.34，而 NuGet 缓存只有 8.0.29 / 8.0.33，旧 project.assets.json 来自 SDK 8.0.427 / 8.0.33。项目 RuntimeIdentifier 为 win-x64、原 Development 发布带 self-contained true，包源保持 https://api.nuget.org/v3/index.json；未修改 SDK、项目配置或包源来绕过问题。
+- 单次授权沙箱外执行 `dotnet restore src\ProductionAssistant.App\ProductionAssistant.csproj -p:Configuration=Debug -p:Platform=x64 -p:RuntimeEnvironment=Development -p:SelfContained=true -r win-x64`，退出 0，App 及三个引用项目还原成功；NETCore / AspNetCore / WindowsDesktop 的 win-x64 8.0.34 均已在缓存中。随后按原流程单次授权 `dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj -c Debug -p:Platform=x64 -p:RuntimeEnvironment=Development --self-contained true --no-restore -o deployments\development`，退出 0，保留既有 PRI249 警告。发布 runtimeconfig 确认包含 Microsoft.NETCore.App 8.0.34。
+- 前端未重新构建：dist 的 123 个文件与本轮开始时逐文件 SHA256 完全一致；Development 前端文件清单及全部 SHA256 与 dist 完全一致，缺失 / 差异 / 多余均为 0。入口仍为 index-B63HHE1C.js / index-B83awzi5.css，包含已完成的执行规则 UI。
+- 用户正常退出旧 Development 后明确要求重新启动；未结束进程。经单次授权用既有 npm Electron 入口启动，仅为该子进程设置 PRODUCTIONASSISTANT_DIST 到已发布目录；日志确认 Development、window-created、did-finish-load、react-ready、sidecar-first-output，启动失败记录为空，Electron / Sidecar 均运行。实际视觉和交互仍待用户在当前窗口集团填报 → 设置中验收。
+- 保留 main、唯一主工作树及全部未提交源码修改；本轮仅更新交接状态，不改业务 / UI / 依赖 / ACL / 沙箱配置，不提交、推送、合并，不修改 Production。未重复前端测试或构建。
+
+## 执行规则测试回归修复（2026-11-13，验证 / Vite 通过，Development 发布失败后停止）
+
+- 本轮源码仅修改 GroupSubmissionPage.test.tsx 的恢复连接测试：重新挂载前 invoke.mockClear() 隔离本次读取，再用 toHaveBeenCalledWith('tencentSheet.get', { id: 'created' }) 验证恢复读取。原创建单次 / 参数、文档读取、无通用向导及 URL 恢复断言全部保留；runs 用于顶部真实执行记录，不需要 get 成为整个调用序列的最后一项。未修改业务源码、执行规则 UI 或其 14 项测试，未新增依赖。
+- 严格按指定顺序验证，均退出 0：原失败用例 1 通过 / 14 未选中；集团填报专项 6 文件 / 81 通过；前端全量 44 文件 / 442 通过 / 1 既有符号链接 EPERM 跳过；独立 TypeScript；单次授权沙箱外 npm run build（现有 Prototype 脚本）。Vite 6.4.3、2754 模块、9.19 秒，保留既有大于 500kB chunk 提示。dist 已更新为 index-B63HHE1C.js / index-B83awzi5.css 及 SubmissionSettings-7oo5TLk1.js，包含前轮执行规则 UI。
+- 随后单次授权执行既有完整 Development 发布命令 `dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj -c Debug -p:Platform=x64 -p:RuntimeEnvironment=Development --self-contained true --no-restore -o deployments\development`，退出 1。原始错误：`Microsoft.NET.Sdk.FrameworkReferenceResolution.targets(491,5): error NETSDK1112: 未下载 Microsoft.NETCore.App.Runtime.win-x64 的运行时包。请尝试使用 RuntimeIdentifier“win-x64”运行 NuGet 还原。`（SDK 8.0.428，项目 ProductionAssistant.csproj）。按失败即停规则未自行 restore / 重试，Development 更新和本轮发布后的 SHA256 核对未完成，不能视为执行规则 UI 已交付至 Electron。
+- 下次入口：用户授权后处理缺失的 win-x64 运行时还原，再执行原有 Development 发布和文件清单 / SHA256 核对，最后刷新 Electron 人工验收。保留 main、唯一主工作树及全部未提交工作；未提交、推送、合并，未修改 Production、ACL、宿主或后端。
+
+## 执行规则 UI 优化（2026-11-13，专项测试失败后停止，未构建交付）
+
+- 延续 main / 唯一主工作树及全部未提交工作。执行规则采用现有 Card + 受控 Collapsible + ItemGroup / ItemSeparator，自动填报 Switch 与 open 同源，顶部记录常驻，无额外 Trigger / 箭头；使用已有 tw-animate-css 折叠动画。增加七天多选且至少一天、等待 / 跳过、5/10/15/30 分钟重试、严格晚于执行时间的截止校验、钉钉通知与启动补跑。时间保留 HH:mm，blur / Enter 校验通过才保存，隐藏 / 折叠保留值，失败恢复适配器已确认草稿。
+- 用户明确允许补齐官方组件必要依赖，新增锁定 @radix-ui/react-radio-group 1.5.1、@radix-ui/react-toggle-group 1.2.1、@radix-ui/react-toggle 1.2.1；仅补入固定官方提交的 RadioGroup / ToggleGroup / Toggle 源码，来源与许可已记录。前端规则视图类型 / Mock 增加字段及业务草稿订阅，SubmissionSettings 仅向执行规则传已有 job 和来源列表；网页配置、业务组件、两点标定、全局布局、宿主和后端源码未改。
+- 本地 Mock 保存提示明确为“仅保留在当前页面，尚未保存到后端”，真实适配器确认才提示“已保存”；没有接入这套新增规则的真实持久化或调度。执行记录使用现有 tencentSheet.runs，登录使用显式 sessionStatus 证据，未提供下次执行时间时显示破折号，未提供历史时显示尚未执行，读取失败单独显示读取失败，不生成日期 / 结果或将未知登录判为未登录。业务联动检查当前有效来源与已配置位置，不恢复业务 enabled 字段。
+- 验证：TypeScript、字体 lint、git diff --check 均退出 0。集团填报专项 6 文件：5 通过 / 1 失败，80 通过 / 1 失败；新增执行规则 14 项全部通过。唯一失败为 GroupSubmissionPage.test.tsx:152 的原 toHaveBeenLastCalledWith('tencentSheet.get', { id: 'created' })，实际最后调用因执行记录读取而成为 tencentSheet.runs；按失败即停规则未改该断言、未重跑、未执行 Vite / Development 发布或 Electron 验收。当前 dist / Development 仍为上一轮文档链接组件版本，不能将本轮源码记为构建交付完成。
+- 下次入口：用户授权后处理上述页面集成断言与新增读取契约，再运行专项、TypeScript、构建并按原有发布流程更新 Development，最后实际 Electron 验收。未提交、推送、合并或更新 Production。
+
+## Development 同步权限排查与恢复（2026-11-13，同步及启动检查通过，待人工视觉验收）
+
+- 失败字体及目标目录存在，字体为 Archive、非只读；当前沙箱身份 WORK\CodexSandboxOnline 所属组的继承 ACL 含 Modify / Synchronize，独占只读打开成功，未发现该文件的冲突句柄。沙箱内进程查询与新启动日志读取也曾返回访问拒绝，均仅对对应只读命令申请一次沙箱外执行；未改 ACL、所有者或沙箱配置。沙箱外身份 WORK\zhang 执行项目原有发布流程成功，故权限故障与沙箱执行身份 / 权限上下文有关，不认定为文件占用或 ACL 配置错误。
+- 单次授权执行 `dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj -c Debug -p:Platform=x64 -p:RuntimeEnvironment=Development --self-contained true --no-restore -o deployments\development`，退出 0；沿用 verify.ps1 原有完整 Development 发布步骤，未使用替代复制方案或 SyncRelease，保留既有 PRI249 警告。Development / Assets / Prototype 与源码 dist 的 123 个文件清单及 SHA256 全部一致，缺失 / 差异 / 多余均为 0，环境标记为 Development；入口 index-Ds9ftah6.js / index-DioBYh8u.css 及 SubmissionSettings-CdbHn92o.js 有效，包含共享文档、h-11、官方分隔和打开文档。
+- 用户正常退出旧 Development 后明确授权重新启动；未结束任何进程。沿用 npm Electron 启动入口，仅给这次进程设置 PRODUCTIONASSISTANT_DIST 指向已发布的 Development 前端目录，未修改持久配置。新 Electron PID 32392、Sidecar PID 10380 均运行；本次日志确认 did-finish-load、react-ready、sidecar-first-output，production.getBindings / automation.list / tencentSheet.get / tencentSheet.runs 读取成功。启动成功不等于组件视觉或真实写入验收通过。
+- 下次入口：用户在当前 Development 窗口进入集团填报 → 设置，人工验收 FileText / 共享文档、44px 高度、两侧分隔、URL 编辑与打开文档、深浅主题、窄窗口、保存反馈和连接状态。保留 main、唯一主工作树及全部未提交工作；本轮不改业务源码 / UI / Production，不提交、推送、合并，不重复完整 verify 或前端测试。
+
+## 文档链接组件构建交付（2026-11-13，构建通过，Development 同步失败后停止）
+
+- 本轮仅继续构建与验收准备，保留 main、唯一主工作树及全部前序未提交修改；未改 UI / 业务源码、依赖、ACL，未提交、推送或合并。没有重复上轮三个不存在路径的辅助检查。
+- 单次申请沙箱外执行 `npm.cmd --prefix src\ProductionAssistant.App\Assets\Prototype run build`，退出 0：TypeScript 与 Vite 6.4.3 通过，2717 模块、Vite 构建 11.22 秒；保留既有大于 500kB chunk 提示。源码 dist 已重生成，入口 index-Ds9ftah6.js / index-DioBYh8u.css 和懒加载 SubmissionSettings-CdbHn92o.js 均存在，设置产物包含“共享文档”、button-group-separator、h-11 items-stretch 和“打开文档”。
+- 向 `deployments/development/Assets/Prototype` 复制产物时，Copy-Item 退出 1，原始错误：`Access to the path 'D:\zhang\工作\ChatGPT\ProductionAssistant\deployments\development\Assets\Prototype\assets\noto-sans-sc-43-wght-normal-psppu0d8.woff2' is denied.` 已按失败即停规则停止，没有重试、强制覆盖或改 ACL；复制可能已部分完成，尚未执行完整 SHA256 核对。index.html 安排最后复制，失败时尚未执行入口更新；不得视为 Development 同步完成。
+- 下次入口：先处理上述明确目标的复制授权 / 写入失败，再完成 Development 前端同步与哈希核对；不重新修改 UI、不修改 production、不使用 SyncRelease。Electron 尚未操作或验收；更新完成后由用户人工检查图标与“共享文档”、44px 高度及分隔线、链接输入、深浅主题、窄窗、保存反馈与连接状态。上轮前端 428 通过 / 1 既有跳过，本轮未重复测试或运行完整 verify。
+
+## 集团填报设置页 TypeScript 三处类型修复（2026-11-13，验证与构建通过，待 Electron 人工验收）
+
+- 本轮源码仅三处类型声明：BusinessConfiguration.tsx 的 state 改为 readonly BusinessListItem[]，与只读 Props 一致；列表继续通过 map / filter / 新数组更新，不修改传入数组。SubmissionConnection.test.tsx 两个延迟 Mock 的 Promise 明确声明 DocumentConnectionState。未改类型定义、测试数据或断言，未改 UI、保存提示、后端或依赖；全部前序未提交工作保留。
+- 按指定顺序验证：在 Prototype 目录执行 `node.exe node_modules\typescript\bin\tsc --noEmit` 退出 0；`npm.cmd --prefix src\ProductionAssistant.App\Assets\Prototype test` 退出 0，43 文件全部通过，425 通过 / 1 既有符号链接 EPERM 跳过；单次申请沙箱外执行 `node.exe node_modules\vite\bin\vite.js build`（Prototype 目录）退出 0，Vite 6.4.3 构建成功，保留大于 500kB chunk 提示。
+- dist 已生成最新前序三部分 UI 和保存提示修复，共 123 个文件。入口引用 index-COrQyJxJ.js / index-DMIFNY3n.css 均存在；入口引用的 SubmissionSettings-BVp1nf46.js 存在，文本核对包含 InputGroup、打开文档、统一连接状态、已保存和位置 Badge，且没有业务启用开关文案及设置页 800px 限制。此为构建与产物检查，不作为 Electron 视觉或真实文档检测验收。
+- 下次入口：用户在 Electron Development 中 Ctrl+R 刷新，验收设置页宽度、网页配置和业务列表。真实文档名称识别 / 七态检测 / 扫码登录未接入，默认保留未识别 / 未检测；本轮没有操作 Electron、运行完整 verify、部署或更新稳定版。保持 main、唯一主工作树，Git 状态直接输出终端；未提交、推送或合并，未修改 ACL，未生成额外报告。
+
+## 网页配置保存提示回归修复（2026-11-13，测试通过，TypeScript 失败后停止）
+
+- 本轮仅修复保存提示，保留 main、唯一工作树及全部前序未提交工作。原因是 save 成功调用 onSaved 更新父组件 job / savedUrl 后，同步 savedUrl 的 effect 清除了刚设置的 notice；已有文档保存时 selectedId / key 不变，不是重挂载。只移除 SubmissionConnection.tsx 该 effect 中的 setNotice('')，保留 URL onChange 清除提示与原 save / revision / 错误处理。
+- 原失败测试及“已保存”断言未改；在 GroupSubmissionPage.test.tsx 增加一项回归，核对保存后仍为同一输入节点、提示在父组件 URL 更新及 Tab 切换后保留、再次编辑 URL 时清除，且不会提前持久化新草稿。
+- 按要求先运行原失败用例的专项：`npm.cmd --prefix src\ProductionAssistant.App\Assets\Prototype test -- src/features/group-submission/GroupSubmissionPage.test.tsx -t "saves the real document link with the revision and retains existing fields and position rules"`，退出 0，1 通过 / 14 未选中。随后前端完整测试退出 0：43 文件全部通过，425 通过 / 1 既有符号链接 EPERM 跳过。
+- 单次申请沙箱外运行 `npm.cmd --prefix src\ProductionAssistant.App\Assets\Prototype run build`，退出 1。tsc 报三处前轮遗留类型错误：BusinessConfiguration.tsx(20,58) 的 readonly 数组不能赋给可变数组；SubmissionConnection.test.tsx(82,3)、(99,3) 的 Promise<unknown> 不能赋给 Promise<DocumentConnectionState>。按规则停止，没有扩展修复这三处类型问题；Vite 未运行，dist 未更新，未执行完整 verify / 部署或 Electron 操作。
+- 下次入口：用户另行授权后处理上述三处 TypeScript 类型错误，再完成构建与后续 UI 验收。Git 信息直接输出终端，不再写此前被拒绝的报告文件，不改 ACL；未提交、推送或合并。
+
+## 集团填报设置页网页配置 / 业务列表 / 宽度统一（2026-11-13，测试失败后停止）
+
+- 延续此前授权的 main / fbba49e 上全部未提交修改；未切分支、提交、推送、创建 PR 或合并。当前需求附件合并为三个范围：统一设置页宽度、网页配置 UI 重构和业务列表微调；不新增依赖，不改业务 Dialog、两点标定、执行规则、全局外壳或后端。
+- 源码已调整：设置移除自身 800px 限制；网页采用固定官方版本的 InputGroup，组合只读文档名 / URL / 打开文档按钮，统一 Alert 七态；移除备注和会话自动检测 / 轮询。打开文档复用 sessionOpen，不从打开结果推断成功；默认本地适配器保留未检测 / 未识别，不伪造名称、成功或时间。业务表格增加完整外框，删除业务项 enabled 字段及开关逻辑，Check outline Badge 与可选 range 文本分开，范围缺失显示破折号而不自行计算。
+- 已更新对应组件测试、页面测试、Mock 测试、浏览器回归脚本预期与组件来源记录。`npm.cmd --prefix src\ProductionAssistant.App\Assets\Prototype test` 退出 1：43 文件中 42 通过 / 1 失败，423 通过 / 1 失败 / 1 既有符号链接 EPERM 跳过。新网页组件 20 项和业务配置 14 项通过；失败为 GroupSubmissionPage.test.tsx 的保存文档反馈断言，期望页面包含“已保存”，实际提示在保存 URL 更新后消失。
+- 当时按项目“任何一步失败立即停止”规则未继续修复或重跑；保存反馈问题的后续修复见上节。该轮未执行构建 / 完整 verify / 部署，未启动或操控 Electron，未生成截图，不能据通过项认定 UI 已完成或人工验收通过。此前 Git 报告文件因 Access denied 未生成，Git 信息以终端输出为准。
+
+## 集团填报设置重做与两步业务（2026-11-13，源码完成，待人工验收）
+
+- 延续当前 main / fbba49e78ee16b60fe55c018f803fda8fc65aef1 与全部前序未提交工作；不创建分支、提交、推送或 PR。仅修改前端、对应测试 / 来源记录和 dist；侧栏、路由、Breadcrumb、.NET、Bridge、Sidecar、真实 Playwright 自动化保持。
+- Tab 改名概览 / 记录 / 设置；设置移除子导航，采用左对齐最大 800px 的单列网页配置 / 业务配置 / 执行规则，之间两个 Separator。网页 Field 提供链接、备注、登录 Badge、重新登录及改动后保存；现有 URL revision / create、会话与启用任务 URL 保护保留，空备注的名称回退不回填输入。
+- 业务改用 Table / Switch / DropdownMenu，整行编辑，位置为空时禁用启用；删除仅在列表经 AlertDialog 确认。新建 / 编辑共用两步 Dialog，来源优先、自动命名和手改保护，下一步即保存业务，关闭第二步不撤销。选区通过可订阅 / 可取消会话处理 waiting / confirmed / cancelled / timeout / error，等待期间仅取消可用；两点预览和保存、已有位置重选与取消保留均在本地。
+- 新增页面适配器与隔离 mock：示例来源、文档名称 / 备注、选区 / 规律 / 三天预览、规则保存，以及跨首次创建文档重挂载的业务 / 规则草稿缓存。页面明确显示本地预览，离开集团页面即重置，不作为真实取数、标定、调度、通知或后端持久化。执行规则使用 Switch / HH:mm Input，适配器确认后 Sonner 提示已保存。
+- 从相同固定官方提交补齐 Switch / Sonner / Empty / Spinner，新增依赖锁定 @radix-ui/react-switch 1.2.6 与 sonner 2.0.8，复用既有主题；来源与许可见 docs/third-party/shadcn-admin.md。设置仅首次访问 lazy 加载，之后保留挂载 / 草稿，集团页和 RouteReady 契约保持。
+- 最终验证：React 42 文件、406 通过 / 1 既有符号链接 EPERM 跳过；TypeScript + Vite、字体 lint、两个浏览器回归脚本语法与 git diff --check 通过，dist 已更新。原 UI 断言 / 两处测试类型错误已修正；首轮全量启动超时及静态 Alert 干扰经设置延迟加载 / note 语义修正，原超时和核心断言未改。完整命令、失败与修正见 artifacts/group-submission-settings-delivery.md。
+- 沿用此前不控制电脑 / 人工验收要求，本轮未启动或操控 Electron，未运行浏览器交互回归或截图，未运行完整 verify 或部署。下次入口：用户自行刷新 Electron，验收单列滚动、两步创建关闭保留、无位置不可启用、名称自动填充 / 手改保护、删除确认、浅深色及窄窗效果；完整修改清单和三项 Git 输出见交付记录。
+
+## 填报位置 Item + Collapsible（2026-11-13，源码完成，待 Electron 人工验收）
+
+- 保留当前 main 和前序未提交修改，不创建分支、提交、推送或 PR。本轮只调整 BusinessPositionField、官方 Collapsible 包装、对应测试 / 依赖 / 来源记录与 dist，未改业务列表、Dialog 宽度、数据来源、网页配置、执行规则或后端自动化。
+- 用户已明确授权放宽本轮“不新增依赖”，仅新增并锁定 @radix-ui/react-collapsible@1.1.20；其内部依赖与现有 Dialog 一致，安装只新增一个包。官方包装来自既有固定 shadcn/ui 提交，来源和许可见 docs/third-party/shadcn-admin.md。
+- 填报位置以 Collapsible 为根，Field asChild 共用一个圆角外边框，Trigger 内使用现有 Item，标题右侧保留真实已有位置 Badge 和旋转箭头。内容仅加顶部分隔线，沿用现有日期 / 选择步骤；使用现有 tw-animate-css 的 Collapsible 高度动画，未自行编写展开或测量逻辑。
+- 未配置默认展开、已有位置默认收起；可点击整行开合，重选入口位于展开内容。折叠保留日期草稿，重选不清除原配置，取消重选收起并恢复标题焦点；未完成重选时保存其他字段仍保留原结果。选区入口继续禁用，不伪造成功。
+- 验证：专项 36/36（业务配置 20）；前端全量 40 文件、394 通过 / 1 既有符号链接 EPERM 跳过；TypeScript + Vite、字体 lint、回归脚本语法、git diff --check 均通过。dist 已更新，保留既有大块产物提示；未运行完整 verify 或部署。
+- 沿用用户此前“不控制电脑 / 人工验收”的边界，本轮未启动或操控 Electron，未运行浏览器交互回归，未生成截图。下次入口：用户自行在 Electron 验收未配置默认展开 / 已配置默认收起、同一完整边框、动画、日期与操作按钮窄窗换行及浅深色主题。修改清单、验证和完整 Git 输出见 artifacts/business-position-collapsible-delivery.md。
+
+## 业务配置第五轮：弹窗尺寸、日期布局与完成 Badge（2026-11-13，源码完成，待人工验收）
+
+- 保留当前 `main` / `fbba49e78ee16b60fe55c018f803fda8fc65aef1` 上全部前序修改，不切分支、不提交、推送或创建 PR。本轮只调整四个业务组件、对应测试和 dist；无新依赖或全局基础组件默认样式变更。
+- 业务区域移除上一轮 `lg:w-2/3`，恢复原全宽和标题 / 列表关系。业务 Dialog 单独采用 `w-[calc(100%-2rem)] sm:max-w-[420px]`；已核对 Tailwind 合并移除了默认 `sm:max-w-lg`，且构建 CSS 含 420px 规则，实际 Electron 计算宽度仍待验收。
+- 每步标题独占一行，下方 240px 日期框与“选取单元格”排列并可换行；日期 Popover 跟随触发框宽度，Calendar 局部内边距及七列尺寸同时调整，保留 yyyy-MM-dd、默认今天 / 明天、左对齐和原 Portal。移除待选择 / 等待前一步小字；真实已选 / 失败输入状态用图标表达，选区按钮仍禁用且不伪造成功。
+- 位置完成态复用官方 outline Badge + CheckCircle2，文案“位置已配置”，兼容浅深色；“重新配置 / 保存修改”改为“重新选取 / 保存”，取消入口同步文案。原增删改、来源 Select、草稿隔离和重选取消 / 未完成重选保存时保留原配置的逻辑保持。
+- 验证：专项 35/35；前端全量 40 文件、393 通过 / 1 既有符号链接 EPERM 跳过；TypeScript + Vite、字体 lint、回归脚本语法、Tailwind 类优先级 / 构建 CSS 和 `git diff --check` 通过。首次专项 2 项仍查找旧按钮名，已同步断言并重跑通过；源码搜索通配路径错误已改为 `-g`；一次 CSS 精确字符串检查因格式空格失败，核对生成规则并忽略空白后通过，未为此改页面实现。
+- 用户明确回复“我人工验收，无需截图”。本轮未操作 Electron、未运行浏览器交互回归或生成新截图；不得把构建样式检查当作实际布局验收。完整 verify / Development 或 Production 发布未运行。下次入口：用户自行刷新 Electron，验收全宽列表、420px 弹窗、日历完整七列 / 与日期框等宽、完成 Badge 和深色主题；文件清单、验证与完整三项 Git 输出见 `artifacts/business-config-v5-delivery.md`。
+
+## 业务配置第四轮：紧凑区域与状态驱动位置配置（2026-11-12，源码完成，待人工验收）
+
+- 延续当前 `main` / `fbba49e78ee16b60fe55c018f803fda8fc65aef1` 上全部前序本地修改，不创建分支、提交、推送或 PR。本轮只修改业务区域相关源码、展示状态和测试，未新增依赖；网页配置、执行规则、统一 Dialog、来源 Select 与 Item 内部样式保持。
+- 业务区域采用 `w-full lg:w-2/3`，桌面为右侧内容约 2/3、窄窗全宽，保持左对齐且标题 / 列表同宽。现有 DatePicker 改为 `w-48 max-w-full`，桌面每步按标题 / 12rem 日期 / 右侧按钮网格对齐，窄窗标题上移、控件自然换行；保留中文日历、yyyy-MM-dd 和默认今天 / 明天。
+- 未配置、等待和失败状态直接展示两步，不再有“配置位置”展开动作或说明小字；每步展示待选择 / 已选择 / 等待前一步 / 失败。已配置只展示成功图标、已配置和重新配置，内部 summary / 地址 / 步长不渲染。重新配置使用 Field 内独立草稿，不覆盖原位置；取消重配或在未完成重配时保存其他字段均保留原结果。选择入口继续不可用，没有真实选区或伪造成功。
+- 验证：业务配置 19 项、集团页面 13 项、启动契约 3 项专项合计 35/35；最终前端全量 40 文件、393 通过 / 1 既有符号链接 EPERM 跳过；TypeScript + Vite、字体 lint、浏览器回归脚本语法和 `git diff --check` 均退出 0，dist 已更新。首轮全量曾发生原 App.startup 5 秒超时并引发另一断言失败；未改代码或测试参数，专项和原全量命令重跑通过，超时根因未确认，不能称已修复。
+- 用户在最初 Electron 访问被拒后明确“读取源码，不要控制我的电脑”。此后仅进行源码与非桌面测试 / 构建，没有再访问窗口、运行浏览器交互回归或截图。本轮现有浏览器回归预期已随 UI 更新，但只做语法检查，不能声称已通过布局或主题的实际运行验收。完整 verify、Development / Production 发布均未执行。
+- 下次入口：用户自行在 Electron Ctrl+R 刷新，验收列表、未配置、已配置及重新配置四种界面，检查浅深色和窄窗。当前不授权自动桌面操作。文件清单、测试细节和三项 Git 输出见 `artifacts/business-config-v4-delivery.md`。
+
+## 业务配置第三轮：统一 Field 表单与官方日期选择（2026-11-12，待人工验收）
+
+- 保留 `main` / `fbba49e78ee16b60fe55c018f803fda8fc65aef1` 上全部前序本地修改，不新建分支、不提交、推送或创建 PR。本轮范围仅为业务配置相关前端、官方基础组件、必要依赖、测试和 dist；网页配置、执行规则、Sidecar / Bridge / 自动化实现保持。
+- Item 列表仅显示状态图标、名称和 ChevronRight，Item `asChild` 组合原生整行按钮，支持 Enter / 空格与焦点；单行标题栏保持。创建 / 编辑统一使用 `BusinessConfigDialog`，Field 按名称、数据来源、填报位置排列，取消不污染列表；编辑模式提供低强调删除，AlertDialog 确认时暂停主弹窗，取消确认保留原草稿并恢复焦点。
+- 原独立位置弹窗已改为内联 `BusinessPositionField`，展示尚未配置 / 等待第一点 / 等待第二点 / 已配置 / 异常五种输入状态。只可开始等待和调整日期，选区按钮保持不可用；不产生选区、坐标或标定成功。既有位置示例可展示、可取消重新配置。数据来源无可复用的业务项静态定义，本轮 Select 通过 `dataOptions` 接收选项，默认空；`initialItems` / Mock 与展示类型均可替换，不作为后端 DTO。来源及既有位置都完整才显示成功图标，默认缺少来源的示例不显示完成。
+- 按用户补充要求，两个标定日期采用官方 Calendar + Popover Date Picker、中文日历，显示固定 `yyyy-MM-dd`。新增 Field / Select / Calendar / Popover 来自已有固定官方源码；依赖为 Select `2.3.7`、Popover `1.1.23`、DayPicker `9.11.1`、date-fns `4.4.0`，来源与适配见组件来源文档。其他页面原 DatePicker 保持。
+- 最终验证全部退出 0：React 40 文件、391 通过 / 1 既有符号链接 EPERM 跳过（业务配置 17 项、集团页面 13 项）；TypeScript / Vite、字体 lint、完整 `check-ui.cjs` 和 `git diff --check` 通过，dist 已更新。浏览器覆盖整行键盘、草稿 / 来源、删除焦点、内联位置、日历选日 / 格式 / Escape、浅深色 Portal、23 条动态列表 / 空状态、390 / 720 / 960 / 1100px 布局及原网页配置 / 旧录制教学契约；组件另覆盖跨月 / 跨年及五种位置状态。
+- 接入日历后曾触发原启动测试 5 秒超时及后续断言失败；通过直接导入中文 locale、仅在日期弹层打开时 lazy 加载 Calendar 修复。保留 Group 直接加载、原启动测试断言和超时，最终全量重跑通过。保留既有 npm 32 项审计及 Vite 大块提示，没有自动升级框架或弱化测试。
+- Electron 窗口存在，但截图工具返回 `Computer Use was not approved to use electron`，未刷新或截图；用户随后明确“人工验收”，已停止自动界面操作。下次入口：用户在现有 Electron 窗口 Ctrl+R 刷新，进入集团填报 → 设置 → 业务配置验收。本轮未运行完整 verify、发布 Development / Production 或实测真实业务写入；完整修改清单、测试和 Git 输出在 `artifacts/business-config-v3-delivery.md`，浏览器 Mock 截图为 `artifacts/business-config-v3-*.png`，不能替代 Electron 人工验收。
+
+## 业务配置标题栏单行布局（2026-11-12，待用户人工验收）
+
+- 延续当前 `main` 上第一、二轮全部本地修改。本轮仅调整 `BusinessConfiguration.tsx` 的标题栏：左侧标题采用 `text-lg font-semibold`，右侧保留原“新建业务”按钮，`flex items-center justify-between` 单行居中对齐，标题栏与列表间距 12px。业务 Item 宽度、水平位置、样式、状态及全部 Dialog / 业务交互未改；无新组件或依赖。
+- 业务配置现有测试 8/8 通过，TypeScript + Vite 构建通过，dist 已更新；保留既有 Vite 大块提示。`git diff --check` 通过。未运行完整 verify、未发布 Development / Production、未提交或推送。
+- 已启动现有 Electron Development 宿主加载本轮源码 dist。窗口访问返回 `Computer Use was not approved to use electron`，未获得截图。用户明确选择“我人工验收，无需截图”，已停止自动界面操作；下次入口等待用户人工验收结果。
+
+## 业务配置 UI 第二轮微调（2026-11-12，待用户人工验收）
+
+- 延续第一轮 `main` 上的全部本地修改，不切分支、不提交或推送。仅移除页面右上角“选择文档连接”入口和业务标题下两行说明，将“新建业务”移到列表上方独立右对齐操作行，业务标题采用 `text-2xl font-semibold tracking-tight`。按钮规格与行为、业务 Item、设置导航、网页连接、执行规则及状态管理保持。
+- 本轮仅追加修改 `GroupSubmissionPage.tsx`、`BusinessConfiguration.tsx` 及对应现有测试，dist 已重新构建；未增加组件或依赖。专项测试 2 文件 / 21 项通过；TypeScript + Vite 构建与 `git diff --check` 退出 0，保留既有 Vite 大块提示。未重跑完整 verify 或发布 Development / Production。
+- 已用本机已有 Electron 可执行文件启动实际 Development 宿主（使用源码 dist 和现有 Release Sidecar），未操作保存或填报。窗口标题“生产助手”；截图工具访问返回原文 `Computer Use was not approved to use electron`，未获得界面状态或生成 Electron 截图。
+- 用户随后明确“我人工验收”，已停止自动界面操作。下次入口：等待用户验收集团填报 → 设置 → 业务配置的四项微调和浅色 / 深色主题；不得把启动成功或自动测试记作人工验收通过。
+
+## Metis 业务配置 UI（2026-11-12，本地实施完成，待 Electron 视觉验收）
+
+- 本轮基线为干净的 `main` / `fbba49e78ee16b60fe55c018f803fda8fc65aef1`，按用户本次要求原地修改；不新建分支、不提交、不推送、不创建 PR。现有其他文件和本地参考源码保持。
+- 设置容器增加网页配置 / 业务配置 / 执行规则导航，网页连接组件和执行规则内容沿用原实现；文档检查快捷入口明确返回网页配置，切换保留原链接草稿。业务区域使用官方 ItemGroup / Item 及 Separator；本地新建、改名、删除确认、两种状态、空状态和位置配置骨架已实现。
+- 新增官方 Item / Badge / Label / AlertDialog，来源与 Portal / Radix 适配记录见 [组件来源](docs/third-party/shadcn-admin.md)。业务状态来自单独 Mock 文件，只保留当前页面内存，不读取或修改正式字段、位置规则，不调用 Bridge、不写存储；位置步骤使用本地今天 / 明天，不生成坐标或成功结果。无 .NET、Sidecar、Bridge 或自动化逻辑修改。
+- 最终验证：React 全量 40 文件、381 通过 / 1 既有符号链接 EPERM 跳过；TypeScript + Vite 构建、字体 lint、`git diff --check` 及完整 `tests/tencent-sheet/check-ui.cjs` 均退出 0，dist 已随源码重生成。新增 8 项组件测试、1 项集团入口回归和浏览器业务配置检查。已修复混用 Radix 焦点模块下菜单 / 弹窗约束冲突和鼠标菜单入口焦点恢复，未跳过失败断言。
+- 浏览器回归使用实际 React dist 和本地 Mock：覆盖 11 项动态列表、增删改 / 空状态、键盘与鼠标焦点、本地日期、不可用选区、无业务写调用、原网页草稿保留及 390 / 720 / 960 / 1100px 无溢出；组件测试另覆盖跨月 / 跨年日期。原录制 / 教学 / 填报契约回归保留。列表、新建、位置和空状态实际截图在 `artifacts/business-configuration-*.png`，已视觉检查。完整文件清单、命令和 Git 输出见 `artifacts/business-configuration-delivery.md`。
+- 下次入口：在 Electron 中进入集团填报 → 设置 → 业务配置，人工验收视觉和交互。完整 `verify.ps1`、Development 发布及真实 Electron 窗口验收本轮未执行；未更新稳定版或版本号。本地预览状态会随页面卸载重置，后续真实选区 / 两点标定 / 后端保存需另行授权设计接入。
+
 ## Metis 全局 Breadcrumb（2026-11-12，人工验收通过，PR 交付）
 
 - 本轮基线经重新核对为 `main` / `a7b9508b9e4dd94da14acced929a162566faa044`，pull 为最新，已创建 `codex/global-breadcrumb`。原有 T1/T1-A/T2.1 已包含在基线；`tools/ui-main.zip` 和 `tools/ui-main/` 保留为未跟踪参考文件，不暂存、不清理。

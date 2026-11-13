@@ -43,7 +43,7 @@ it('enters group submission without an automation fallback while its list and co
     await act(async () => clickSidebar(container, '集团填报'))
     const workbench = container.querySelector('[aria-label="集团填报工作台"]')!
     expect(workbench).not.toBeNull()
-    expect([...workbench.querySelectorAll('[role=tab]')].map(tab => tab.textContent)).toEqual(['填报', '历史记录', '设置'])
+    expect([...workbench.querySelectorAll('[role=tab]')].map(tab => tab.textContent)).toEqual(['概览', '记录', '设置'])
     const placeholder = () => container.querySelector('[role=status][aria-label="正在读取集团填报配置"]')!
     expect(placeholder()).not.toBeNull()
     expect(placeholder().querySelectorAll('tbody tr')).toHaveLength(4)
