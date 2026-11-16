@@ -53,6 +53,7 @@ it('opens the business workbench with four empty metrics, backend date, and no r
   expect(panel.textContent).toContain('尚未接入')
   expect(panel.textContent).not.toMatch(/DOM|iframe|原值|选择器/)
   expect(container.querySelector('.automation-list-page')).toBeNull()
+  expect(invoke).toHaveBeenCalledWith('automation.list', { taskType: 'tencent_sheet_fill' })
   expect(invoke).toHaveBeenCalledWith('tencentSheet.get', { id: 'group' })
   expect(invoke.mock.calls.some(([operation]) => /fetch|inspect|write|setEnabled|backgroundTest/.test(operation))).toBe(false)
   await act(async () => button('检查文档连接').click())
@@ -68,6 +69,15 @@ it('omits the document chooser with multiple connections and retains the origina
   expect(invoke).toHaveBeenCalledWith('tencentSheet.get', { id: 'group' })
   await tab('设置')
   expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.value).toBe(job.config.documentUrl)
+})
+
+it('loads history independently while configuration is pending', async () => {
+  const normal = invoke.getMockImplementation()!
+  invoke.mockImplementation((operation: string, payload: any) => operation === 'tencentSheet.get' ? new Promise(() => {}) : normal(operation, payload))
+  await mount(); await tab('记录')
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.runs', { id: 'group' })
+  expect(container.querySelector('[aria-label="集团填报历史"]')).not.toBeNull()
+  expect(container.querySelector('[aria-label="正在读取集团填报配置"]')).toBeNull()
 })
 
 it('shows all settings sections without secondary navigation and retains the overview shortcut', async () => {

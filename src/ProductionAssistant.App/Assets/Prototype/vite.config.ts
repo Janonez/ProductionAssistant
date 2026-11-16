@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import postcss, { type Plugin } from 'postcss'
+import { randomUUID } from 'node:crypto'
+
+const buildId = randomUUID()
 
 const isolateStyles: Plugin = {
   postcssPlugin: 'production-assistant-style-boundaries',
@@ -28,7 +31,11 @@ const isolateStyles: Plugin = {
 
 export default defineConfig({
   base: './',
-  plugins: [react(), tailwindcss()],
+  define: { 'import.meta.env.VITE_METIS_BUILD_ID': JSON.stringify(buildId) },
+  plugins: [react(), tailwindcss(), {
+    name: 'metis-build-identity',
+    generateBundle() { this.emitFile({ type: 'asset', fileName: 'build-info.json', source: JSON.stringify({ buildId }) }) },
+  }],
   css: { postcss: { plugins: [isolateStyles] } },
   build: { outDir: 'dist', emptyOutDir: true }
 })

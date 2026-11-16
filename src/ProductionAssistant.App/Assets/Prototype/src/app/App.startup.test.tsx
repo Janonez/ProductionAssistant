@@ -25,7 +25,7 @@ it('enters group submission without an automation fallback while its list and co
     return Promise.resolve({ state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown', verifiedAt: null, message: '浏览器已关闭' })
   })
   const notifyReady = vi.fn()
-  vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
+  vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
   history.replaceState({}, '', '?route=production-message&loadId=group-entry')
   const { App } = await import('./App')
   const container = document.createElement('div'), root = createRoot(container)
@@ -44,13 +44,16 @@ it('enters group submission without an automation fallback while its list and co
     const workbench = container.querySelector('[aria-label="集团填报工作台"]')!
     expect(workbench).not.toBeNull()
     expect([...workbench.querySelectorAll('[role=tab]')].map(tab => tab.textContent)).toEqual(['概览', '记录', '设置'])
-    const placeholder = () => container.querySelector('[role=status][aria-label="正在读取集团填报配置"]')!
+    const placeholder = () => container.querySelector('[aria-label="正在读取填报日期"]')!
     expect(placeholder()).not.toBeNull()
-    expect(placeholder().querySelectorAll('tbody tr')).toHaveLength(4)
-    expect(placeholder().querySelectorAll('[data-slot=skeleton]').length).toBeGreaterThan(0)
+    const table = workbench.querySelector('[aria-label="本次填报数据"]')!
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(4)
+    expect(workbench.textContent).toContain('获取数据 → 检查目标 → 确认填报')
+    expect([...workbench.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '配置文档连接')?.disabled).toBe(false)
     expect(container.textContent).not.toMatch(/管理定时推送与自动填报|自动化任务名称/)
     await act(async () => finishList({ tasks: [{ id: 'group', name: '文档', taskType: 'tencent_sheet_fill' }] }))
     expect(placeholder()).not.toBeNull()
+    expect(workbench.querySelector('[aria-label="本次填报数据"]')).toBe(table)
     await act(async () => finishJob({ id: 'group', businessDate: '2026-11-10', config: { documentUrl: 'https://docs.qq.com/sheet/fixture', fields: [], rules: {} } }))
     expect(placeholder()).toBeNull()
     expect(workbench.querySelector('[aria-label="本次填报数据"]')).not.toBeNull()
@@ -66,7 +69,7 @@ it('opens the default production message page and reports its first readiness', 
   const invoke = vi.fn().mockResolvedValue({})
   const delayed = { resolve: undefined as undefined | ((value: { DailyWeldPage: () => React.ReactNode }) => void) }
   vi.resetModules()
-  vi.doMock('../bridge/index', () => ({ notifyReady, invoke, notifyTheme: vi.fn() }))
+  vi.doMock('../bridge/index', () => ({ notifyReady, invoke, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
   vi.doMock('../features/daily-weld/DailyWeldPage', () => new Promise<{ DailyWeldPage: () => React.ReactNode }>(resolve => { delayed.resolve = resolve }))
 
   history.replaceState({}, '', '?loadId=start')
@@ -99,7 +102,7 @@ it('[nav-switch] keeps readiness stable while a delayed route module loads', asy
   const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
   const postMessage = vi.fn()
   Object.assign(window, { chrome: { webview: { postMessage, addEventListener: () => undefined } } })
-  vi.doMock('../bridge/index', () => ({ notifyReady, invoke, notifyTheme: vi.fn() }))
+  vi.doMock('../bridge/index', () => ({ notifyReady, invoke, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
   notifyReady.mockImplementation(sendReady)
   const readyMessages = () => postMessage.mock.calls.filter(([message]) => message.type === 'app.ready')
   vi.doMock('../features/daily-weld/DailyWeldPage', () => new Promise<{ DailyWeldPage: () => React.ReactNode }>(resolve => { delayed.resolve = resolve }))

@@ -42,6 +42,23 @@ public sealed class StartupMigrationTests : IDisposable
     }
 
     [Fact]
+    public void Required_migration_records_each_stage_and_fails_before_ready_on_invalid_catalog_then_recovers()
+    {
+        File.WriteAllText(JobsPath, "{invalid-json");
+        var original = File.ReadAllBytes(JobsPath);
+        var stages = new List<(string Phase, string Status)>();
+        Assert.ThrowsAny<Exception>(() => StartupMigration.RunRequired(observe: (phase, status, _) => stages.Add((phase, status))));
+        Assert.Contains(("lock", "end"), stages);
+        Assert.Contains(("daily-report", "failed"), stages);
+        Assert.Equal(original, File.ReadAllBytes(JobsPath));
+        File.Delete(JobsPath);
+        stages.Clear();
+        StartupMigration.RunRequired(observe: (phase, status, _) => stages.Add((phase, status)));
+        Assert.Contains(("daily-report", "end"), stages);
+        Assert.Contains(("report-center", "end"), stages);
+    }
+
+    [Fact]
     public void Legacy_notification_ciphertext_is_imported_only_once()
     {
         WriteLegacyCatalog("legacy-webhook-placeholder", "legacy-secret-placeholder");

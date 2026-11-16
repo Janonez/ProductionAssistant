@@ -158,7 +158,7 @@ describe('Electron bridge transport', () => {
     const { hasHost, invoke } = await import('./webview')
     expect(hasHost()).toBe(true)
     const result = invoke('database.getState', { source: 'fixture' })
-    expect(sent).toEqual({ id: expect.any(String), operation: 'database.getState', payload: { source: 'fixture' } })
+    expect(sent).toEqual({ id: expect.any(String), operation: 'database.getState', payload: { source: 'fixture' }, timeoutMs: 30000 })
     receive({ data: { id: sent.id, ok: true, data: { value: 7 } } })
     await expect(result).resolves.toEqual({ value: 7 })
   })

@@ -8,6 +8,20 @@ namespace ProductionAssistant.Tests;
 public sealed class AutomationTaskShellTests
 {
     [Fact]
+    public async Task Filter_reads_only_the_requested_handler_and_rejects_unknown_types_before_reading()
+    {
+        var daily = new StubTaskType("daily_report", "daily-1");
+        var tencent = new StubTaskType("tencent_sheet_fill", "group-1");
+        var registry = new AutomationTaskHandlerRegistry([daily, tencent]);
+        Assert.Equal("group-1", Assert.Single(await registry.ListTasksAsync("tencent_sheet_fill")).Id);
+        Assert.Equal(0, daily.ListCount);
+        Assert.Equal(1, tencent.ListCount);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => registry.ListTasksAsync("unknown"));
+        Assert.Equal(0, daily.ListCount);
+        Assert.Equal(1, tencent.ListCount);
+        Assert.Equal(2, (await registry.ListTasksAsync()).Count);
+    }
+    [Fact]
     public async Task Registry_builds_the_task_index_from_handler_owned_storage()
     {
         var daily = new StubTaskType("daily_report", "daily-1");
@@ -66,10 +80,13 @@ public sealed class AutomationTaskShellTests
     {
         public string TaskType { get; } = taskType;
         public AutomationTaskExecutionContext? LastContext { get; private set; }
+        public int ListCount { get; private set; }
 
-        public Task<IReadOnlyList<AutomationTaskSummary>> ListTasksAsync() =>
-            Task.FromResult<IReadOnlyList<AutomationTaskSummary>>(
-                taskIds.Select(Summary).ToArray());
+        public Task<IReadOnlyList<AutomationTaskSummary>> ListTasksAsync()
+        {
+            ListCount++;
+            return Task.FromResult<IReadOnlyList<AutomationTaskSummary>>(taskIds.Select(Summary).ToArray());
+        }
 
         public Task<AutomationTask> GetTaskAsync(string taskId) =>
             Task.FromResult(new AutomationTask(

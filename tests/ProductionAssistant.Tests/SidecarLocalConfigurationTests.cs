@@ -697,7 +697,7 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         {
             using var document = JsonDocument.Parse(line);
             return document.RootElement.Clone();
-        }).ToArray();
+        }).Where(message => message.TryGetProperty("id", out _)).ToArray();
     }
 
     private static void AssertSuccess(JsonElement response) => Assert.True(response.GetProperty("ok").GetBoolean(), response.GetRawText());
@@ -768,6 +768,14 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
             var session = new SidecarSession(Process.Start(info) ?? throw new InvalidOperationException("Could not start the test sidecar."));
             try
             {
+                foreach (var expected in new[] { "Initializing", "Ready" })
+                {
+                    var line = await session._process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(20));
+                    using var lifecycle = JsonDocument.Parse(line!);
+                    Assert.Equal("sidecar.lifecycle", lifecycle.RootElement.GetProperty("type").GetString());
+                    Assert.Equal(1, lifecycle.RootElement.GetProperty("protocolVersion").GetInt32());
+                    Assert.Equal(expected, lifecycle.RootElement.GetProperty("state").GetString());
+                }
                 AssertSuccess(await session.SendAsync("settings.open"));
                 return session;
             }

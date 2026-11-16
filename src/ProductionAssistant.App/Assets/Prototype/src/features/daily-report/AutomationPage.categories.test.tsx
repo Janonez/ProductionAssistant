@@ -7,7 +7,7 @@ import { AutomationPage } from './AutomationPage'
 import type { AutomationTaskFilter } from '../../routes/routeTable'
 
 const { invoke, notifyReady } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn() }))
-vi.mock('../../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
+vi.mock('../../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
 
 let container: HTMLDivElement, root: Root, tasks: AutomationTaskSummary[]
 const closed = { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown', verifiedAt: null, message: '浏览器已关闭' }

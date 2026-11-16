@@ -7,6 +7,14 @@ static class Program
 {
     static async Task<int> Main(string[] args)
     {
+        var utf8 = new UTF8Encoding(false);
+        Console.InputEncoding = utf8;
+        Console.OutputEncoding = utf8;
+        using var output = new StreamWriter(Console.OpenStandardOutput(), utf8);
+        // From this point all ordinary application logging goes to stderr.
+        Console.SetOut(Console.Error);
+        var startupId = Environment.GetEnvironmentVariable("METIS_STARTUP_ID") ?? Guid.NewGuid().ToString("N");
+        var trace = new StartupTrace(output, Console.Error, startupId);
         try
         {
             if (!HasExplicitEnvironment(args))
@@ -14,12 +22,20 @@ static class Program
                 Console.Error.WriteLine("必须通过 --environment 显式指定 Development 或 Production。");
                 return 2;
             }
-            _ = RuntimeEnvironment.Current;
-            RuntimeEnvironment.WriteStartupSummary();
-            StartupMigration.Run(message => Console.Error.WriteLine(message));
-
             var legacyDailyReport = HasArgument(args, "--send-daily-report");
             var automationTask = HasArgument(args, "--run-automation-task");
+            if (!legacyDailyReport && !automationTask) trace.Lifecycle("Initializing");
+            trace.Measure("environment", () => { _ = RuntimeEnvironment.Current; });
+            trace.Measure("startup-summary", RuntimeEnvironment.WriteStartupSummary);
+            trace.Measure("migration", () =>
+            {
+                if (legacyDailyReport || automationTask)
+                    StartupMigration.Run(message => Console.Error.WriteLine(message));
+                else StartupMigration.RunRequired(
+                    message => Console.Error.WriteLine(message),
+                    (phase, status, elapsedMs) => trace.Record("migration." + phase, status, elapsedMs));
+            });
+
             if (legacyDailyReport || automationTask)
             {
                 var taskType = legacyDailyReport
@@ -32,16 +48,14 @@ static class Program
                 return Environment.ExitCode;
             }
 
-            var utf8 = new UTF8Encoding(false);
-            Console.InputEncoding = utf8;
-            Console.OutputEncoding = utf8;
-            var output = new StreamWriter(Console.OpenStandardOutput(), utf8);
-            Console.SetOut(Console.Error);
             using var input = new StreamReader(Console.OpenStandardInput(), utf8);
-            return await new StdioHost(input, output, Console.Error).RunAsync();
+            StdioHost? host = null;
+            trace.Measure("stdio", () => host = new StdioHost(input, output, Console.Error, startupId));
+            return await host!.RunAsync();
         }
         catch (Exception ex)
         {
+            trace.Lifecycle("Failed", "SIDECAR_INITIALIZATION_FAILED");
             Console.Error.WriteLine($"运行环境或宿主初始化失败（{ex.GetType().Name}）。");
             return 2;
         }

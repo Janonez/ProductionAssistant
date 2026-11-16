@@ -24,6 +24,7 @@ async function fixture(environment = 'Development') {
     send() {}, setWindowOpenHandler() {}, getURL: () => loaded.at(-1),
   });
   const window = Object.assign(new EventEmitter(), {
+    isVisible: () => true,
     webContents: contents, destroyed: false, isDestroyed() { return this.destroyed; },
     loadURL: url => { loaded.push(url); return Promise.resolve(); },
     setTitleBarOverlay: value => overlays.push(JSON.parse(JSON.stringify(value))),
@@ -56,7 +57,7 @@ async function fixture(environment = 'Development') {
     require(name) {
       if (name === 'electron') return electron;
       if (name === 'node:fs') return {
-        mkdirSync() {}, appendFileSync() {}, existsSync: () => true,
+        mkdirSync() {}, appendFileSync() {}, writeFileSync() {}, existsSync: () => true,
         statSync: () => ({ size: 0, isDirectory: () => true, isFile: () => true }),
       };
       if (name === './lib/environment') return {
@@ -65,8 +66,10 @@ async function fixture(environment = 'Development') {
       };
       if (name === './lib/sidecar-client') return { SidecarClient: class {
         child = { pid: 1 };
+        snapshot = { state: 'Ready' };
         send(request) { forwarded.push(request); return true; }
       } };
+      if (name === './lib/renderer-build') return { resolveRendererBuild: () => ({ root: 'fixture', buildId: 'fixture-build' }), compareInstanceBuild: () => 'same' };
       return require(name.startsWith('.') ? path.join(desktopRoot, name) : name);
     },
   });
@@ -75,8 +78,18 @@ async function fixture(environment = 'Development') {
   assert.ok(options);
   const event = { sender: contents, senderFrame: contents.mainFrame };
   const send = (message, source = event) => ipcMain.emit('bridge:message', source, message);
-  return { ipcMain, contents, window, nativeTheme, forwarded, options, event, send, loaded, overlays, menu, menuVisibility, setSystemDark };
+  send({ type: 'app.ready', loadId: new URL(loaded.at(-1)).searchParams.get('loadId'), buildId: 'fixture-build' });
+  return { ipcMain, contents, window, nativeTheme, forwarded, options, event, send, loaded, overlays, menu, menuVisibility, setSystemDark, errors };
 }
+
+test('a renderer Build ID mismatch revokes business access without inventing a Sidecar state', async () => {
+  const f = await fixture();
+  const loadId = new URL(f.loaded.at(-1)).searchParams.get('loadId');
+  f.send({ type: 'app.ready', loadId, buildId: 'different-build' });
+  f.send({ id: 'blocked', operation: 'database.getState' });
+  assert.equal(f.forwarded.length, 0);
+  assert.equal(f.errors.at(-1)[0], '界面资源版本不匹配');
+});
 
 test('main applies all theme choices without forwarding them and preserves business routing', async () => {
   const f = await fixture();

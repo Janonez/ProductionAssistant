@@ -76,7 +76,7 @@ test('routes both local dialogs and preserves their payloads', () => {
 
 test('serializes forwarded requests as one line and omits missing payloads and extra fields', () => {
   assert.deepEqual(classify({ id: 'id', operation: 'settings.open', extra: true }),
-    { kind: 'forward', id: 'id', line: '{"id":"id","operation":"settings.open"}' });
+    { kind: 'forward', id: 'id', operation: 'settings.open', timeoutMs: 29900, line: '{"id":"id","operation":"settings.open"}' });
   const result = classify({ id: 'id', operation: 'echo', payload: { text: '中文\nsecond line' } });
   assert.equal(result.line.includes('\n'), false);
   assert.equal(result.line, JSON.stringify({ id: 'id', operation: 'echo', payload: { text: '中文\nsecond line' } }));

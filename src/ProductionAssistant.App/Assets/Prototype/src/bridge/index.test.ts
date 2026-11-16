@@ -195,7 +195,7 @@ describe('Electron bridge adapter in DEV', () => {
     await expect(bridge.invoke('database.getState')).resolves.toEqual(hostState)
     bridge.ready('database-viewer', 'electron-load')
     bridge.ready('database-viewer', 'electron-load')
-    expect(postMessage).toHaveBeenCalledWith({ id: expect.any(String), operation: 'database.getState', payload: undefined })
+    expect(postMessage).toHaveBeenCalledWith({ id: expect.any(String), operation: 'database.getState', payload: undefined, timeoutMs: 30000 })
     expect(postMessage).toHaveBeenCalledWith({
       type: 'app.ready', route: 'database-viewer', loadId: 'electron-load',
       moduleEntryMs: expect.any(Number), readyMs: expect.any(Number),

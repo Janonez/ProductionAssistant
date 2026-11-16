@@ -29,13 +29,21 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 
 ## Electron 开发运行时
 
-Electron 开发外壳沿用 npm 包的原生 `electron .`，由官方 `@electron/get` 管理 ZIP 缓存，不使用项目自定义启动器、解压运行时管理器或文件哈希清单。当前锁定 Electron 45.0.0，开发环境使用 Windows x64 Node.js 22.12.0 或更新版本。
+Electron 开发外壳锁定 Electron 45.0.0，使用 Windows x64 Node.js 22.12.0 或更新版本。依赖安装、官方 Runtime 准备和启动分为三个明确步骤；正常启动不会调用 Electron 包中可能自动安装的 index.js。
+
+```powershell
+npm.cmd --prefix src\ProductionAssistant.Desktop ci --ignore-scripts
+npm.cmd --prefix src\ProductionAssistant.Desktop run prepare:electron-runtime
+npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development
+```
+
+准备命令幂等复用完整 Runtime；缺失时只调用未修改的官方 install.js，保留官方 ZIP 校验、缓存和按需下载。正常启动只快速检查 path.txt、版本和 Windows 必需文件，然后直接运行 electron.exe；检查失败会退出并打印恢复命令。若官方安装器复用后仍不完整，在 Desktop 重新执行 `npm ci --ignore-scripts` 再准备，不手动修改 node_modules 源码或关闭校验。
 
 Windows 默认缓存位于 `%LOCALAPPDATA%\electron\Cache\<URL 目录哈希>\electron-v<版本>-win32-x64.zip`。子目录由官方缓存实现根据下载 URL 的目录部分计算 SHA-256，与 ZIP 内容的校验和不同；更换镜像、版本或设置 `electron_config_cache` 后须重新确认目标路径。缓存机制及镜像配置见 [Electron 官方说明](https://www.electronjs.org/docs/latest/tutorial/installation#cache)。
 
 已有本地官方 ZIP 时，可一次性准备缓存：先用已安装 Electron 包的 `checksums.json` 核对 ZIP 的 SHA-256；若目标已有相同有效文件则复用，若冲突则停止；否则复制到目标目录中的临时文件，再校验复制件并改名为正式 ZIP 文件名。保留原 ZIP，不自行解压，不关闭官方校验。每位开发者自行指定本地 ZIP 来源路径；不提交 ZIP、缓存或机器专属配置。
 
-完整 verify 保留 `npm ci --ignore-scripts`，会清除 `node_modules/electron/dist` 和 `node_modules/electron/path.txt`，但不会清除仓库外的官方 ZIP 缓存。verify 后首次运行仍会调用官方安装器，校验缓存 ZIP 并重新解压到 `node_modules/electron/dist`；有效缓存配合 npm 包内置的校验和可避免再次联网下载。后续正常启动不再安装，也不进行约 374 MB 的逐文件全量哈希。
+完整 verify 保留 `npm ci --ignore-scripts`，随后立即执行 Runtime 准备，因此 verify 完成后可直接启动。`-SkipRestore` 也执行幂等准备。启动不做逐文件全量哈希；显式运行 `node scripts\check-electron-runtime-install.cjs` 可在临时目录经官方安装器恢复并逐文件 SHA256 对比真实 Runtime，不删除现有 Runtime。
 
 启动命令保持不变：
 
@@ -43,13 +51,13 @@ Windows 默认缓存位于 `%LOCALAPPDATA%\electron\Cache\<URL 目录哈希>\ele
 npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development
 ```
 
-要核对缓存命中，在完整 verify 后、包内运行时尚未恢复时，启用官方调试日志并调用本地安装器：
+需要诊断官方安装器缓存行为时，可启用官方调试日志并执行准备命令：
 
 ```powershell
 $previousElectronDebug = $env:DEBUG
 try {
     $env:DEBUG = '@electron/get*'
-    node .\src\ProductionAssistant.Desktop\node_modules\electron\install.js
+    npm.cmd --prefix src\ProductionAssistant.Desktop run prepare:electron-runtime
     if ($LASTEXITCODE -ne 0) { throw "Electron 安装器退出码 $LASTEXITCODE" }
 } finally {
     $env:DEBUG = $previousElectronDebug
@@ -60,7 +68,11 @@ try {
 
 缓存缺失或损坏时，官方机制可能重新联网下载；开启 `electron_use_remote_checksums` 时也可能访问远程校验和。DEBUG 本身不禁止网络，严格离线验收须另有进程网络禁用条件，并记录真实结果。官方缓存读写模式中的 `ReadOnly` 也不是离线开关。正常启动不逐文件校验已解压内容，不能把缓存校验等同于每次启动的完整性检查。
 
-Electron 仍依赖共享前端 dist 和匹配源码的 Release Sidecar，默认完整 verify 会生成这些资源；`deployments\development\ProductionAssistant.exe` 是 WinUI 入口。真实缓存准备、完整 verify 后恢复、窗口和再次启动均单独验收，不以模拟验证代替实际结果。
+Electron 依赖匹配源码的 Release Sidecar 和不可变前端快照。前端 `npm run build` 生成 UUID Build ID、共享 dist 和 `dist.builds/<Build ID>`，校验清单后原子更新 `current.json`；完整 verify 另外向 `deployments/development/Assets/Prototype.builds` 发布相同快照。Electron 启动时固定选取一代，后续重载及懒加载均使用该目录，WinUI 仍使用共享 dist。旧构建保留，不自动清理。
+
+显式设置 `PRODUCTIONASSISTANT_DIST` 时，该值仍指向原 dist 目录，但必须先准备对应快照：`npm.cmd --prefix src\ProductionAssistant.Desktop run prepare:renderer -- <dist目录>`。未准备时明确报错，不回退到可变目录。不同 Build ID 二次启动会提示旧窗口，只有用户选择后才关闭；关闭后再次执行启动命令。`deployments\development\ProductionAssistant.exe` 仍是 WinUI 入口。
+
+Sidecar 的环境、串行迁移和 StdioHost 初始化成功后才发送版本化 Ready；界面订阅主进程权威状态，启动请求有界排队、超时和结构化失败，不自动重放写操作。启动 ID、进程、Build ID、各阶段和请求耗时见 Electron 的 desktop.log，载荷和响应内容不写入新增日志。详细设计及实测入口见 [Electron 启动架构](docs/electron-startup-architecture.md)。
 
 ## 运行环境
 

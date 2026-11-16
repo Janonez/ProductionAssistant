@@ -52,6 +52,7 @@ dist/
 .dotnet/
 *.user
 /artifacts/
+*.builds/
 /deployments/
 /tools/experiments/
 /.codex/

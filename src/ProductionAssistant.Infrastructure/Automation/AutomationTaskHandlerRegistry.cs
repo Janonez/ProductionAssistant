@@ -17,10 +17,11 @@ public sealed class AutomationTaskHandlerRegistry
             ? handler
             : throw new InvalidOperationException($"未注册任务类型：{taskType}");
 
-    public async Task<IReadOnlyList<AutomationTaskSummary>> ListTasksAsync()
+    public async Task<IReadOnlyList<AutomationTaskSummary>> ListTasksAsync(string? taskType = null)
     {
         var tasks = new List<AutomationTaskSummary>();
-        foreach (var handler in _handlers.Values)
+        var handlers = string.IsNullOrEmpty(taskType) ? _handlers.Values : new[] { GetHandler(taskType) };
+        foreach (var handler in handlers)
             tasks.AddRange(await handler.ListTasksAsync());
         EnsureUniqueTaskIds(tasks);
         return tasks;

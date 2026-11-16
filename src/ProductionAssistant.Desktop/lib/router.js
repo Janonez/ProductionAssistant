@@ -58,6 +58,8 @@ function classify(message) {
     if (!['light', 'dark', 'system'].includes(message.theme)) return invalid('invalid-theme');
     return { kind: 'theme', theme: message.theme };
   }
+  if (message.type === 'app.serviceState') return { kind: 'service-status' };
+  if (message.type === 'app.restart') return { kind: 'restart' };
   if (message.type === 'app.ready') {
     return {
       kind: 'ready',
@@ -73,7 +75,8 @@ function classify(message) {
     return invalid('invalid-operation');
   if (LOCAL_OPERATIONS.has(operation)) return { kind: 'local', id, operation, payload };
   try {
-    return { kind: 'forward', id, line: JSON.stringify({ id, operation, payload }) };
+    const timeoutMs = Number.isFinite(message.timeoutMs) && message.timeoutMs > 0 ? Math.min(message.timeoutMs, 300000) : 30000;
+    return { kind: 'forward', id, operation, timeoutMs: Math.max(1, timeoutMs - 100), line: JSON.stringify({ id, operation, payload }) };
   } catch {
     return invalid('not-serializable');
   }

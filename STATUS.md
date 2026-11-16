@@ -1,5 +1,23 @@
 # ProductionAssistant 交接状态
 
+## Electron 启动验收四项修复（2026-11-16，已授权 Git 交付，待 CI）
+
+- 继续 `codex/electron-startup-lifecycle`，保留前序全部未提交源码；修改前快照在本机 `artifacts/startup/acceptance-fix-baseline`。没有切分支、暂存、提交、推送、PR、合并或操作既存 hotfix 工作树；没有更新 Production / 版本 / 用户业务配置。
+- 修复普通入口隐藏标志、Sidecar 单调截止时间及发送前复核、概览固定内容与设置三分区加载边界、测量脚本运行身份 / 轮转 / 必需指标校验。保留 256 项有界队列、结构化错误及已发送请求超时的结果未知语义，不重发写入，不增加预取或缓存。
+- 按序完成 P1 29 项、集团填报 UI 83 项、测量 9 项专项；React 全量 445 通过 / 1 既有跳过、Electron 122/122、.NET 372/372、TypeScript / Vite 和无跳过参数完整 verify 退出 0，Development 发布完成。125 文件四处资源核对全部一致，Build ID `88520091-85e5-45bc-af15-b7af4f372e82`。
+- 实际普通入口已用 Windows 原生窗口验证可见、未最小化并正常关闭；真实 Development 页面已验证延迟只读时的固定概览、设置对应加载结构、模拟只读失败及重试恢复。五次独立启动样本均通过运行身份和指标校验，中位数：窗口可见 318ms、React Ready 536ms、Sidecar Ready 482ms、设置首次 400ms；不能宣称整体提速。
+- 首次原生检查曾有 30 秒观察超时，随后确认该测试创建的窗口实际可见并正常关闭；修正测试启动方式及输出捕获后重跑通过，第一次超时原因仍未确定。历史 Playwright 连接超时、慢启动和真实启动失败后的重启恢复仍未完成现场验收，不能由后续成功抹去。
+- 用户随后明确授权提交、推送、创建 PR 和合并；本次交付包含该分支累积的启动架构整改及四项验收修复。下次入口：按路径暂存并检查、提交与推送本需求分支、创建 PR；只在 CI verify pass 后 squash 合并。CI 未完成时按项目规则汇报并等待用户下次通知，不循环轮询。此授权不改变上面保留的历史异常与现场恢复验收边界。细节、完整文件清单、测试、性能口径及修复阶段 Git 输出见 [本轮验收修复报告](docs/electron-startup-acceptance-fixes.md)。
+
+## Electron Development 启动架构整改（2026-11-16，完整 verify 通过，待用户审阅）
+
+- 当前 `codex/electron-startup-lifecycle`，基线 `11461dc`；本轮按用户要求保留未提交改动，不提交 / 推送 / PR / 合并，不更新 Production、版本、标签或 Release。既有 hotfix 工作树只记录、不操作。
+- 已实现显式官方 Electron Runtime 准备、启动快速预检、Sidecar 生命周期及版本化 Ready、迁移分阶段计时、Bridge 有界排队 / 超时 / 失败及有界退出、React 服务初始化状态、automation.list 可选类型过滤，以及不可变 Renderer 快照 / Build ID / 单实例身份识别。设计见 [启动架构](docs/electron-startup-architecture.md)。
+- 专项证据：官方临时目录 Runtime 恢复 / 幂等 / 全量 SHA256 对比 3 项通过；实际 Electron 资源生命周期 5 项通过。空闲预取实测没有改善设置首次打开，已移除，保留按需加载与 Skeleton。历史读取独立于文档配置读取。
+- 最终无跳过参数的完整 verify 退出 0：React 444 通过 / 1 既有跳过、TypeScript / Vite、浏览器、Electron 106/106、.NET 372/372、Development 发布通过。首轮日报夹具误把 Ready 当响应的问题已修复，原业务断言保留。源码 / 发布兼容目录 / 不可变快照的 125 文件 SHA256 全部一致，缺失 / 差异 / 多余均 0，Build ID 为 `46ccdac2-86af-49a6-b209-f83079a2fc20`。
+- 发布后五次正式测量成功：Sidecar Ready 中位数 469ms，集团填报首次进入 136ms，设置首次 399ms；窗口创建及 React Ready 中位数未优于基线，不能宣称整体提速。首次测量曾遇到 Playwright 30 秒连接超时，原因未定；诊断重试 Ready 4005ms，记录单独保留。完整报告、原始证据和范围见 [验收报告](docs/electron-startup-validation.md)。
+- 下次入口：用户审阅报告及 Development 实际效果后再安排 Git 交付；当前全部本轮改动未提交。不把本地验证或截图当作人工 / 生产写入验收，也未证明历史 8.258 秒样本的根因。
+
 ## 集团填报设置交付基线（2026-11-13，人工验收及完整 verify 通过）
 
 - 用户已验收集团填报设置界面，并再次明确授权提交、推送、创建 PR 和 Squash Merge。交付范围为本分支积累的网页配置与文档链接、业务两步配置 / 位置预览、执行规则、官方组件、测试、组件来源和 dist；不改后端 / Bridge / Sidecar / Electron 宿主，不更新版本、Production、标签或 Release。

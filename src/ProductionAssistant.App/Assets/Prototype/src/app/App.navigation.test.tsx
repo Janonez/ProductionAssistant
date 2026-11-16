@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
 const { invoke, notifyReady } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn() }))
-vi.mock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
+vi.mock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
 vi.mock('motion/react', () => ({
   AnimatePresence: ({ children }: { children: unknown }) => children,
   motion: {
@@ -190,7 +190,7 @@ describe('App host navigation contracts', () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
 
     ;(await import("../features/daily-report/dailyFieldCache")).clearDailyFieldCache();
     localStorage.clear();
@@ -239,7 +239,7 @@ describe('App host navigation contracts', () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
 
     history.replaceState({}, '', '?route=navigation:production-message&loadId=sidebar')
     const container = document.createElement('div')
@@ -292,7 +292,7 @@ describe('App host navigation contracts', () => {
     const previousChrome = Object.getOwnPropertyDescriptor(window, 'chrome')
     const postMessage = vi.fn()
     Object.assign(window, { chrome: { webview: { postMessage, addEventListener: () => undefined } } })
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
     notifyReady.mockImplementation(sendReady)
     const readyMessages = () => postMessage.mock.calls.filter(([message]) => message.type === 'app.ready')
 
@@ -335,7 +335,7 @@ describe('App host navigation contracts', () => {
     const invoke = vi.fn()
     const notifyReady = vi.fn()
     vi.resetModules()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
 
     history.replaceState({}, '', '?route=production-message&loadId=initial')
     invoke.mockReset().mockImplementation((operation: string) => {
@@ -411,7 +411,7 @@ describe('legacy navigation prefix host contract', () => {
       return Promise.resolve({})
     })
     const notifyReady = vi.fn()
-    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn() }))
+    vi.doMock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
     vi.doMock('motion/react', () => ({
       AnimatePresence: ({ children }: { children: unknown }) => children,
       motion: {
