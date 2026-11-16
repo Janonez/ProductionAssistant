@@ -3,22 +3,27 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { parseEnvironment, resolveSidecarPath, resolveDistRoot, resolveUserDataDir } = require('./lib/environment');
 const { newLoadId, isCurrentLoad, buildDocumentUrl, classify } = require('./lib/router');
 const { checkSender } = require('./lib/sender-check');
 const { resolveFile } = require('./lib/file-resolver');
 const { SidecarClient } = require('./lib/sidecar-client');
+const { resolveRendererBuild, compareInstanceBuild } = require('./lib/renderer-build');
 
 const PROTOCOL_HOST = 'app';
 const INDEX_PATH = '/index.html';
 const documentUrl = `pa://${PROTOCOL_HOST}${INDEX_PATH}`;
 
 function start() {
+  const startupId = randomUUID();
   let environment;
   let userData;
+  let renderer;
   try {
     environment = parseEnvironment(process.argv, process.env);
     userData = resolveUserDataDir(process.env, environment);
+    renderer = resolveRendererBuild(resolveDistRoot(__dirname, process.env));
   } catch (error) {
     dialog.showErrorBox('启动失败', error.message);
     app.exit(2);
@@ -27,10 +32,23 @@ function start() {
   fs.mkdirSync(userData, { recursive: true });
   app.setPath('userData', userData);
   app.setPath('sessionData', userData);
-  if (!app.requestSingleInstanceLock()) {
+  const identityFile = path.join(userData, 'instance-identity.json');
+  if (!app.requestSingleInstanceLock({ buildId: renderer.buildId, startupId, pid: process.pid })) {
+    // Pre-migration main processes cannot understand second-instance Build IDs.
+    // A missing/invalid identity must not silently focus a window and imply it is current.
+    let versionAware = false;
+    try {
+      const identity = JSON.parse(fs.readFileSync(identityFile, 'utf8'));
+      if (identity.identityVersion === 1 && Number.isInteger(identity.pid)) {
+        process.kill(identity.pid, 0);
+        versionAware = true;
+      }
+    } catch {}
+    if (!versionAware) dialog.showErrorBox('已有应用窗口正在运行', '已有窗口无法确认构建版本。请保存工作并正常关闭旧窗口，再次运行启动命令；本次没有加载新构建。');
     app.quit();
     return;
   }
+  fs.writeFileSync(identityFile, JSON.stringify({ identityVersion: 1, startupId, buildId: renderer.buildId, pid: process.pid }));
   protocol.registerSchemesAsPrivileged([
     { scheme: 'pa', privileges: { standard: true, secure: true, supportFetchAPI: true } },
   ]);
@@ -48,12 +66,13 @@ function start() {
       fs.renameSync(logFile, logFile + '.1');
       logBytes = 0;
     }
-    const line = JSON.stringify({ timestamp: new Date().toISOString(), t: now(), event, ...details }) + '\n';
+    const line = JSON.stringify({ timestamp: new Date().toISOString(), t: now(), event, startupId, electronPid: process.pid, environment, ...details }) + '\n';
     fs.appendFileSync(logFile, line, 'utf8');
     logBytes += Buffer.byteLength(line, 'utf8');
   }
   log('app-start', { electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node,
-    environment, platform: process.platform, arch: process.arch });
+    environment, platform: process.platform, arch: process.arch, buildId: renderer.buildId,
+    resourceSource: process.env.PRODUCTIONASSISTANT_DIST ? 'explicit-override' : 'source-build' });
   let lastLoopT = now();
   const lagTimer = setInterval(() => {
     const t = now();
@@ -69,6 +88,7 @@ function start() {
   let loadStartT = 0;
   let resourceStats = { count: 0, totalMs: 0, maxMs: 0 };
   let quitting = false;
+  let rendererVerified = false;
   const openDialogs = new Set();
   const forwarded = new Map();
   const reply = message => {
@@ -76,7 +96,7 @@ function start() {
       const request = forwarded.get(message.id);
       if (request) {
         forwarded.delete(message.id);
-        log('request-done', { operation: request.operation, elapsedMs: now() - request.startedT, ok: message.ok });
+        log('request-done', { requestId: message.id, operation: request.operation, elapsedMs: now() - request.startedT, ok: message.ok, errorCode: message.errorCode });
       }
     }
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed())
@@ -92,6 +112,7 @@ function start() {
   function loadDocument(reason) {
     if (!window || window.isDestroyed()) return;
     currentLoadId = newLoadId();
+    rendererVerified = false;
     const target = buildDocumentUrl(reason === 'initial' ? '' : window.webContents.getURL(), currentLoadId);
     loadStartT = now();
     resourceStats = { count: 0, totalMs: 0, maxMs: 0 };
@@ -120,7 +141,7 @@ function start() {
       return;
     }
     openDialogs.add(operation);
-    const started = Date.now();
+    const started = now();
     try {
       const options = operation === 'plan.pickFolder'
         ? { title: '选择挂网计划目录', properties: ['openDirectory'] }
@@ -128,7 +149,7 @@ function start() {
       log('dialog-open', { operation });
       const result = await dialog.showOpenDialog(window, options);
       reply({ id, ok: true, data: { path: result.canceled ? null : result.filePaths[0] ?? null } });
-      log('dialog-finished', { operation, elapsedMs: Date.now() - started, canceled: result.canceled });
+      log('dialog-finished', { operation, elapsedMs: now() - started, canceled: result.canceled });
     } catch (error) {
       reply({ id, ok: false, error: '选择对话框失败。' });
       log('dialog-failed', { operation, error: error.name });
@@ -137,10 +158,20 @@ function start() {
     }
   }
 
-  app.on('second-instance', () => {
+  let versionPromptOpen = false;
+  app.on('second-instance', (_event, _argv, _cwd, candidate) => {
     if (!window || window.isDestroyed()) return;
     if (window.isMinimized()) window.restore();
     window.focus();
+    const comparison = compareInstanceBuild(renderer.buildId, candidate);
+    log('second-instance', { comparison });
+    if (comparison === 'different' && !versionPromptOpen) {
+      versionPromptOpen = true;
+      void dialog.showMessageBox(window, { type: 'info', title: '检测到新构建',
+        message: '当前窗口仍运行旧构建。保存工作并关闭当前应用后，请重新执行启动命令以加载新构建。',
+        detail: `当前构建：${renderer.buildId}`, buttons: ['继续使用当前窗口', '关闭当前应用'], defaultId: 0, cancelId: 0,
+      }).then(result => { if (result.response === 1) app.quit(); }).finally(() => { versionPromptOpen = false; });
+    }
   });
   app.on('window-all-closed', () => app.quit());
   app.on('child-process-gone', (_event, details) => log('child-process-gone', {
@@ -150,14 +181,23 @@ function start() {
     if (quitting) return;
     quitting = true;
     event.preventDefault();
-    Promise.resolve(client?.shutdown()).then(() => app.exit(0));
+    Promise.resolve(client?.shutdown()).then(() => {
+      try {
+        if (JSON.parse(fs.readFileSync(identityFile, 'utf8')).startupId === startupId) fs.unlinkSync(identityFile);
+      } catch (error) { if (error.code !== 'ENOENT') log('instance-identity-cleanup-failed', { error: error.name }); }
+      app.exit(0);
+    }, error => {
+      log('sidecar-shutdown-failed', { errorCode: error.code || 'SIDECAR_SHUTDOWN_FAILED' });
+      app.exit(1);
+    });
   });
 
   app.whenReady().then(() => {
     log('app-ready');
     try { log('gpu-status', { features: app.getGPUFeatureStatus() }); }
     catch (error) { log('gpu-status', { error: error.name }); }
-    const distRoot = resolveDistRoot(__dirname, process.env);
+    // Fixed for this process lifetime, including reloads and dynamic chunks.
+    const distRoot = renderer.root;
     if (!fs.existsSync(distRoot) || !fs.statSync(distRoot).isDirectory()) {
       dialog.showErrorBox('前端资源缺失', '请先运行 verify.ps1 生成前端资源。');
       app.exit(4);
@@ -170,12 +210,17 @@ function start() {
       return;
     }
     client = new SidecarClient({
-      executable, environment, env: { ...process.env }, onMessage: reply,
+      executable, environment, env: { ...process.env, METIS_STARTUP_ID: startupId }, onMessage: reply,
+      onState: state => {
+        log(state.state === 'Ready' ? 'sidecar-ready' : 'sidecar-state', { state: state.state, phase: state.phase, sidecarPid: state.pid, errorCode: state.errorCode });
+        reply({ type: 'service.state', data: state });
+      },
       onFirstOutput: () => log('sidecar-first-output'),
       onDiagnostic: diagnostic => {
         if (diagnostic.kind === 'mark') log('sidecar-mark', {
           phase: diagnostic.phase, operation: diagnostic.operation, durationMs: diagnostic.durationMs,
         });
+        else if (diagnostic.kind === 'startup') log('sidecar-phase', { phase: diagnostic.phase, status: diagnostic.status, elapsedMs: diagnostic.elapsedMs });
         else log('sidecar-stderr-other', { length: diagnostic.length });
       },
       onExit: ({ code, signal, error }) => {
@@ -227,6 +272,8 @@ function start() {
       },
     });
     log('window-created');
+    window.once('show', () => log('window-shown'));
+    if (window.isVisible()) log('window-shown');
     window.on('unresponsive', () => log('window-unresponsive'));
     window.on('responsive', () => log('window-responsive'));
     const contents = window.webContents;
@@ -265,8 +312,22 @@ function start() {
         if (request.id) reply({ id: request.id, ok: false, error: '无效的界面请求。' });
       } else if (request.kind === 'theme') {
         nativeTheme.themeSource = request.theme;
+      } else if (request.kind === 'service-status') {
+        reply({ type: 'service.state', data: client.snapshot });
+      } else if (request.kind === 'restart') {
+        void dialog.showMessageBox(window, { type: 'question', title: '重新启动应用', message: '重新启动将关闭当前窗口，请先保存正在编辑的内容。',
+          buttons: ['取消', '重新启动'], defaultId: 0, cancelId: 0 }).then(result => {
+          if (result.response === 1) { app.relaunch(); app.quit(); }
+        });
       } else if (request.kind === 'ready') {
         if (isCurrentLoad(request.loadId, currentLoadId)) {
+          if (message.buildId !== renderer.buildId) {
+            rendererVerified = false;
+            log('renderer-build-mismatch');
+            dialog.showErrorBox('界面资源版本不匹配', '当前界面未获得业务访问权限。请运行完整 verify.ps1 后重新启动应用。');
+            return;
+          }
+          rendererVerified = true;
           log('react-ready', { moduleEntryMs: request.moduleEntryMs, readyMs: request.readyMs, sinceLoadMs: now() - loadStartT });
           summarizeResources();
         }
@@ -274,10 +335,14 @@ function start() {
       } else if (request.kind === 'local') {
         void pick(request);
       } else {
+        if (!rendererVerified) {
+          reply({ id: request.id, ok: false, error: '界面资源版本尚未确认，请重新加载。', errorCode: 'RENDERER_NOT_VERIFIED', retryable: true });
+          return;
+        }
         const operation = /^[A-Za-z0-9.]+$/.test(message.operation) ? message.operation : '<已省略>';
         forwarded.set(request.id, { operation, startedT: now() });
-        log('request-forward', { operation });
-        if (!client.send(request)) reply({ id: request.id, ok: false, error: '能力进程不可用，请重启应用。' });
+        log('request-forward', { requestId: request.id, operation });
+        if (!client.send(request) && forwarded.has(request.id)) reply({ id: request.id, ok: false, error: '本地服务不可用，请重新启动应用。', errorCode: 'SIDECAR_UNAVAILABLE', state: client.snapshot.state, retryable: false });
       }
     };
     ipcMain.on('bridge:message', onBridgeMessage);

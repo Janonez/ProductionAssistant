@@ -3,7 +3,9 @@
   "private": true,
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "node scripts/start.js",
+    "prepare:electron-runtime": "node scripts/prepare-electron-runtime.js",
+    "prepare:renderer": "node scripts/prepare-renderer.js",
     "test": "node --test"
   },
   "devDependencies": {

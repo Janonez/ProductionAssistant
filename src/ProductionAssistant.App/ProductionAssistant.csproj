@@ -40,6 +40,8 @@
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest" />
     <Content Remove="Assets\TencentSheet\node_modules\**;Assets\TencentSheet\package.json;Assets\TencentSheet\package-lock.json;Assets\Prototype\src\**;Assets\Prototype\node_modules\**;Assets\Prototype\package.json;Assets\Prototype\package-lock.json;Assets\Prototype\tsconfig*.json;Assets\Prototype\vite.config.ts;Assets\Prototype\vitest.config.ts" />
+    <Content Remove="Assets\Prototype\dist.builds\**" />
+    <None Remove="Assets\Prototype\dist.builds\**" />
     <Content Include="Assets\Fonts\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\production-assistant-logo.png"
              CopyToOutputDirectory="PreserveNewest" />

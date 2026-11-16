@@ -4,8 +4,12 @@ namespace ProductionAssistant;
 
 public sealed partial class OperationDispatcher
 {
-    private static async Task<object> ListAutomationTasksAsync() =>
-        new { tasks = await AppServices.AutomationTaskHandlers.ListTasksAsync(), availableTaskTypes = AppServices.AutomationTaskHandlers.TaskTypes };
+    private static async Task<object> ListAutomationTasksAsync(JsonElement payload)
+    {
+        if (payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("taskType", out var taskType) && taskType.ValueKind != JsonValueKind.String)
+            throw new InvalidOperationException("任务类型必须是字符串。");
+        return new { tasks = await AppServices.AutomationTaskHandlers.ListTasksAsync(ReadString(payload, "taskType")), availableTaskTypes = AppServices.AutomationTaskHandlers.TaskTypes };
+    }
 
     private static async Task<object> SetAutomationTaskEnabledAsync(JsonElement payload)
     {

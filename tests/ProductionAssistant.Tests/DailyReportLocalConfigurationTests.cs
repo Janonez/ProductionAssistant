@@ -988,6 +988,7 @@ public sealed class DailyReportLocalConfigurationTests : IDisposable
 
         internal HostSession()
         {
+            var ready = false;
             var reader = new QueueReader(_input.Reader, line =>
             {
                 using var document = JsonDocument.Parse(line);
@@ -998,9 +999,17 @@ public sealed class DailyReportLocalConfigurationTests : IDisposable
             {
                 using var document = JsonDocument.Parse(line);
                 var root = document.RootElement.Clone();
+                if (root.TryGetProperty("type", out var type) && type.GetString() == "sidecar.lifecycle")
+                {
+                    Assert.Equal(1, root.GetProperty("protocolVersion").GetInt32());
+                    Assert.Equal("Ready", root.GetProperty("state").GetString());
+                    ready = true;
+                    return;
+                }
                 if (_responses.TryRemove(root.GetProperty("id").GetString()!, out var response)) response.TrySetResult(root);
             });
             _run = new StdioHost(reader, writer, TextWriter.Null).RunAsync();
+            Assert.True(ready, "The protocol must be Ready before reading business requests.");
         }
 
         internal Pending Queue(string operation, object? payload = null)
@@ -1067,6 +1076,14 @@ public sealed class DailyReportLocalConfigurationTests : IDisposable
             var session = new ProcessSession(Process.Start(info) ?? throw new InvalidOperationException("Could not start isolated Sidecar."));
             try
             {
+                foreach (var expected in new[] { "Initializing", "Ready" })
+                {
+                    var line = await session._process.StandardOutput.ReadLineAsync().WaitAsync(Deadline);
+                    using var lifecycle = JsonDocument.Parse(line!);
+                    Assert.Equal("sidecar.lifecycle", lifecycle.RootElement.GetProperty("type").GetString());
+                    Assert.Equal(1, lifecycle.RootElement.GetProperty("protocolVersion").GetInt32());
+                    Assert.Equal(expected, lifecycle.RootElement.GetProperty("state").GetString());
+                }
                 Success(await session.SendAsync("daily.list"));
                 return session;
             }

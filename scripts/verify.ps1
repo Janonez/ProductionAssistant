@@ -33,8 +33,16 @@ try {
         try { npm.cmd ci --ignore-scripts; Assert-NativeSuccess 'TencentSheet npm ci' } finally { Pop-Location }
         Push-Location $desktop
         try { npm.cmd ci --ignore-scripts; Assert-NativeSuccess 'Desktop npm ci' } finally { Pop-Location }
+        npm.cmd --prefix $desktop run prepare:electron-runtime
+        Assert-NativeSuccess 'Electron Runtime preparation'
         dotnet restore ProductionAssistant.sln -p:Platform=x64 -r win-x64
         Assert-NativeSuccess 'dotnet restore'
+    }
+
+    # Also check reused dependencies when -SkipRestore is explicitly requested.
+    if ($SkipRestore) {
+        npm.cmd --prefix $desktop run prepare:electron-runtime
+        Assert-NativeSuccess 'Electron Runtime preparation'
     }
 
     # Tests outside the asset package use the same locked Playwright installation.
@@ -74,6 +82,8 @@ try {
     dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj `
         -c Debug -p:Platform=x64 -p:RuntimeEnvironment=Development --self-contained true --no-restore -o $debugPublish
     Assert-NativeSuccess 'Debug publish'
+    node (Join-Path $desktop 'scripts\prepare-renderer.js') (Join-Path $prototype 'dist') (Join-Path $debugPublish 'Assets\Prototype')
+    Assert-NativeSuccess 'Development immutable Renderer publish'
     if ($SyncRelease) {
         dotnet publish src\ProductionAssistant.App\ProductionAssistant.csproj `
             -c Release -p:Platform=x64 -p:RuntimeEnvironment=Production --self-contained true --no-restore -o $releasePublish

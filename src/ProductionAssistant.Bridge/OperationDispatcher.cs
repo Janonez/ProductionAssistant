@@ -103,7 +103,7 @@ public sealed partial class OperationDispatcher
             "database.getState" => GetDatabaseState(),
             "database.getSchema" => await GetDatabaseSchemaAsync(payload, cancellationToken),
             "database.inspect" => await InspectDatabaseAsync(payload, cancellationToken),
-            "automation.list" => await ListAutomationTasksAsync(),
+            "automation.list" => await ListAutomationTasksAsync(payload),
             "automation.setEnabled" => await SetAutomationTaskEnabledAsync(payload),
             "automation.delete" => await DeleteAutomationTaskAsync(payload),
             "tencentSheet.create" => await TencentSheetAsync("create", payload, cancellationToken),

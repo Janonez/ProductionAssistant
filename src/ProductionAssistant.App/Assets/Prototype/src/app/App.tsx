@@ -5,6 +5,7 @@ import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
 import { ROUTES } from '../routes/routeTable'
 import { AppLayout } from '../components/layout/AppLayout'
+import { LocalServiceBoundary } from '../components/layout/LocalServiceBoundary'
 import { ThemeProvider } from '../components/layout/ThemeProvider'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import ProductionMessagePage from '../features/production-message/ProductionMessagePage'
@@ -53,8 +54,10 @@ export function App() {
         <LoadBoundary>
           <Suspense fallback={<RouteSkeleton route={route} />}>
             <RouteReady route={route} loadId={loadId} />
+            <LocalServiceBoundary>
             {taskType === null ? <p role="alert">任务分类无效，请从左侧重新选择业务分类。</p> : route === ROUTES.productionMessage ? <ProductionMessagePage /> : route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : route === ROUTES.planPdf ? <PlanPdfPage /> : route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : groupSubmission ? <GroupSubmissionPage /> : route === ROUTES.dailyReport ? <AutomationPage taskType={taskType} openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
 
+            </LocalServiceBoundary>
           </Suspense>
         </LoadBoundary>
       </div>

@@ -7,9 +7,10 @@ const { EventEmitter } = require('node:events');
 const path = require('node:path');
 const os = require('node:os');
 const { randomUUID } = require('node:crypto');
+const { performance } = require('node:perf_hooks');
 const { SidecarClient, classifySidecarLine } = require('../lib/sidecar-client');
 
-function launch(t, { mode = '', graceMs = 5000, defaultKill = false } = {}) {
+function launch(t, { mode = '', graceMs = 5000, defaultKill = false, startupTimeoutMs = 2000, unresponsiveKill = false } = {}) {
   const events = [];
   const waiters = new Set();
   const publish = event => {
@@ -36,7 +37,8 @@ function launch(t, { mode = '', graceMs = 5000, defaultKill = false } = {}) {
   const mocked = t.mock.method(childProcess, 'spawn', (executable, args, options) => {
     assert.equal(executable, process.execPath);
     assert.deepEqual(args, ['--environment', 'Development']);
-    assert.equal(options.env, env);
+    assert.equal(options.env.PA_FAKE_MODE, env.PA_FAKE_MODE);
+    assert.ok(options.env.METIS_STARTUP_ID);
     assert.equal(options.windowsHide, true);
     assert.deepEqual(options.stdio, ['pipe', 'pipe', 'pipe']);
     return spawn(process.execPath, [path.join(__dirname, 'fixtures', 'fake-sidecar.js'), ...args], {
@@ -47,13 +49,15 @@ function launch(t, { mode = '', graceMs = 5000, defaultKill = false } = {}) {
   let client;
   try {
     client = new SidecarClient({
-      executable: process.execPath, environment: 'Development', env, graceMs,
+      executable: process.execPath, environment: 'Development', env, graceMs, startupTimeoutMs,
       onMessage: message => publish({ type: 'message', message }),
       onDiagnostic: message => publish({ type: 'diagnostic', message }),
       onFirstOutput: () => publish({ type: 'first-output' }),
       onExit: details => publish({ type: 'exit', details }),
+      onState: state => publish({ type: 'state', state }),
       ...(defaultKill ? {} : { killTree: pid => {
         killed.push(pid);
+        if (unresponsiveKill) return;
         client.child.send('exit', () => {});
       } }),
     });
@@ -61,12 +65,13 @@ function launch(t, { mode = '', graceMs = 5000, defaultKill = false } = {}) {
   const closed = new Promise(resolve => client.child.once('close', resolve));
   t.after(async () => {
     if (client.child.connected) client.child.send('exit', () => {});
-    await client.shutdown();
+    try { await client.shutdown(); }
+    catch (error) { assert.equal(error.code, 'SIDECAR_SHUTDOWN_TIMEOUT'); }
     await closed;
   });
   return {
     client, events, killed, waitFor,
-    ready: waitFor(event => event.type === 'first-output'),
+    get ready() { return waitFor(event => event.type === 'state' && event.state.state === 'Ready'); },
     send: (id, operation, payload) => client.send({ id, line: JSON.stringify({ id, operation, payload }) }),
   };
 }
@@ -118,7 +123,12 @@ test('fails every pending request once on exit code 7 and rejects later sends', 
   assert.equal(exit.details.code, 7);
   const messages = harness.events.filter(event => event.type === 'message').map(event => event.message);
   assert.deepEqual(messages.map(message => message.id), ['first', 'second', 'exit']);
-  for (const message of messages) assert.deepEqual(message, { id: message.id, ok: false, error: '能力进程已退出（退出码 7），请重启应用。' });
+  for (const message of messages) {
+    assert.equal(message.ok, false);
+    assert.equal(message.error, '能力进程已退出（退出码 7），请重启应用。');
+    assert.equal(message.errorCode, 'SIDECAR_EXITED');
+    assert.equal(message.retryable, false);
+  }
   assert.equal(harness.client.pending.size, 0);
   assert.equal(harness.send('later', 'echo'), false);
   assert.equal(harness.events.filter(event => event.type === 'exit').length, 1);
@@ -135,7 +145,8 @@ test('reports ENOENT as startup failure and settles shutdown', async () => {
   client.send({ id: 'startup', line: '{"id":"startup","operation":"echo"}' });
   const details = await exited;
   assert.equal(details.error.code, 'ENOENT');
-  assert.deepEqual(messages, [{ id: 'startup', ok: false, error: '能力进程已退出（启动失败），请重启应用。' }]);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].error, '能力进程已退出（启动失败），请重启应用。');
   assert.equal(client.send({ id: 'later', line: '{}' }), false);
   await client.shutdown();
 });
@@ -184,6 +195,14 @@ test('calls injected killTree after the grace period and waits for the fake proc
   assert.deepEqual(harness.killed, [harness.client.child.pid]);
   assert.equal(harness.client.pending.size, 0);
   assert.equal(harness.events.filter(event => event.type === 'exit').length, 1);
+});
+
+test('shutdown is bounded even if tree termination cannot finish the owned process', async t => {
+  const h = launch(t, { mode: 'keep-after-eof', graceMs: 20, unresponsiveKill: true });
+  await h.ready;
+  await assert.rejects(h.client.shutdown(), { code: 'SIDECAR_SHUTDOWN_TIMEOUT' });
+  assert.equal(h.client.snapshot.state, 'Failed');
+  assert.equal(h.client.snapshot.errorCode, 'SIDECAR_SHUTDOWN_TIMEOUT');
 });
 
 test('uses the default tree termination command without executing it in the test', async t => {
@@ -256,4 +275,121 @@ test('notifies first sidecar output once across stderr and multiple stdout lines
   harness.send('first-output', 'progress.demo');
   await harness.waitFor(event => event.type === 'message' && event.message.ok === true);
   assert.equal(harness.events.filter(event => event.type === 'first-output').length, 1);
+});
+
+test('queues before delayed Ready, correlates concurrent replies and never sends twice', async t => {
+  const h = launch(t, { mode: 'delayed-ready' });
+  h.send('queued-a', 'echo', { value: 'a' }); h.send('queued-b', 'echo', { value: 'b' });
+  await h.waitFor(event => event.type === 'first-output');
+  assert.notEqual(h.client.snapshot.state, 'Ready');
+  assert.equal(h.events.filter(event => event.type === 'message').length, 0);
+  await h.ready;
+  await h.waitFor(event => event.type === 'message' && event.message.id === 'queued-b');
+  assert.deepEqual(h.events.filter(event => event.type === 'message').map(event => event.message.data.value), ['a', 'b']);
+});
+
+test('queue expiry removes the request before Ready and does not replay a timed out write', async t => {
+  const h = launch(t, { mode: 'delayed-ready' });
+  h.client.send({ id: 'expired-write', line: '{"id":"expired-write","operation":"echo"}', timeoutMs: 10 });
+  const failure = await h.waitFor(event => event.type === 'message');
+  assert.equal(failure.message.errorCode, 'SIDECAR_NOT_READY');
+  assert.equal(failure.message.retryable, true);
+  await h.ready;
+  h.send('barrier', 'echo');
+  await h.waitFor(event => event.type === 'message' && event.message.id === 'barrier');
+  assert.equal(h.events.filter(event => event.type === 'message' && event.message.id === 'expired-write').length, 1);
+});
+
+test('startup failures reject queued requests with structured errors and never become Ready', async t => {
+  for (const [mode, code] of [['no-ready', 'SIDECAR_STARTUP_TIMEOUT'], ['initialize-fail', 'SIDECAR_INITIALIZATION_FAILED'], ['protocol-mismatch', 'SIDECAR_PROTOCOL_MISMATCH'], ['exit-before-ready', 'SIDECAR_EXITED']]) {
+    const h = launch(t, { mode, startupTimeoutMs: mode === 'no-ready' ? 200 : 2000 });
+    h.send('queued', 'echo');
+    const failure = await h.waitFor(event => event.type === 'message');
+    assert.equal(failure.message.errorCode, code);
+    await h.waitFor(event => event.type === 'exit');
+    assert.equal(h.client.snapshot.state, 'Failed');
+    assert.equal(h.events.some(event => event.type === 'state' && event.state.state === 'Ready'), false);
+    assert.equal(h.send('later', 'echo'), false);
+  }
+});
+
+test('in-flight timeout reports unknown outcome and ignores a late response', async t => {
+  const h = launch(t); await h.ready;
+  h.client.send({ id: 'timeout', line: '{"id":"timeout","operation":"hang"}', timeoutMs: 10 });
+  const failure = await h.waitFor(event => event.type === 'message');
+  assert.equal(failure.message.errorCode, 'SIDECAR_REQUEST_TIMEOUT');
+  assert.equal(failure.message.retryable, false);
+  assert.match(failure.message.error, /结果未知/);
+});
+
+test('Ready drains only live requests even when deadline callbacks have not run', async t => {
+  const h = launch(t, { mode: 'delayed-ready' });
+  let now = 100;
+  t.mock.method(performance, 'now', () => now);
+  const write = t.mock.method(h.client.child.stdin, 'write');
+  for (let i = 0; i < 256; i++) h.client.send({ id: `queued-${i}`, line: JSON.stringify({ id: `queued-${i}`, operation: 'echo' }), timeoutMs: i % 2 ? 10000 : 1000 });
+  const expired = [...h.client.pending.values()].filter((_, i) => i % 2 === 0);
+  h.send('overflow', 'echo');
+  assert.equal(h.events.at(-1).message.errorCode, 'SIDECAR_QUEUE_FULL');
+  now = 1100; // exact deadline, before any 1000ms timer can fire
+  await h.ready;
+  await h.waitFor(event => event.type === 'message' && event.message.id === 'queued-255');
+  assert.equal(write.mock.callCount(), 128);
+  assert.ok(write.mock.calls.every(call => Number(JSON.parse(call.arguments[0]).id.split('-')[1]) % 2 === 1));
+  assert.equal(h.client.pending.size, 0);
+  for (const request of expired) {
+    assert.equal(request.sent, false);
+    assert.equal(request.timer._destroyed, true);
+    h.client.expire(request); // an already runnable timer must not settle twice
+  }
+  assert.equal(h.events.filter(event => event.type === 'message').length, 257);
+});
+
+test('completed or cancelled queue entries and stale objects cannot be sent or settle reused IDs', async t => {
+  const h = launch(t, { mode: 'delayed-ready' });
+  h.send('reused', 'echo');
+  const old = h.client.pending.get('reused');
+  h.client.complete('reused');
+  assert.equal(old.timer._destroyed, true);
+  h.send('reused', 'echo');
+  const write = t.mock.method(h.client.child.stdin, 'write');
+  assert.equal(h.client.write(old), false);
+  h.client.expire(old);
+  await h.ready;
+  await h.waitFor(event => event.type === 'message' && event.message.id === 'reused');
+  assert.equal(write.mock.callCount(), 1);
+  assert.equal(h.events.filter(event => event.type === 'message').length, 1);
+});
+
+test('Ready just before deadline sends once; a response after deadline remains outcome unknown', async t => {
+  const h = launch(t, { mode: 'delayed-ready' });
+  let now = 0;
+  t.mock.method(performance, 'now', () => now);
+  h.client.send({ id: 'write', line: '{"id":"write","operation":"hang"}', timeoutMs: 1000 });
+  now = 999;
+  await h.ready;
+  const request = h.client.pending.get('write');
+  assert.equal(request.sent, true);
+  now = 1000;
+  h.client.child.stdout.emit('data', Buffer.from('{"id":"write","ok":true}\n'));
+  h.client.expire(request);
+  const messages = h.events.filter(event => event.type === 'message');
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].message.errorCode, 'SIDECAR_REQUEST_TIMEOUT');
+  assert.equal(messages[0].message.retryable, false);
+});
+
+test('exit and shutdown clear queued deadlines and cannot publish duplicate timeout outcomes', async t => {
+  for (const action of ['shutdown', 'exit']) {
+    const h = launch(t, { mode: 'delayed-ready' });
+    h.send('queued', 'echo');
+    const request = h.client.pending.get('queued');
+    if (action === 'shutdown') await h.client.shutdown();
+    else { h.client.child.send('exit'); await h.waitFor(event => event.type === 'exit'); }
+    h.client.expire(request);
+    assert.equal(h.client.write(request), false);
+    assert.equal(request.timer._destroyed, true);
+    assert.equal(h.client.pending.size, 0);
+    assert.equal(h.events.filter(event => event.type === 'message').length, 1);
+  }
 });

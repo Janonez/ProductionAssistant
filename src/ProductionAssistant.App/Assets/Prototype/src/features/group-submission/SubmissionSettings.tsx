@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentProps } from 'react'
+import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { Separator } from '../../components/ui/separator'
@@ -9,9 +9,15 @@ import { SubmissionExecutionRules } from './SubmissionExecutionRules'
 import { BusinessConfiguration } from './BusinessConfiguration'
 import { createSubmissionSettingsMock } from './submission-settings.mock'
 import type { BusinessDataOption, SubmissionSettingsAdapter } from './business-configuration.types'
+import { SubmissionSettingsLoading } from './SubmissionSettingsLoading'
 
 type Props = Omit<ComponentProps<typeof SubmissionConnection>, 'adapter' | 'onReady'> & { adapter?: SubmissionSettingsAdapter }
-export function SubmissionSettings({ adapter: suppliedAdapter, ...props }: Props) {
+export function SubmissionSettings({ configurationLoading, configurationError, ...props }: Props & { configurationLoading?: boolean; configurationError?: ReactNode }) {
+  if (configurationLoading || configurationError) return <SubmissionSettingsLoading stage="configuration" error={configurationError} />
+  return <SubmissionSettingsContent {...props} />
+}
+
+function SubmissionSettingsContent({ adapter: suppliedAdapter, ...props }: Props) {
   const [adapter] = useState(() => suppliedAdapter ?? createSubmissionSettingsMock())
   const [canPick, setCanPick] = useState(false)
   const [sources, setSources] = useState<readonly BusinessDataOption[]>([]), [loading, setLoading] = useState(true)

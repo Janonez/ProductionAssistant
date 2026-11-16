@@ -49,17 +49,20 @@ internal sealed class StdioHost : IBridgeHost
     private readonly object _diagnosticGate = new();
     private readonly OperationDispatcher _dispatcher;
     private bool _outputClosed;
+    private readonly string _startupId;
 
-    internal StdioHost(TextReader input, TextWriter output, TextWriter diagnostics)
+    internal StdioHost(TextReader input, TextWriter output, TextWriter diagnostics, string? startupId = null)
     {
         _input = input;
         _output = output;
         _diagnostics = diagnostics;
+        _startupId = startupId ?? Guid.NewGuid().ToString("N");
         _dispatcher = new OperationDispatcher(this);
     }
 
     public async Task<int> RunAsync()
     {
+        StartupTrace.WriteLifecycle(_output, _startupId, "Ready");
         var tasks = new List<Task>();
         try
         {

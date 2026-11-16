@@ -26,4 +26,12 @@ if (process.env.PA_FAKE_SIDECAR === '1') {
     if (process.env.PA_FAKE_MODE !== 'keep-after-eof') process.exit(0);
   });
   process.stderr.write('fixture-ready\n');
+  const lifecycle = (state, version = 1) => write({ type: 'sidecar.lifecycle', protocolVersion: version,
+    startupId: process.env.METIS_STARTUP_ID, state, phase: 'environment', pid: process.pid });
+  lifecycle('Initializing');
+  const mode = process.env.PA_FAKE_MODE;
+  if (mode === 'initialize-fail') lifecycle('Failed');
+  else if (mode === 'protocol-mismatch') lifecycle('Ready', 99);
+  else if (mode === 'exit-before-ready') process.exit(9);
+  else if (mode !== 'no-ready') setTimeout(() => lifecycle('Ready'), mode === 'delayed-ready' ? 150 : 0);
 }
