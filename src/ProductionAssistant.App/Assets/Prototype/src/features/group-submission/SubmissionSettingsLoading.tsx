@@ -8,9 +8,7 @@ export function SubmissionSettingsLoading({ stage, error }: { stage: 'module' | 
     {error}
     <section className="space-y-3" aria-label="网页配置加载">
       <h2 className="text-base font-semibold">网页配置</h2>
-      <p className="text-sm font-medium">文档链接</p>
-      <Skeleton className="h-11 w-full" /><Skeleton className="h-5 w-64 max-w-full" />
-      <div className="flex gap-3"><Skeleton className="h-9 w-16" /><Skeleton className="h-9 w-24" /></div>
+      <Skeleton className="h-14 w-full" />
     </section>
     <Separator />
     <section className="space-y-3" aria-label="业务配置加载"><h2 className="text-base font-semibold">业务配置</h2><Skeleton className="h-28 w-full" /></section>

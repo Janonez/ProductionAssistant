@@ -41,13 +41,17 @@ module.exports = async function checkBusinessConfiguration(page) {
     const wrapper = table.parentElement.parentElement;
     return getComputedStyle(wrapper).borderTopWidth === '1px' && parseFloat(getComputedStyle(wrapper).borderRadius) > 0;
   }), true);
-  assert.equal(await settings.locator('[data-slot=input-group] [data-slot=input-group-addon]').count(), 2);
-  assert.equal(await settings.locator('[aria-label="文档名称"]').textContent(), '共享文档');
+  const connectionItem = settings.locator('#submission-settings-web [data-slot=item][data-variant=outline]');
+  assert.equal(await connectionItem.locator('[data-slot=item-media]').count(), 1);
+  assert.equal(await connectionItem.locator('[data-slot=item-actions]').count(), 1);
+  assert.equal((await connectionItem.boundingBox()).height, 56);
+  assert.equal(await settings.locator('[aria-label="文档名称"]').textContent(), '腾讯文档');
   const writesBefore = await page.evaluate(() => [...window.operations]);
-  await settings.getByRole('button', { name: '检测连接', exact: true }).click();
+  await settings.getByRole('button', { name: '检测', exact: true }).click();
   await settings.locator('[data-connection-state=idle]').waitFor();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  assert.deepEqual(await page.evaluate(() => window.operations), writesBefore, 'local detection and focus never invoke a real session');
+  assert.deepEqual(await page.evaluate(() => window.operations), writesBefore.concat('tencentSheet.sessionVerify','tencentSheet.sessionStatus'), 'detection and focus only use existing session reads, without business writes');
+  const operationsAfterCheck = await page.evaluate(() => [...window.operations]);
   await rows.first().click(); await stepOne.waitFor();
   assert.equal(await stepOne.getByRole('button', { name: '删除业务', exact: true }).count(), 0);
   await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).fill('修改后业务');
@@ -71,13 +75,13 @@ module.exports = async function checkBusinessConfiguration(page) {
   assert.equal(await rows.count(), 0);
   await settings.getByRole('switch', { name: '自动填报', exact: true }).click();
   await page.locator('[data-sonner-toast]').filter({ hasText: '仅保留在当前页面，尚未保存到后端' }).waitFor();
-  assert.deepEqual(await page.evaluate(() => window.operations), writesBefore.concat('tencentSheet.sessionStatus'), 'businesses and execution-rule preview issue no backend writes; enabling rules only reads the existing session status');
+  assert.deepEqual(await page.evaluate(() => window.operations), operationsAfterCheck.concat('tencentSheet.sessionStatus'), 'businesses and execution-rule preview issue no backend writes; enabling rules only reads the existing session status');
   for (const width of [1600, 960, 720, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const layout = await settings.evaluate(element => ({ width: element.getBoundingClientRect().width, overflow: element.scrollWidth > element.clientWidth }));
     const panelWidth = await settings.evaluate(element => element.parentElement.getBoundingClientRect().width);
     assert.equal(layout.width, panelWidth); assert.equal(layout.overflow, false);
-    const group = settings.locator('[data-slot=input-group]');
+    const group = connectionItem;
     assert.equal(await group.evaluate(element => element.scrollWidth > element.clientWidth), false);
   }
   await page.setViewportSize({ width: 1200, height: 900 });

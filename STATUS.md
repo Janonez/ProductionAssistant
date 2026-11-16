@@ -1,5 +1,24 @@
 # ProductionAssistant 交接状态
 
+## 集团填报网页配置 UI（2026-11-16，人工验收通过，Git 交付中）
+
+- 当前需求分支 `codex/group-document-connection`，基线 `44d3144`。用户已允许原样保留既有 STATUS.md / dist 差异后建分支；原件备份于 `artifacts/web-config-baseline-20261116`，未 stash、清理或操作既存 hotfix 工作树。
+- 用户明确“先只做 UI，后端下个步骤做”；此前试作的后端、Bridge、Sidecar、Worker 和后端测试已全部撤回，相关 Git 差异核对为空。UI 已获人工验收通过，用户随后明确先完成 UI 的 Git 交付，再做后端。
+- 网页配置使用现有官方 Item outline、Input、Badge、Spinner、DropdownMenu、Tooltip、AlertDialog 和 Sonner，统一 56px 行与 20px FileText；八状态由一份映射驱动。更换链接可取消，保存/打开/轻量检查复用现有接口，复制有反馈；登录清除仅提示当前不可用，确认按钮禁用。
+- 独立 TypeScript、集团填报 96 项通过。最终完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 无跳过/稳定版参数退出 0：React 47 文件、459 通过 / 1 既有 EPERM 跳过；TypeScript / Vite、浏览器及 32 组 UI 矩阵、Electron 122/122、.NET 372/372、构建和 Development 发布通过。日志：`artifacts/document-connection-final-verify.log`。
+- 实际 Electron Development 隔离 UI 夹具另有 32 组通过（八状态 × 两主题 × 1400/960px，含 960×600）；外框、图标位置及操作右边缘跨状态一致。截图和尺寸在 `artifacts/document-connection-ui`，模拟证据不代表真实腾讯连接。正常 Development 已启动供验收；Computer Use 未获准操作 Electron，未自动切页。
+- 最终资源核对：Build ID `51e87ed3-8b53-4acd-b465-29857e349cea`，124 文件，缺失/差异/兼容目录多余均 0。首次 verify 因旧 InputGroup 浏览器断言（0 !== 2）停止，已按新 Item 更新等价断言后通过；原失败日志保留。npm audit、Vite 大块及 PRI249 既有提示未处理。
+- 下次入口：按路径暂存并检查本轮 UI 与构建产物，提交/推送需求分支、创建 PR；只在 CI verify pass 后 squash 合并。CI 未完成时汇报并等用户下次通知，不反复轮询。UI Git 交付完成后再进入真实认证/名称/可编辑检测和清除登录状态的后端步骤；本轮未真实填报或调度，未更新 Production / 版本 / 标签。详情见[网页配置说明](docs/group-submission-web-ui.md)；原验收交接和 Git 快照保留在本机 artifacts/document-connection-ui/acceptance-handoff-before-git-20261116.md。
+
+## PR #93 已合并，合并后本机完整 verify 通过（2026-11-16）
+
+- GitHub 确认 PR #93 为 MERGED，CI verify 为 pass（4 分 34 秒）。主目录已切回 main 并 `pull --ff-only`；main / origin/main 均为 `44d3144f00c089cbe17a493a5c0da475c84851f6`，与修复分支内容一致。
+- 合并后完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 不带跳过参数，退出 0：React 47 文件通过、446 通过 / 1 既有 EPERM 跳过；此前两个失败文件均通过；TypeScript / Vite / 浏览器检查、Electron 122/122、.NET 372/372、Release 构建及 Development 发布通过。原始日志在 `artifacts/startup/post-merge-93-verify.log`。
+- Development 资源检查通过：Build ID `4e68a708-59dd-4038-87de-69fca77ee2c8`，125 文件，缺失 / 差异 / 多余均 0。verify 生成了新的 Build ID 和 dist 文件名；`git diff --stat --ignore-cr-at-eol` 有实质统计，按规则停止资源清理，保留全部产物，没有自动还原、删除或提交。
+- 本次本地分支 `codex/fix-react-test-lifecycle` 顶端与 PR head `92003fb1afde938cf2882e581e4a377afbbbc542` 一致；完整哈希和分支名已追加到上级工作区 `branch-backup-20261012.txt` 并回读核对，只删除了该本地分支。既存 `codex/hotfix-frame-detached` 分支及工作树未操作。
+- 本轮未修改 Production、版本或稳定版，未启动桌面应用，未做真实腾讯写入、调度或消息发送。npm audit、Vite 大块及 PRI249 既有提示未处理。首次模块变慢的具体 OS 诱因仍缺原现场遥测，结论边界见下方调查及报告，不以本次通过代替历史原因证明。
+- 下次入口：用户决定本次 verify 生成的 dist 实质差异如何处理；当前保留这些差异及本交接修改，不继续提交。完整 Git 状态见本机 `artifacts/startup/post-merge-93-summary.md`；本次合并同步与验证完成，自动化通过不等于人工验收通过。
+
 ## PR #92 本机 React verify 调查（2026-11-16，完整验证通过，进入 Git 交付）
 
 - 当前 `codex/fix-react-test-lifecycle`，基线 main / origin/main `16e5141`；保留原有 STATUS.md 修改后建分支，没有 stash，既存 hotfix 工作树未操作。原交接原件和 SHA256 已备份、核对，以下历史内容保留。用户审阅后已明确要求继续并合并分支，进入提交、推送及 PR 流程，合并仍以 CI verify 通过为前提。

@@ -1,108 +1,90 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { FileText } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { toast } from 'sonner'
 import { invoke } from '../../bridge/index'
-import { Button } from '../../components/ui/button'
-import { ButtonGroupSeparator } from '../../components/ui/button-group'
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '../../components/ui/input-group'
-import { Spinner } from '../../components/ui/spinner'
-import { Alert, AlertDescription } from '../../components/ui/alert'
-import { Field, FieldDescription, FieldLabel } from '../../components/ui/field'
-import { DocumentConnectionAlert, documentLink, type DocumentConnectionState } from './DocumentConnectionAlert'
-import type { SubmissionSettingsAdapter } from './business-configuration.types'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../../components/ui/alert-dialog'
+import { DocumentConnectionItem, connectionFromSession, documentLink, type ConnectionAction, type DocumentConnectionState, type DocumentSessionEvidence } from './DocumentConnectionItem'
 import type { SubmissionJob } from './types'
 
-export function SubmissionConnection({ job, adapter, onSaved, onCreated, onActive, onDirty, onReady }: {
-  job?: SubmissionJob
-  adapter: SubmissionSettingsAdapter
-  onSaved: (job: SubmissionJob) => void
-  onCreated: (id: string) => void
-  onActive: (busy: boolean) => void
-  onDirty: (dirty: boolean) => void
-  onReady: (ready: boolean) => void
+export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirty, onReady }: {
+  job?: SubmissionJob; onSaved: (job: SubmissionJob) => void; onCreated: (id: string) => void
+  onActive: (busy: boolean) => void; onDirty: (dirty: boolean) => void; onReady: (ready: boolean) => void
 }) {
   const savedUrl = job?.config.documentUrl ?? ''
-  const [draft, setDraft] = useState(savedUrl)
-  const [connection, setConnection] = useState<DocumentConnectionState>({ state: 'idle' })
-  const [saving, setSaving] = useState(false), [opening, setOpening] = useState(false)
-  const [error, setError] = useState(''), [notice, setNotice] = useState('')
-  const inFlight = useRef(false), generation = useRef(0), mounted = useRef(false)
-  const dirty = draft !== savedUrl
-  const blocked = saving || opening || connection.state === 'checking'
-  const target = documentLink(draft)
-  const documentName = (connection.state === 'connected' ? connection.documentName : adapter.readDocumentName(draft.trim()))?.trim() || '共享文档'
+  const [draft, setDraft] = useState(savedUrl), [editing, setEditing] = useState(!savedUrl)
+  const [connection, setConnection] = useState<DocumentConnectionState>({ state: savedUrl ? 'idle' : 'unconfigured' })
+  const [operation, setOperation] = useState<string>(), [confirmClear, setConfirmClear] = useState(false)
+  const flight = useRef<symbol | null>(null), generation = useRef(0), mounted = useRef(false)
+  const busy = !!operation || connection.state === 'checking'
+  const dirty = editing && draft !== savedUrl
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++ } }, [])
-  useEffect(() => { generation.current++; setDraft(savedUrl); setConnection({ state: 'idle' }); setError('') }, [savedUrl, adapter])
-  useEffect(() => { onActive(blocked); return () => onActive(false) }, [blocked, onActive])
-  useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
-  useEffect(() => { onReady(!!savedUrl && connection.state === 'connected' && !dirty && !blocked) }, [savedUrl, connection.state, dirty, blocked, onReady])
-  async function checkConnection() {
-    if (blocked) return
-    const current = ++generation.current
-    setError(''); setNotice('')
-    if (!target) { setConnection({ state: 'invalidLink' }); return }
-    setConnection({ state: 'checking' })
+  const check = useCallback(async (action: 'Status' | 'Verify' | 'Open' = 'Verify') => {
+    if (!savedUrl || flight.current) return
+    const token = Symbol(), current = generation.current
+    flight.current = token; setConnection(value => ({ ...value, state: 'checking' }))
     try {
-      const result = await adapter.checkDocumentConnection(target)
-      if (result.state === 'connected' && (!result.documentName?.trim() || !Number.isFinite(Date.parse(result.checkedAt)))) throw new Error('检测结果缺少文档名称或检测时间')
-      if (current === generation.current) setConnection(result)
+      const result = documentLink(savedUrl) ? connectionFromSession(await invoke<DocumentSessionEvidence>(`tencentSheet.session${action}`, { documentUrl: savedUrl }, 60000)) : { state: 'invalidLink' as const }
+      if (mounted.current && current === generation.current) setConnection(result)
     } catch {
-      if (current === generation.current) setConnection({ state: 'unavailable' })
-    }
-  }
-  async function openDocument() {
-    if (!target || inFlight.current || blocked) return
-    inFlight.current = true; setOpening(true); setError(''); setNotice('')
-    try {
-      // Reuse the existing document/browser entry. Opening never establishes a connection result.
-      await invoke('tencentSheet.sessionOpen', { documentUrl: target }, 60000)
-    } catch (failure) {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : '打开文档失败，请重试')
-    } finally { inFlight.current = false; if (mounted.current) setOpening(false) }
-  }
+      if (mounted.current && current === generation.current) setConnection({ state: 'unavailable' })
+    } finally { if (flight.current === token) flight.current = null }
+  }, [savedUrl])
+  useEffect(() => {
+    generation.current++; setDraft(savedUrl); setEditing(!savedUrl); setConnection({ state: savedUrl ? 'idle' : 'unconfigured' })
+    const current = generation.current
+    queueMicrotask(() => { if (mounted.current && current === generation.current) void check('Status') })
+  }, [savedUrl, check])
+  useEffect(() => {
+    const refresh = () => { if (!editing && !flight.current) void check(connection.state === 'notLoggedIn' ? 'Verify' : 'Status') }
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [check, editing, connection.state])
+  useEffect(() => { onActive(busy); return () => onActive(false) }, [busy, onActive])
+  useEffect(() => { onDirty(dirty) }, [dirty, onDirty])
+  useEffect(() => { onReady(!!savedUrl && connection.state === 'connected' && !editing && !busy) }, [savedUrl, connection.state, editing, busy, onReady])
+
   async function save(event: FormEvent) {
     event.preventDefault()
-    if (inFlight.current || blocked || !dirty || !target || job?.enabled) return
-    inFlight.current = true; setSaving(true); setError(''); setNotice('')
+    if (flight.current || !draft.trim() || job?.enabled) return
+    const target = documentLink(draft)
+    if (!target) { toast.error('请粘贴腾讯文档表格的 HTTPS 链接'); return }
+    const token = Symbol(), current = generation.current
+    flight.current = token; setOperation('save')
     try {
       if (job) {
         const result = await invoke<SubmissionJob>('tencentSheet.save', { id: job.id, config: { documentUrl: target }, configRevision: job.configRevision ?? 0 })
-        if (mounted.current) onSaved(result)
-      } else if (!job) {
+        if (!result || result.id !== job.id || result.config?.documentUrl !== target) throw new Error('保存响应无效，请重新读取文档配置')
+        if (mounted.current && current === generation.current) {
+          flight.current = null; setEditing(false); onSaved(result)
+          if (target === savedUrl) void check()
+        }
+      } else {
         const result = await invoke<{ id: string }>('tencentSheet.create', { documentUrl: target })
-        if (mounted.current) onCreated(result.id)
+        if (!result?.id) throw new Error('创建文档配置响应无效')
+        if (mounted.current && current === generation.current) { flight.current = null; onCreated(result.id) }
       }
-      if (mounted.current) setNotice('已保存')
-    } catch (failure) { if (mounted.current) setError(failure instanceof Error ? failure.message : '保存失败，请重试') }
-    finally { inFlight.current = false; if (mounted.current) setSaving(false) }
+      // The acknowledged configuration triggers verification after the parent reads it.
+    } catch (failure) { if (mounted.current && current === generation.current) toast.error(failure instanceof Error ? failure.message : '保存失败，请重试') }
+    finally { if (flight.current === token) flight.current = null; if (mounted.current) setOperation(undefined) }
+  }
+  async function action(value: ConnectionAction) {
+    if (flight.current) return
+    if (value === 'replace') { setDraft(savedUrl); setEditing(true); return }
+    if (value === 'check' || value === 'login') { await check(value === 'login' ? 'Open' : 'Verify'); return }
+    if (value === 'open') {
+      const token = Symbol(); flight.current = token; setOperation('open')
+      try { await invoke('tencentSheet.sessionOpen', { documentUrl: savedUrl }, 60000) }
+      catch { if (mounted.current) toast.error('打开文档失败，请重试') }
+      finally { if (flight.current === token) flight.current = null; if (mounted.current) setOperation(undefined) }
+    }
+  }
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(savedUrl); toast.success('链接已复制') }
+    catch { toast.error('复制失败，请重试') }
   }
   return <section id="submission-settings-web" aria-labelledby="web-configuration-title" className="space-y-3">
     <h2 id="web-configuration-title" className="text-base font-semibold">网页配置</h2>
-    <form onSubmit={save} className="space-y-4">
-      <Field className="gap-2">
-        <FieldLabel htmlFor="submission-document-url">文档链接</FieldLabel>
-        <InputGroup aria-labelledby="web-configuration-title" className="h-11 items-stretch" data-disabled={saving || opening || !!job?.enabled}>
-          <InputGroupInput id="submission-document-url" className="h-full basis-0 px-3" type="url" required value={draft} disabled={saving || opening || !!job?.enabled} placeholder="https://docs.qq.com/sheet/…" onChange={event => {
-            generation.current++; setDraft(event.target.value); setConnection({ state: 'idle' }); setNotice(''); setError('')
-          }} />
-          <InputGroupAddon align="inline-start" className="h-full max-w-[min(35%,12rem)] min-w-0 shrink-0 gap-0 rounded-l-[calc(var(--radius)-1px)] bg-muted/50 p-0">
-            <span className="flex min-w-0 items-center gap-2 px-3"><FileText className="size-4 shrink-0" aria-hidden="true" /><span className="truncate" title={documentName} aria-label="文档名称">{documentName}</span></span>
-            <ButtonGroupSeparator />
-          </InputGroupAddon>
-          <InputGroupAddon align="inline-end" className="h-full shrink-0 gap-0 p-0 has-[>button]:mr-0">
-            <ButtonGroupSeparator />
-            <InputGroupButton variant="secondary" size="sm" className="h-full rounded-none rounded-r-[calc(var(--radius)-1px)] px-3" disabled={!target || blocked} onClick={openDocument}>打开文档</InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-        <DocumentConnectionAlert connection={connection} onLogin={() => setNotice('扫码登录尚未接入')} />
-        {adapter.isMock && <FieldDescription>当前为本地界面预览，文档名称识别、连接检测和扫码登录尚未接入。</FieldDescription>}
-        {job?.enabled && <FieldDescription>当前任务已启用，请先在任务清单中停用后再修改文档链接。</FieldDescription>}
-      </Field>
-      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={blocked || !dirty || !target || !!job?.enabled}>{saving && <Spinner />}保存</Button>
-        <Button type="button" variant="outline" disabled={blocked || !draft.trim()} onClick={checkConnection}>检测连接</Button>
-        {notice && <span role="status" className="text-sm text-muted-foreground">{notice}</span>}
-      </div>
-    </form>
+    <form onSubmit={save}><DocumentConnectionItem connection={connection} url={savedUrl} draft={draft} editing={editing} busy={busy} locked={job?.enabled} onDraft={setDraft} onAction={action} onCancel={() => { setDraft(savedUrl); setEditing(false) }} onCopy={copyLink} onClear={() => setConfirmClear(true)} /></form>
+    {job?.enabled && <p className="text-sm text-muted-foreground">当前任务已启用，请先在任务清单中停用后再更换文档。</p>}
+    <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>清除登录状态？</AlertDialogTitle><AlertDialogDescription>当前版本暂不支持清除登录状态。多个腾讯文档可能共用同一浏览器登录会话，清除可能影响这些文档。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" disabled>清除登录状态</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </section>
 }

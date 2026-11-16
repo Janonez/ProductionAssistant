@@ -1,6 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { GroupSubmissionPage } from './GroupSubmissionPage'
 // These integration cases use the real, loaded settings. The separate loading
 // suite controls module delivery; Vite compilation is not a timed UI action here.
@@ -17,15 +18,25 @@ const tab = async (label: string) => {
   await act(async () => { button(label).focus(); button(label).click() })
   await settleModuleImports()
 }
-const changeUrl = async (value: string) => act(async () => {
+async function replaceDocument() {
+  const trigger = container.querySelector<HTMLButtonElement>('[aria-label="文档更多操作"]')!
+  await act(async () => { trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })) })
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+  await act(async () => [...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(element => element.textContent === '更换文档')!.click())
+}
+const changeUrl = async (value: string) => {
+  if (!container.querySelector('#submission-document-url')) await replaceDocument()
+  await act(async () => {
   const input = container.querySelector<HTMLInputElement>('#submission-document-url')!
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
-})
+  })
+}
 const submit = () => container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
 const mount = async () => act(async () => root.render(<GroupSubmissionPage />))
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  vi.spyOn(toast, 'error').mockReturnValue('error')
   job = { id: 'group', name: '现有文档', businessDate: '2026-11-10', configRevision: 8, config: { documentUrl: 'https://docs.qq.com/sheet/original', fields: [{ id: 'custom', name: '自定义指标', notion: { sourceName: '现有来源' } }], rules: { custom: { rowStep: 3 } } } }
   tasks = [{ id: 'other', name: '集团填报（只是名称）', taskType: 'daily_report' }, { id: 'group', name: '现有文档', taskType: 'tencent_sheet_fill' }]
   runs = []
@@ -50,7 +61,7 @@ afterEach(async () => {
   try {
     await act(async () => root.unmount())
     expect(container.childElementCount).toBe(0)
-  } finally { container.remove(); vi.unstubAllGlobals() }
+  } finally { container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals() }
 })
 
 it('opens the business workbench with four empty metrics, backend date, and no runnable write actions', async () => {
@@ -68,7 +79,7 @@ it('opens the business workbench with four empty metrics, backend date, and no r
   await act(async () => button('检查文档连接').click())
   await settleModuleImports()
   expect(button('设置').getAttribute('aria-selected')).toBe('true')
-  expect(container.querySelector('[data-slot=field]')).not.toBeNull()
+  expect(container.querySelector('[data-slot=item][data-variant=outline]')).not.toBeNull()
 })
 
 it('omits the document chooser with multiple connections and retains the original connection load', async () => {
@@ -77,7 +88,7 @@ it('omits the document chooser with multiple connections and retains the origina
   expect(button('选择文档连接')).toBeUndefined()
   expect(invoke).toHaveBeenCalledWith('tencentSheet.get', { id: 'group' })
   await tab('设置')
-  expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.value).toBe(job.config.documentUrl)
+  expect(container.querySelector('[aria-label="文档名称"]')?.textContent).toBe('腾讯文档')
 })
 
 it('loads history independently while configuration is pending', async () => {
@@ -101,38 +112,30 @@ it('shows all settings sections without secondary navigation and retains the ove
   expect(container.querySelector('[aria-labelledby="business-configuration-title"]')).not.toBeNull()
 })
 
-it('saves the real document link with the revision and retains existing fields and position rules', async () => {
-  await mount(); await tab('设置')
-  await changeUrl('https://docs.qq.com/sheet/new')
+it('saves the real document link with its revision and checks the newly saved target', async () => {
+  await mount(); await tab('设置'); await changeUrl('https://docs.qq.com/sheet/new')
   expect(container.querySelector('[data-connection-state=idle]')).not.toBeNull()
   await act(async () => { submit() })
   expect(invoke).toHaveBeenCalledWith('tencentSheet.save', { id: 'group', config: { documentUrl: 'https://docs.qq.com/sheet/new' }, configRevision: 8 })
   expect(job.config.fields?.[0].name).toBe('自定义指标')
   expect(job.config.rules).toEqual({ custom: { rowStep: 3 } })
-  expect(container.textContent).toContain('已保存')
-  await act(async () => button('打开文档').click())
-  expect(invoke).toHaveBeenLastCalledWith('tencentSheet.sessionOpen', { documentUrl: 'https://docs.qq.com/sheet/new' }, 60000)
-  const calls = invoke.mock.calls.length
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new' }, 60000)
+  expect(container.querySelector('[data-connection-state=connected]')).toBeNull()
   await act(async () => window.dispatchEvent(new Event('focus')))
-  expect(invoke.mock.calls).toHaveLength(calls)
-  expect(container.querySelector('[data-connection-state=idle]')).not.toBeNull()
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new' }, 60000)
 })
-
-it('keeps the saved notice after the parent URL update and clears it when the URL is edited again', async () => {
-  await mount(); await tab('设置')
-  const input = container.querySelector<HTMLInputElement>('#submission-document-url')!
-  await changeUrl('https://docs.qq.com/sheet/saved-notice')
+it('returns to the configured row after save and preserves a replacement draft across tabs until cancelled', async () => {
+  await mount(); await tab('设置'); await changeUrl('https://docs.qq.com/sheet/saved')
   await act(async () => { submit() })
-  expect(container.querySelector('#submission-document-url')).toBe(input)
-  expect(input.value).toBe(job.config.documentUrl)
-  expect(button('保存').disabled).toBe(true)
-  expect(container.textContent).toContain('已保存')
-  await tab('概览'); await tab('设置')
-  expect(container.textContent).toContain('已保存')
+  expect(container.querySelector('#submission-document-url')).toBeNull()
   await changeUrl('https://docs.qq.com/sheet/next-draft')
-  expect(container.textContent).not.toContain('已保存')
-  expect(button('保存').disabled).toBe(false)
-  expect(job.config.documentUrl).toBe('https://docs.qq.com/sheet/saved-notice')
+  await tab('概览'); await tab('设置')
+  expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.value).toBe('https://docs.qq.com/sheet/next-draft')
+  expect(job.config.documentUrl).toBe('https://docs.qq.com/sheet/saved')
+  await act(async () => button('取消').click())
+  expect(container.querySelector('#submission-document-url')).toBeNull()
+  await replaceDocument()
+  expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.value).toBe(job.config.documentUrl)
 })
 
 it('keeps a draft across tabs without persisting or checking the unsaved target', async () => {
@@ -151,10 +154,10 @@ it('does not overwrite the saved target on a rejected save and blocks duplicate 
   invoke.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))
   await act(async () => { submit(); submit() })
   expect(invoke.mock.calls.filter(([operation]) => operation === 'tencentSheet.save')).toHaveLength(1)
-  expect(button('保存').disabled).toBe(true)
+  expect(button('连接').disabled).toBe(true)
   expect(button('概览').disabled).toBe(true)
   await act(async () => reject(new Error('任务配置已变化，请重新打开后再修改。')))
-  expect(container.querySelector('[role=alert]')?.textContent).toContain('任务配置已变化')
+  expect(toast.error).toHaveBeenCalledWith('任务配置已变化，请重新打开后再修改。')
   expect(job.config.documentUrl).toContain('/original')
   expect(container.querySelector('[data-connection-state=idle]')).not.toBeNull()
 })
@@ -170,7 +173,7 @@ it('creates one persisted connection without a generic task wizard and restores 
   invoke.mockClear()
   await act(async () => root.unmount()); root = createRoot(container); await mount(); await tab('设置')
   expect(invoke).toHaveBeenCalledWith('tencentSheet.get', { id: 'created' })
-  expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.value).toBe(job.config.documentUrl)
+  expect(container.querySelector('[aria-label="文档名称"]')?.textContent).toBe('腾讯文档')
 })
 
 it('retains a business created before the first document connection is saved', async () => {
@@ -205,7 +208,7 @@ it('keeps the created identity when its first read fails, so retry cannot create
   invoke.mockImplementation(normal)
   await act(async () => button('重新读取文档配置').click())
   expect(invoke.mock.calls.filter(([operation]) => operation === 'tencentSheet.create')).toHaveLength(1)
-  expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.value).toBe(job.config.documentUrl)
+  expect(container.querySelector('[aria-label="文档名称"]')?.textContent).toBe('腾讯文档')
 })
 
 it('reads existing history and preserves uncertain outcomes and PascalCase stored snapshots', async () => {
@@ -236,8 +239,12 @@ it('shows a history transport error without reporting an empty successful result
 
 it('blocks configuration changes on an enabled task and does not expose unsupported scheduler actions', async () => {
   job.enabled = true; await mount(); await tab('设置')
-  expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.disabled).toBe(true)
-  expect(button('保存').disabled).toBe(true)
+  expect(container.querySelector('#submission-document-url')).toBeNull()
+  const trigger = container.querySelector<HTMLButtonElement>('[aria-label="文档更多操作"]')!
+  await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })))
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+  expect([...document.querySelectorAll('[role=menuitem]')].find(element => element.textContent === '更换文档')?.getAttribute('aria-disabled')).toBe('true')
+  await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
   expect(container.textContent).toContain('当前任务已启用')
   expect(container.querySelector('[role=switch][id=submission-auto]')).not.toBeNull()
   expect(invoke.mock.calls.some(([operation]) => operation === 'automation.setEnabled')).toBe(false)
@@ -253,7 +260,7 @@ it('rejects a mismatched configuration identity without starting its session and
   invoke.mockImplementation(normal)
   await act(async () => button('重新读取文档配置').click())
   await tab('设置')
-  expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.value).toBe(job.config.documentUrl)
+  expect(container.querySelector('[aria-label="文档名称"]')?.textContent).toBe('腾讯文档')
 })
 
 it('shows a list failure before offering creation and can reload without selecting another task type', async () => {

@@ -113,15 +113,18 @@ async function main(){
     await page.setViewportSize({width:1200,height:900});
     assert.equal(await workbench.locator('[data-slot=table]').evaluate(el=>!!el.closest('[data-shadcn-surface]')&&!el.closest('.pa-legacy-content')),true);
     await workbench.getByRole('button',{name:'检查文档连接',exact:true}).click();
+    await workbench.getByRole('button',{name:'文档更多操作',exact:true}).click();
+    await page.getByRole('menuitem',{name:'更换文档',exact:true}).click();
     const connectionInput=workbench.getByLabel('文档链接',{exact:true});
     await connectionInput.fill('https://docs.qq.com/sheet/t2-saved');
     assert.equal(await workbench.locator('[data-connection-state=idle]').count(),1);
-    assert.equal(await workbench.locator('[data-slot=input-group]').count(),1);
+    assert.equal(await workbench.locator('#submission-settings-web [data-slot=item][data-variant=outline]').count(),1);
+    assert.equal((await workbench.locator('#submission-settings-web [data-slot=item]').boundingBox()).height,56);
     await workbench.getByRole('tab',{name:'概览',exact:true}).click();
     await workbench.getByRole('tab',{name:'设置',exact:true}).click();
     assert.equal(await connectionInput.inputValue(),'https://docs.qq.com/sheet/t2-saved');
-    await workbench.getByRole('button',{name:'保存',exact:true}).click();
-    await workbench.getByRole('status').filter({hasText:/^已保存$/}).waitFor();
+    await workbench.getByRole('button',{name:'连接',exact:true}).click();
+    await workbench.getByLabel('文档名称',{exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(()=>window.savedConfig),{documentUrl:'https://docs.qq.com/sheet/t2-saved'});
     await workbench.getByRole('tab',{name:'记录',exact:true}).click();
     await workbench.getByRole('table',{name:'集团填报历史'}).getByRole('cell',{name:'失败或待确认',exact:true}).waitFor();
@@ -327,4 +330,4 @@ async function main(){
     throw error;
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 }
-main().catch(error=>{console.error(error);process.exitCode=1;});
+(async()=>{await main();await require('./check-document-connection-ui.cjs')();})().catch(error=>{console.error(error);process.exitCode=1;});
