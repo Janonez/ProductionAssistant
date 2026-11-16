@@ -2,6 +2,10 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { GroupSubmissionPage } from './GroupSubmissionPage'
+// These integration cases use the real, loaded settings. The separate loading
+// suite controls module delivery; Vite compilation is not a timed UI action here.
+import './SubmissionSettings'
+import { settleModuleImports } from '../../test-utils/settle-module-imports'
 import type { SubmissionJob, SubmissionRun } from './types'
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
@@ -11,7 +15,7 @@ const closed = { state: 'closed', browserOpen: false, authentication: 'unknown',
 const button = (label: string) => [...container.querySelectorAll<HTMLButtonElement>('button')].find(element => element.textContent?.trim() === label)!
 const tab = async (label: string) => {
   await act(async () => { button(label).focus(); button(label).click() })
-  await act(async () => { await vi.dynamicImportSettled() })
+  await settleModuleImports()
 }
 const changeUrl = async (value: string) => act(async () => {
   const input = container.querySelector<HTMLInputElement>('#submission-document-url')!
@@ -42,7 +46,12 @@ beforeEach(() => {
   })
   container = document.createElement('div'); document.body.append(container); root = createRoot(container)
 })
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals() })
+afterEach(async () => {
+  try {
+    await act(async () => root.unmount())
+    expect(container.childElementCount).toBe(0)
+  } finally { container.remove(); vi.unstubAllGlobals() }
+})
 
 it('opens the business workbench with four empty metrics, backend date, and no runnable write actions', async () => {
   await mount()
@@ -57,7 +66,7 @@ it('opens the business workbench with four empty metrics, backend date, and no r
   expect(invoke).toHaveBeenCalledWith('tencentSheet.get', { id: 'group' })
   expect(invoke.mock.calls.some(([operation]) => /fetch|inspect|write|setEnabled|backgroundTest/.test(operation))).toBe(false)
   await act(async () => button('检查文档连接').click())
-  await act(async () => { await vi.dynamicImportSettled() })
+  await settleModuleImports()
   expect(button('设置').getAttribute('aria-selected')).toBe('true')
   expect(container.querySelector('[data-slot=field]')).not.toBeNull()
 })

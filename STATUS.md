@@ -1,5 +1,22 @@
 # ProductionAssistant 交接状态
 
+## PR #92 本机 React verify 调查（2026-11-16，完整验证通过，进入 Git 交付）
+
+- 当前 `codex/fix-react-test-lifecycle`，基线 main / origin/main `16e5141`；保留原有 STATUS.md 修改后建分支，没有 stash，既存 hotfix 工作树未操作。原交接原件和 SHA256 已备份、核对，以下历史内容保留。用户审阅后已明确要求继续并合并分支，进入提交、推送及 PR 流程，合并仍以 CI verify 通过为前提。
+- 原 18 项已逐项提取原日志可用堆栈：2 个首项超时 + 16 个后续未渲染错误。受控集团 / App 模块等待实验分别复现 16 / 2 个原失败名称，证实 Vitest 超时不取消旧测试体、未退出的 async act 和迟到模块初始化能够污染同文件后续用例；不是 18 个独立业务超时。原现场没有逐阶段计时，不把对照当作原现场遥测。
+- 仅修复两个测试的模块准备、act 边界及 finally 清理，新增一个测试辅助函数和一个会在旧实现下失败的回归；不改运行源码、Vitest 全局 5000ms、并发配置、依赖或 Electron。禁用收集预载的受控对照中，修复后首项仍超时，其余 15 项通过；App 初始化失败不再污染后两项。
+- 专项 21/21；React 全量 446 通过 / 1 既有跳过。完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 无跳过参数退出 0，含全量还原、TypeScript / Vite / 浏览器、Electron 122/122、.NET 372/372、构建和 Development 发布。125 文件资源一致，Build ID `e6604b40-e3c5-44cc-b9ef-35f20a845cf9`；verify 新生成的 dist 实质差异已报告并保留，未自动还原或删除。
+- 原现场模块为什么首次超过期限，没有分阶段系统遥测，仍不能唯一归因于 CPU / 内存 / 磁盘 / Windows 扫描等；全新 npm ci 的自然诊断也通过，不能以重跑成功抹去初次失败。等待模式在 #92 之前已存在，Squash 前后树一致，未发现 #92 运行逻辑回归的证据。
+- 下次入口：完成修复分支 PR 的 CI 验证及 squash 合并；CI 未完成时按规则交接等待，不反复轮询。已验证的 dist 随前端测试修复一并交付。本轮不修改 Production、版本、稳定版，不做真实腾讯写入、调度或消息发送。详见 [调查报告](docs/pr92-local-verify-investigation.md)；原始逐项堆栈和对照数据在 `artifacts/startup/pr92-verify-investigation`，完整验收日志为 `artifacts/startup/pr92-lifecycle-fix-verify.log`。
+
+## Electron 启动整改 PR #92 已合并（2026-11-16，合并后本机 verify 失败后停止）
+
+- GitHub 确认 PR #92 为 MERGED；需求提交 `0052017dde184b1fc983055f6d5f931fd92d9be4` 的 CI verify 为 success，squash 提交为 `16e5141ecdf58d736cd9e1dd93161f7f7c46fab4`。主目录已切回 main 并 `pull --ff-only`，合并内容与需求分支一致。
+- 本次本地分支 `codex/electron-startup-lifecycle` 顶端与 PR head 一致，完整哈希已追加并回读核对到上级工作区的 `branch-backup-20261012.txt`，随后只删除该本地分支。既存 hotfix 分支和工作树未操作。
+- 合并后完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 退出 1：React 为 18 失败 / 427 通过 / 1 既有跳过，46 文件中 2 失败。`GroupSubmissionPage.test.tsx` 16 项失败，`App.startup.test.tsx` 2 项失败；首项均出现 `Test timed out in 5000ms.`，另见 `overlapping act()`、未找到按钮和断言失败。原因未定位，不归因于应用或测试环境，也不以此前 CI 成功抹去本次失败。
+- 原始完整输出保存在本机忽略目录 `artifacts/startup/post-merge-92-verify.log`。依赖还原和 Runtime 准备已执行；失败后未进入 TypeScript / Vite、浏览器、Electron、.NET、构建或 Development 发布，Production、版本和用户数据未修改。没有重跑、提高超时、弱化断言或修改运行源码。
+- 下次入口：用户通知后先只读调查上述两个首项超时及后续状态，保留当前失败证据。当前仅本交接记录未提交；不得把合并后本机完整验证记为通过。
+
 ## Electron 启动验收四项修复（2026-11-16，已授权 Git 交付，待 CI）
 
 - 继续 `codex/electron-startup-lifecycle`，保留前序全部未提交源码；修改前快照在本机 `artifacts/startup/acceptance-fix-baseline`。没有切分支、暂存、提交、推送、PR、合并或操作既存 hotfix 工作树；没有更新 Production / 版本 / 用户业务配置。
