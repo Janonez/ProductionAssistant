@@ -29,7 +29,7 @@ function SubmissionSettingsContent({ adapter: suppliedAdapter, ...props }: Props
     return () => { active = false }
   }, [adapter, reload])
   return <div className="min-w-0 space-y-6" aria-label="集团填报设置">
-    <SubmissionConnection {...props} adapter={adapter} onReady={setCanPick} />
+    <SubmissionConnection {...props} onReady={setCanPick} />
     <Separator />
     {loading && <Spinner aria-label="正在读取数据来源" />}
     {error && <Alert variant="destructive"><AlertDescription>{error}<Button variant="outline" size="sm" onClick={() => setReload(value => value + 1)}>重新读取</Button></AlertDescription></Alert>}

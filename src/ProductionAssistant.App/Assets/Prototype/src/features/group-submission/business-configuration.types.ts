@@ -1,5 +1,4 @@
 import { formatDate } from '../../lib/calendar'
-import type { DocumentConnectionState } from './DocumentConnectionAlert'
 
 // Replaceable frontend view data; not backend DTOs or persisted automation rules.
 export type BusinessDataOption = { value: string; label: string }
@@ -43,8 +42,6 @@ export interface SubmissionSettingsAdapter {
   subscribeBusinessDrafts: (listener: () => void) => () => void
   readRuleDraft: () => ExecutionRules
   listDataSources: () => Promise<readonly BusinessDataOption[]>
-  readDocumentName: (url: string) => string | undefined
-  checkDocumentConnection: (url: string) => Promise<DocumentConnectionState>
   saveRules: (rules: ExecutionRules) => Promise<ExecutionRules>
   startPick: (businessId: string, date: string) => PickSession
   recognizePosition: (first: PositionSample, second: PositionSample) => Promise<ConfiguredPosition | null>

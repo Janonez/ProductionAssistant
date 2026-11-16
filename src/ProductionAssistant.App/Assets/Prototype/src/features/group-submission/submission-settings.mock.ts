@@ -18,9 +18,6 @@ export function createSubmissionSettingsMock({ pickDelay = 900, outcomes = [] as
     async listDataSources() {
       return [{ value: 'preview-runtime', label: '设备运行时长（示例）' }, { value: 'preview-stock', label: '成品入库量（示例）' }]
     },
-    readDocumentName() { return undefined },
-    // No document lookup/detection is wired yet. Never synthesize a title, success or timestamp.
-    async checkDocumentConnection() { return { state: 'idle' } },
     async saveRules(rules) { ruleDraft = structuredClone(rules); return structuredClone(ruleDraft) },
     startPick(_businessId, date) {
       let listener: ((event: PickEvent) => void) | undefined

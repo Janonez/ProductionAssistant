@@ -3,10 +3,10 @@ import { createSubmissionSettingsMock } from './submission-settings.mock'
 import { defaultExecutionRules } from './business-configuration.types'
 
 afterEach(() => { vi.useRealTimers() })
-it('does not synthesize a document title, successful connection or check time', async () => {
+it('keeps document detection outside the business preview adapter', () => {
   const adapter = createSubmissionSettingsMock()
-  expect(adapter.readDocumentName('https://docs.qq.com/sheet/one')).toBeUndefined()
-  expect(await adapter.checkDocumentConnection('https://docs.qq.com/sheet/one')).toEqual({ state: 'idle' })
+  expect(adapter).not.toHaveProperty('readDocumentName')
+  expect(adapter).not.toHaveProperty('checkDocumentConnection')
 })
 it('keeps page drafts through settings remounts without sharing mutable references', async () => {
   const adapter = createSubmissionSettingsMock()
