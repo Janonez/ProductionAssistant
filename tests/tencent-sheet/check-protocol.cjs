@@ -2,6 +2,8 @@
 const assert=require('node:assert/strict');
 const {TencentSheetClient}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/client.cjs');
 const {normalize,dispatch}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/runner.cjs');
+const {TencentSession}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/session.cjs');
+TencentSession.prototype.verify=async config=>({authentication:'authenticated',authenticationSource:'server',documentAccess:'allowed',editPermission:'editable',documentIdentity:config.documentUrl});
 let writes=0;
 TencentSheetClient.prototype.inspect=async()=>({prewriteVerified:true,rows:[],conflict:false});
 TencentSheetClient.prototype.write=async()=>{writes++;return {message:'fixture'};};

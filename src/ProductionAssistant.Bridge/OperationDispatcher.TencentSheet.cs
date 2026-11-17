@@ -13,11 +13,21 @@ public sealed partial class OperationDispatcher
         if (operation == "create")
         {
             var config = new JsonObject { ["documentUrl"] = TencentSessionService.ValidateDocumentUrl(ReadString(payload, "documentUrl")) };
+            var requestId = ReadString(payload, "requestId");
+            if (!string.IsNullOrEmpty(requestId) && !Guid.TryParseExact(requestId, "N", out _))
+                throw new InvalidOperationException("创建请求编号无效。");
+            var id = string.IsNullOrEmpty(requestId) ? Guid.NewGuid().ToString("N") : requestId;
+            var existing = TencentSheetTaskHandler.Load().OfType<JsonObject>().FirstOrDefault(item => (string?)item["id"] == id);
+            if (existing is not null)
+            {
+                if ((string?)existing["config"]?["documentUrl"] != (string?)config["documentUrl"])
+                    throw new InvalidOperationException("创建请求已用于其他文档，请先回读配置。");
+                return new { id };
+            }
             config["fields"] = new JsonArray();
             config["rules"] = new JsonObject();
             TencentSheetService.ValidateExecutionRules(config.AsObject());
             var validated = await handler.Service.CallAsync(new() { ["operation"] = "validate", ["config"] = config.DeepClone().AsObject() }, cancellationToken);
-            var id = Guid.NewGuid().ToString("N");
             TencentSheetTaskHandler.Save(new() { ["id"] = id, ["name"] = "腾讯文档填报", ["config"] = JsonNode.Parse(validated.GetProperty("config").GetRawText())! });
             return new { id };
         }

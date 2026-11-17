@@ -1,5 +1,40 @@
 # ProductionAssistant 交接状态
 
+## P3 腾讯文档权限检测（2026-11-17，完整验证及真实界面只读链路通过，Git 交付已授权）
+
+- 继续 `codex/group-document-backend`，基线 `aa3d8de`；原 599 项文件备份及 SHA256 清单在 `artifacts/p3-permissions/baseline*`。实现验证阶段保留前序未提交修改，未切分支或操作既存 hotfix 工作树。用户随后明确授权提交、推送和创建 PR，交付包含本分支累计的网页连接后端、企业微信会话及 P3 权限检测；不授权合并。正式写入 runner 与既有写入方法相对 P3 开始未改；未更新 Production / 版本 / 标签 / Release。
+- 在原 Browser / Authentication / Session 上实现独立账号、文档编辑、目标保护及填写资格证据；扩展原 `sessionVerify` 的目标输入和结构化结果，经 .NET / Bridge 接入集团填报设置页的「检查填写位置权限」，沿用现有组件。设计、缓存与保守边界见 [权限说明](docs/tencent-permission-check.md)。
+- Context / Page / 文档 / 账号 / 权限修订隔离，真实导航及 Page 重建失效；原认证 30 秒策略，文档 / 模型 / 区域证据 15 秒策略；字段冲突、初始化、响应缺失 / 错误、所有者例外、值 2 等未验证权限不放行。未加载工作表返回 unknown，不自动切换它。
+- 完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 不带 SkipRestore / SyncRelease，退出 0，日志 `artifacts/p3-permissions/verify-passed.log`：React 49 文件、478 通过 / 1 既有跳过；TypeScript / Vite、浏览器及原 32 组 UI 矩阵、Electron 122/122、.NET 379/379、Release 构建和 Development 发布通过。.NET 会话专项 18/18；权限单元 / Mock、认证和完全拦截页面及主动认证请求的 Headless 合成回归通过。
+- 真实 Headless 原 Profile 复测的首次、重复、Status、明确刷新、reload 和 Page 关闭重建均已核对：受保护回归目标为 denied，未保护目标为 eligible（仅填写前置条件）；重载立即使旧证据失效，Context 复用并正常关闭。证据在 `artifacts/p3-permissions/live-evidence.jsonl`，业务标识不进入源码和工程文档。
+- 已实际操作 Development Renderer 的 React 新入口，经真实 Electron IPC → Sidecar → Worker → 现有 Headless Edge 得到上述两类目标结果。宿主只在本机测试夹具中设为隐藏；没有改传输或业务实现。`electron-evidence.json` 的操作仅为 list/get/runs/Status/Verify；没有扫码、可见浏览器或业务写入，配置哈希未变，结束后相关进程 Count=0。两张实际 UI 图核对常规宽度和 960px 暗色无横向溢出，并记录证据过期后的重验提示；尚未由用户人工视觉验收。
+- Build ID `6668da2e-8af2-438b-9e23-df94fa7c6bdc`；Development 124 文件及不可变 Renderer 与源 dist 清单 / 大小 / SHA256 一致，5 个 Worker 脚本在源 / Sidecar Release / Development 一致。Release / Debug bin 兼容目录各有 131 个额外旧文件，当前所需文件缺失 / 差异均 0，未删除；源码 dist 为本轮前端更新的实质构建差异，保留全部结果。资源清单 `artifacts/p3-permissions/resources.json`。
+- 三次完整 verify 的旧文案断言 / 浏览器旧文案断言 / 新 xUnit 异步断言错误已分别修正，原日志 `verify.log`、`verify-final.log`、`verify-complete.log` 保留；早期真实诊断的保守 unknown、认证 / 页面作用域时序问题亦保留，不用最终成功覆盖历史失败。沙箱目录 / 清单写入拒绝均按单条授权执行，没有改权限或配置绕过。
+- 下次入口：查看当前分支对应 PR 与 CI；CI 未完成时汇报并等用户下次通知，不反复轮询。用户可查看 Development「数据报送 → 集团填报 → 设置 → 网页配置 → 检查填写位置权限」及工程说明，人工验收及合并仍待明确指示。真实只读文档负样本、撤权 / 实际换号、可编辑保护范围、特殊范围和真实 iframe 重建仍有现场验证边界；常规回归不访问生产文档。实现清单在本机 `artifacts/p3-permissions/delivery.md`，本次 PR / CI 与最终 Git 原始输出在 `artifacts/p3-permissions/git-delivery.md`。
+
+## 网页配置后端接入（2026-11-17，企业微信真实二维码展示 / 刷新 / 取消通过，权限证据待补）
+
+- 当前 `codex/group-document-backend`，HEAD `aa3d8de`。用户允许原 STATUS / dist 差异带入；基线备份在本机 `artifacts/t2-backend`，原 124 文件 SHA256 差异 0。全部源码、测试、新模块及 dist 保留，未暂存、提交、推送、PR 或合并；既存 hotfix 工作树未操作。
+- 原 Worker 的认证观察 / 按需核验、共享后台 Context / Page、独立认证和文档证据、八态、创建请求编号及未知结果回读、配置 / 会话代次保护和写前独立预检已接入。业务配置与执行规则仍保留 Mock 边界。
+- 用户指出历史扫码为企业微信，已核对 `aac83de` 和 PR #88 前的 login.cjs，撤换本轮误接的普通微信入口。复用目标文档 → #header-login-btn → 用户确认协议 → 企业微信 → 受管企业微信页面 / iframe 的元素 PNG；保留当前短请求、8 秒准备和 180 秒本地期限，不恢复旧版 DOM 认证成功判定。协议需明确点击，轮询不代为同意；固定官方协议链接沿用历史来源。加载、扫描、失效仅作网页进度，登录成功仍需 user_info。
+- 完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 无 SkipRestore / SyncRelease，退出 0：React 48 文件、471 通过 / 1 既有 EPERM 跳过，TypeScript / Vite、浏览器及 32 组 UI 矩阵、Electron 122/122、.NET 377/377、Release 构建及 Development 发布通过。Build ID `a9c5e3ad-d615-48d4-9ef0-32124b606c9c`；四处前端 124 文件清单 / 大小 / SHA256 一致；authentication / browser / session / runner / login 五脚本在源码、Sidecar Release、Development 三处一致。企业微信协议确认 / 刷新 / 取消 / 代次保护专项通过，属于离线夹具。
+- 真实认证已有独立正向证据：用户在全新测试 Profile 手动完成有头登录并正常关闭后，同一真实 Sidecar / Worker 从该 Profile 后台恢复，返回 authenticated / server-confirmed，目标表格可访问。编辑权限仍 unknown；“已连接”及“只读”仍仅夹具验收，未据账号成功变绿。该 Profile 保留；真实链接只在本机忽略目录及授权命令中。
+- Cookie 集合确认为空且无 xsrf 时提供本地 LoginCredentialsMissing 恢复入口，认证事实仍 unknown；未知认证也提供登录按钮。尚未证实具体登录 Cookie 键名 / 作用域，不臆测直接 Cookie 读取规则。先前匿名 token-not-observed 和普通微信 QrUnavailable 的失败事实保留，不能由有头登录成功抹去。
+- 用户已授权清空应用专属 Profile；确认范围和独占租约后已实现关闭 Context、复核规范化目标并仅删除当前环境的 tencent-sheet-profile，二次确认说明全部腾讯文档 / 旧任务 / 浏览器缓存影响。只清除过新建合成资料；未清除任何真实登录或用户工作 Profile。
+- 企业微信真实二维码验收现已通过：用户另行批准一次隔离重测并亲自确认协议，实际 Metis Renderer → Sidecar → Worker 返回 LoginCredentialsMissing 后显示登录入口；企业微信 PNG 解码 / 尺寸通过，刷新取得不同内存图像，取消后 Dialog / 图像消失且收到 cancelled，脚本退出 0，正常关闭应用。没有扫码、没有截图、没有真实业务写入；此结果不等于新 Dialog 的扫码后认证已验收。
+- 先前一次 `TimeoutError: Timeout 30000ms exceeded.` 的失败保留。续接只读确认该临时目录为空、无宿主日志 / Sidecar 日志 / 腾讯 Profile，未发现其遗留进程，范围收窄至应用早期启动但完整根因未定。已安装 Playwright 1.62.1 的 Electron 启动器存在多个并行通道等待，可能导致未进入脚本正常错误分支；未改依赖、启动限制或产品代码。验收脚本新增分阶段诊断和父进程 stderr 过滤，离线验证失败仍退出 1、不重试、不泄漏 stderr，然后获准的一次真实重测成功。仅进程归属检查遇沙箱拒绝后，原命令单次沙箱外执行通过。
+- 历史 0x80000003 按用户指示仅记录；loadId 验收脚本问题已修复且保留宿主校验。诊断中曾误带二维码资源路径，已改为严格路径白名单并清理本地 JSONL；既有工具输出不能撤回，不重复凭据片段。未截图活跃二维码、未真实填报 / 云端保存 / 调度；未更新 Production、版本、标签或 Release。
+- 下次入口：准备 `artifacts/t2-backend/research-permission.cjs`，新增真实权限调查须按任务书 7.4 / 9.2 另行授权。仅拟用此前唯一独立登录测试 Profile 后台加载同一测试表，观察自然响应的权限字段名 / 布尔标志，不试写，不按“没有只读标志”变绿。新配置目前没有录制编辑控件，“已连接” / “只读”真实验收仍待补；原手动有头登录和后台认证恢复证据保留。当前交接及 Git 原始输出在 `artifacts/t2-backend/enterprise-wechat-handoff.md`；实现边界见 [网页配置说明](docs/group-submission-web-ui.md)。
+
+## PR #94 已合并，合并后完整 verify 通过（2026-11-16）
+
+- GitHub 确认 PR #94 为 MERGED，CI 的 verify job 为 success；合并提交为 `aa3d8de484131e562fd0d9504730c7030a1f556a`。主目录已切回 main 并 `pull --ff-only`，main / origin/main 均为该提交，合并内容与需求分支一致。
+- 已核对本次分支 `codex/group-document-connection` 顶端等于 PR head `a0dcf58947cfe625b5b970505c4f6a5869fbd6bf`；完整哈希和分支名已追加到上级工作区 branch-backup-20261012.txt，回读一致后仅删除该本地分支。既存 hotfix 分支和工作树未操作。
+- 合并后首次 verify 在 Desktop npm ci 处因 `electron/dist/ffmpeg.dll` 的 EPERM unlink（-4048）停止；保留原始日志 `artifacts/document-connection-ui/post-merge-94-verify.log`。用户正常关闭 Development 后，确认 Electron / 应用 / Sidecar 进程已退出，再单次授权重跑原完整 verify；未跳过还原。
+- 最终 `pwsh -NoProfile -File .\scripts\verify.ps1` 不带 SkipRestore / SyncRelease，退出 0：React 47 文件、459 通过 / 1 既有 EPERM 跳过；TypeScript / Vite、浏览器回归及 32 组 UI 矩阵、Electron 122/122、.NET 372/372、Release 构建和 Development 发布通过。日志为 `artifacts/document-connection-ui/post-merge-94-final-verify.log`。
+- Development 资源核对通过：Build ID `ed7100ec-2887-454e-a748-e516a68f7a2d`，124 文件，缺失 / 差异 / 兼容目录多余均 0。verify 生成新 Build ID 与 dist 文件名，`git diff --stat --ignore-cr-at-eol` 有实质统计；按规则停止产物清理，保留全部差异和本交接记录，没有自动还原、删除或提交。
+- 下次入口：先由用户决定本次 dist 构建差异的处理方式，再按“先完成 UI Git 交付、再做后端”的指示进入网页配置后端步骤。当前未开始后端，未更新 Production / 版本 / 标签 / Release，未执行真实腾讯填报或清除登录。完整 Git 输出见本机 `artifacts/document-connection-ui/post-merge-94-summary.md`。
+
 ## 集团填报网页配置 UI（2026-11-16，人工验收通过，Git 交付中）
 
 - 当前需求分支 `codex/group-document-connection`，基线 `44d3144`。用户已允许原样保留既有 STATUS.md / dist 差异后建分支；原件备份于 `artifacts/web-config-baseline-20261116`，未 stash、清理或操作既存 hotfix 工作树。

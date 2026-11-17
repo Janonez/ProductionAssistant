@@ -4,12 +4,12 @@ const {chromium,_electron}=require('playwright');
 const fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os'),http=require('node:http'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'../..'),dist=path.join(root,'src/ProductionAssistant.App/Assets/Prototype/dist');
 const output=path.join(root,'artifacts/document-connection-ui');
-const states={unconfigured:['','连接'],idle:['未检测','检测'],checking:['检测中',null],connected:['已连接','打开文档'],notLoggedIn:['登录已失效','扫码登录'],invalidLink:['不是表格链接','更换文档'],readOnly:['只有查看权限','打开文档'],unavailable:['无法打开','重新检测']};
+const states={unconfigured:['','连接'],idle:['未检测','检测'],checking:['检测中',null],connected:['已连接','打开文档'],notLoggedIn:['需要登录','扫码登录'],invalidLink:['不是表格链接','更换文档'],readOnly:['只有查看权限','打开文档'],unavailable:['无法打开','重新检测']};
 function installFixture() {
   const state=new URL(location.href).searchParams.get('fixture')||'idle';
   let receive;
   const config={documentUrl:state==='invalidLink'?'https://docs.qq.com/doc/fixture':'https://docs.qq.com/sheet/ui-fixture',fields:[],rules:{}};
-  const evidence={state:'authenticated',browserOpen:true,authentication:'authenticated',authenticationSource:'server',documentAccess:'allowed',editPermission:'editable',verifiedAt:'2026-11-16T01:30:00Z',documentName:'集团生产日报（隔离模拟名称）'.repeat(24),message:''};
+  const evidence={state:'authenticated',browserOpen:true,authentication:'authenticated',authenticationSource:'server',authenticationObservedAt:'2026-11-16T01:30:00Z',documentAccess:'allowed',editPermission:'editable',verifiedAt:'2026-11-16T01:30:00Z',documentCheckedAt:'2026-11-16T01:30:00Z',documentType:'spreadsheet',documentIdentity:'https://docs.qq.com/sheet/ui-fixture',targetDocumentUrl:config.documentUrl,documentName:'集团生产日报（隔离模拟名称）'.repeat(24),message:''};
   const status=state==='connected'?evidence:state==='readOnly'?{...evidence,editPermission:'read-only'}:state==='notLoggedIn'?{...evidence,state:'login-required',authentication:'required',documentAccess:'unknown',editPermission:'unknown'}:state==='unavailable'?{...evidence,state:'unavailable',authentication:'unknown',documentAccess:'unknown',editPermission:'unknown'}:{...evidence,state:'closed',browserOpen:false,authentication:'unknown',documentAccess:'unknown',editPermission:'unknown',documentName:null,verifiedAt:null};
   window.uiCalls=[];
   window.chrome={webview:{addEventListener:(_,listener)=>{receive=listener;},postMessage:request=>{
@@ -23,7 +23,7 @@ function installFixture() {
     if(request.operation==='tencentSheet.create'){config.documentUrl=request.payload.documentUrl;data={id:'ui-fixture'};}
     if(request.operation.startsWith('tencentSheet.session')){
       if(state==='checking')return;
-      data=status;
+      data={...status,targetDocumentUrl:config.documentUrl};
     }
     queueMicrotask(()=>receive({data:{id:request.id,ok:true,data}}));
   }}};
@@ -108,8 +108,8 @@ async function main(){
         assert.equal(await page.evaluate(()=>window.uiCalls.filter(call=>call.operation==='tencentSheet.save').length),0);
         await trigger.click();await page.getByRole('menuitem',{name:'清除登录状态',exact:true}).click();
         const dialog=page.getByRole('alertdialog');
-        await dialog.getByText('当前版本暂不支持清除登录状态。',{exact:false}).waitFor();
-        assert.equal(await dialog.getByRole('button',{name:'清除登录状态',exact:true}).isDisabled(),true);
+        await dialog.getByText('全部腾讯文档和旧任务',{exact:false}).waitFor();
+        assert.equal(await dialog.getByRole('button',{name:'清除登录状态',exact:true}).isDisabled(),false);
         await dialog.getByRole('button',{name:'取消',exact:true}).click();
       }
       if(state==='connected'&&width===1400&&theme==='light')await page.screenshot({path:path.join(output,kind+'-settings-fixture.png')});

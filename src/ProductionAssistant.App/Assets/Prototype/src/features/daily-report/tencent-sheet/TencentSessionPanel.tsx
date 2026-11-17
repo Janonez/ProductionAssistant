@@ -4,16 +4,30 @@ import { invoke } from '../../../bridge/index';
 import { Button } from '../../../components/ui/button';
 import { useTheme } from '../../../components/layout/ThemeProvider';
 
+export type TencentPermissionCheck = {
+  document: { value: 'editable' | 'read-only' | 'unknown'; reason: string; source?: string; observedAt?: string }
+  model: { value: 'complete' | 'unknown'; reason: string }
+  targets: { sheetId?: string; sheetName?: string; address: string; label?: string; protection: 'protected' | 'unprotected' | 'unknown'; eligibility: 'eligible' | 'denied' | 'unknown'; reason: string }[]
+  checkedAt: string; expiresAt: string; generation: number; pageGeneration: number; userGeneration: number
+}
+
 export type TencentSessionStatus = {
   state: 'closed' | 'login-required' | 'authenticated' | 'access-denied' | 'loading' | 'unverified' | 'unavailable' | 'profile-busy';
   browserOpen: boolean;
   authentication: 'unknown' | 'required' | 'authenticated';
   documentAccess: 'unknown' | 'allowed' | 'denied';
-  editPermission: 'unknown' | 'read-only';
+  editPermission: 'unknown' | 'read-only' | 'editable';
   verifiedAt: string | null;
   message: string;
   code?: string | null;
   recoveryHint?: string | null;
+  sessionGeneration?: number; sessionScope?: string | null; targetDocumentUrl?: string | null; configRevision?: number | null;
+  authenticationSource?: 'server' | null; authenticationObservedAt?: string | null; authenticationReason?: string | null;
+  authenticationStale?: boolean; authenticationPreviouslyConfirmed?: boolean;
+  documentIdentity?: string | null; documentType?: string; documentName?: string | null; documentCheckedAt?: string | null;
+  interaction?: 'none' | 'qr' | 'manual'; loginState?: 'loading' | 'consent' | 'waiting' | 'scanned' | 'expired' | 'authenticated' | 'failed' | 'timeout' | 'cancelled';
+  loginOperationId?: string | null; loginWaitUntil?: string | null; qrImage?: string | null;
+  pageGeneration?: number; permissionCheck?: TencentPermissionCheck | null;
 };
 type Action = 'Status' | 'Open' | 'Verify' | 'Close';
 const busyText: Record<Action, string> = { Open: '正在打开并检查…', Verify: '正在重新检查登录与文档访问…', Status: '正在读取浏览器状态…', Close: '正在关闭浏览器…' };
@@ -70,7 +84,7 @@ export function TencentSessionPanel({ documentUrl, disabled = false, onActive }:
   return <section aria-label="腾讯文档登录与会话" aria-busy={!!busy} data-shadcn-surface=""
     className={`pa-shell-theme rounded-lg border bg-card p-5 text-card-foreground ${resolvedTheme === 'dark' ? 'dark' : ''}`}>
     <div className="mb-4 space-y-1"><h2 className="text-lg font-semibold">腾讯文档登录与会话</h2>
-      <p className="text-sm text-muted-foreground">检查上方已保存的文档。请在 Edge 中扫码登录，再返回重新检查。关闭浏览器会保留登录资料。</p></div>
+      <p className="text-sm text-muted-foreground">重新检查在后台完成。需要扫码时可前往集团填报的网页配置；也可主动打开文档处理网页验证。关闭浏览器会保留登录资料。</p></div>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap gap-2"><Button disabled={!!busy || disabled || !target} onClick={() => run('Open')}>打开并检查</Button>
       <Button variant="outline" disabled={!!busy || disabled || !target} onClick={() => run('Verify')}>重新检查</Button></div>
@@ -82,7 +96,7 @@ export function TencentSessionPanel({ documentUrl, disabled = false, onActive }:
           {status.recoveryHint && <p>{status.recoveryHint}</p>}
           <dl className="grid gap-1 sm:grid-cols-3"><div><dt className="text-muted-foreground">浏览器</dt><dd>{status.browserOpen ? '运行中' : status.state === 'closed' ? '已关闭' : '未确认'}</dd></div><div><dt className="text-muted-foreground">登录</dt><dd>{status.authentication === 'authenticated' ? '已登录' : status.authentication === 'required' ? '需要登录' : '未知'}</dd></div>
             <div><dt className="text-muted-foreground">文档访问</dt><dd>{status.documentAccess === 'allowed' ? '可访问' : status.documentAccess === 'denied' ? '无权限' : '未知'}</dd></div>
-          </dl><p className="text-muted-foreground">编辑权限：{status.editPermission === 'read-only' ? '只读' : '未知（本阶段不试写）'}</p></>
+          </dl><p className="text-muted-foreground">编辑权限：{status.editPermission === 'editable' ? '文档可编辑' : status.editPermission === 'read-only' ? '只读' : '未知（只读检查）'}</p></>
           : <p className="text-muted-foreground">当前状态未知，请重新检查。</p>}
       <p className="text-muted-foreground">{status?.verifiedAt ? `最近检查：${new Date(status.verifiedAt).toLocaleString()}（检查时的结果）。` : lastCheckAt ? `历史检查：${new Date(lastCheckAt).toLocaleString()}，不能据此判断当前登录状态。` : '最近检查：尚未完成。'}</p>
     </div>

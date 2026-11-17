@@ -15,6 +15,12 @@ let siteValidation=null;
 let sheetValidation=null;
 let siteTestCell=null;
 const signature=(config,plan,jobId)=>JSON.stringify({config,plan,jobId});
+async function verifyWrite(config) {
+  const result=await session.run('sessionVerify',config);
+  if(result.authentication!=='authenticated'||result.authenticationSource!=='server'||result.authenticationStale||
+    result.documentAccess!=='allowed'||result.editPermission!=='editable'||!result.documentIdentity)
+    throw Object.assign(Error('填写前未能确认当前认证、目标表格及编辑权限，本次未开始填写。'),{code:'WritePreflightUnconfirmed',phase:'check'});
+}
 function normalize(raw={}) {
   const config=core.validate(raw);
   config.documentUrl=documentUrl(config.documentUrl);
@@ -83,8 +89,8 @@ async function teach(request,config) {
 }
 async function dispatch(request) {
   const {operation}=request;
-  if(['sessionStatus','sessionOpen','sessionVerify','sessionClose'].includes(operation)) {
-    if(operation!=='sessionStatus'){confirmation=null;teaching=null;siteValidation=null;sheetValidation=null;siteTestCell=null;}
+  if(['sessionStatus','sessionOpen','sessionVerify','sessionClose','sessionClear','sessionLoginBegin','sessionLoginStatus','sessionLoginRefresh','sessionLoginCancel','sessionLoginConsent'].includes(operation)) {
+    if(['sessionOpen','sessionClose','sessionClear','sessionLoginBegin','sessionLoginRefresh'].includes(operation)){confirmation=null;teaching=null;siteValidation=null;sheetValidation=null;siteTestCell=null;}
     const config={...request.config};
     if(config.documentUrl)config.documentUrl=documentUrl(config.documentUrl);
     return session.run(operation,config);
@@ -159,6 +165,7 @@ async function dispatch(request) {
   const plan=core.plan(config,request.date,request.values);
   if(operation==='background') {
     confirmation=null;
+    if(browser.context&&!browser.headless)throw Object.assign(Error('人工网页正在使用，本次后台填报未开始。'),{code:'ManualSessionBusy',phase:'check'});
     try {
       let inspection;
       try {
@@ -167,6 +174,7 @@ async function dispatch(request) {
             await browser.open(config,true);
             inspection=await client.inspect(config,plan);
             if(!inspection.prewriteVerified||inspection.conflict)throw Error('后台检查未通过或目标格已有内容，本次未填写。');
+            await verifyWrite(config);
             break;
           } catch(error) {
             const transient=error.code==='AnchorContentPending' || (error.code==='ControlUnavailable'&&!error.ambiguous) || /net::ERR_(?:CONNECTION_RESET|CONNECTION_TIMED_OUT|NETWORK_CHANGED)/.test(error.message);
@@ -189,6 +197,7 @@ async function dispatch(request) {
   if(operation==='write') {
     const saved=confirmation;confirmation=null;
     if(!saved||saved.token!==request.token||saved.expires<Date.now()||saved.signature!==signature(config,plan,request.jobId))throw Error('预览已失效，请重新检查本次数据。');
+    await verifyWrite(config);
     return client.write(config,plan,saved.inspection);
   }
   throw Error('不支持的填报操作。');

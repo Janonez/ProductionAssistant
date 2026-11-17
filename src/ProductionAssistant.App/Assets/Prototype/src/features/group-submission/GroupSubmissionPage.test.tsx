@@ -119,10 +119,10 @@ it('saves the real document link with its revision and checks the newly saved ta
   expect(invoke).toHaveBeenCalledWith('tencentSheet.save', { id: 'group', config: { documentUrl: 'https://docs.qq.com/sheet/new' }, configRevision: 8 })
   expect(job.config.fields?.[0].name).toBe('自定义指标')
   expect(job.config.rules).toEqual({ custom: { rowStep: 3 } })
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new' }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new', id: 'group', configRevision: 9 }, 60000)
   expect(container.querySelector('[data-connection-state=connected]')).toBeNull()
   await act(async () => window.dispatchEvent(new Event('focus')))
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new' }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new', id: 'group', configRevision: 9 }, 60000)
 })
 it('returns to the configured row after save and preserves a replacement draft across tabs until cancelled', async () => {
   await mount(); await tab('设置'); await changeUrl('https://docs.qq.com/sheet/saved')
@@ -166,7 +166,7 @@ it('creates one persisted connection without a generic task wizard and restores 
   tasks = []
   await mount(); await tab('设置'); await changeUrl('https://docs.qq.com/sheet/new-connection')
   await act(async () => { submit(); submit() })
-  expect(invoke.mock.calls.filter(([operation]) => operation === 'tencentSheet.create')).toEqual([['tencentSheet.create', { documentUrl: 'https://docs.qq.com/sheet/new-connection' }]])
+  expect(invoke.mock.calls.filter(([operation]) => operation === 'tencentSheet.create')).toEqual([['tencentSheet.create', { documentUrl: 'https://docs.qq.com/sheet/new-connection', requestId: expect.stringMatching(/^[a-f0-9]{32}$/) }]])
   expect(invoke).toHaveBeenCalledWith('tencentSheet.get', { id: 'created' })
   expect(container.querySelector('.automation-create-dialog')).toBeNull()
   tasks = [{ id: 'created', name: '恢复的文档', taskType: 'tencent_sheet_fill' }]

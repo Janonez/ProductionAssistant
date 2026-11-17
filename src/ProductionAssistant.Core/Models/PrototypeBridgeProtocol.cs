@@ -31,6 +31,8 @@ public static class PrototypeBridgeProtocol
         "automation.delete",
         "tencentSheet.create", "tencentSheet.get", "tencentSheet.save",
         "tencentSheet.sessionStatus", "tencentSheet.sessionOpen", "tencentSheet.sessionVerify", "tencentSheet.sessionClose",
+        "tencentSheet.sessionClear", "tencentSheet.sessionLoginBegin", "tencentSheet.sessionLoginStatus", "tencentSheet.sessionLoginRefresh", "tencentSheet.sessionLoginCancel",
+        "tencentSheet.sessionLoginConsent", "tencentSheet.sessionLoginAgreement",
         "tencentSheet.backgroundTest", "tencentSheet.recognize", "tencentSheet.teach", "tencentSheet.inspect", "tencentSheet.write", "tencentSheet.runs",
         "tencentSheet.sources", "tencentSheet.schema", "tencentSheet.views", "tencentSheet.fetch", "tencentSheet.addField", "tencentSheet.updateField", "tencentSheet.deleteField",
         "tencentSite.open", "tencentSite.pick", "tencentSite.testSheet", "tencentSite.captureCell", "tencentSite.test", "tencentSite.save",

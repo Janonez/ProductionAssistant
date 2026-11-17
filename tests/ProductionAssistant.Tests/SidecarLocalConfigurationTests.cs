@@ -21,7 +21,9 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         "tencentSheet.create", "tencentSheet.save",
         "notionFill.runs", "settings.open", "automation.list", "daily.list", "daily.get", "daily.runs", "report.getState",
         "settings.saveNotification", "settings.saveNotificationRules", "daily.create", "daily.saveTemplate",
-        "tencentSheet.sessionStatus", "tencentSheet.sessionOpen", "tencentSheet.sessionVerify", "tencentSheet.sessionClose"
+        "tencentSheet.sessionStatus", "tencentSheet.sessionOpen", "tencentSheet.sessionVerify", "tencentSheet.sessionClose",
+        "tencentSheet.sessionClear", "tencentSheet.sessionLoginBegin", "tencentSheet.sessionLoginStatus", "tencentSheet.sessionLoginRefresh", "tencentSheet.sessionLoginCancel",
+        "tencentSheet.sessionLoginConsent", "tencentSheet.sessionLoginAgreement"
     ];
     internal static readonly string[] ExpectedUnmigratedOperations =
     [
@@ -137,9 +139,18 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         var nextUrl = "https://docs.qq.com/sheet/saved-fixture";
         await using (var sidecar = await SidecarSession.StartAsync(_folder))
         {
-            var created = await sidecar.SendAsync("tencentSheet.create", new { documentUrl = firstUrl });
+            var requestId = Guid.NewGuid().ToString("N");
+            var created = await sidecar.SendAsync("tencentSheet.create", new { documentUrl = firstUrl, requestId });
             AssertSuccess(created);
             id = created.GetProperty("data").GetProperty("id").GetString()!;
+            Assert.Equal(requestId, id);
+            var repeated = await sidecar.SendAsync("tencentSheet.create", new { documentUrl = firstUrl, requestId });
+            AssertSuccess(repeated);
+            Assert.Equal(id, repeated.GetProperty("data").GetProperty("id").GetString());
+            var differentTarget = await sidecar.SendAsync("tencentSheet.create", new { documentUrl = nextUrl, requestId });
+            Assert.False(differentTarget.GetProperty("ok").GetBoolean());
+            var all = await sidecar.SendAsync("automation.list");
+            Assert.Single(all.GetProperty("data").GetProperty("tasks").EnumerateArray(), item => item.GetProperty("taskType").GetString() == TencentSheetTaskHandler.Type);
             var saved = await sidecar.SendAsync("tencentSheet.save", new { id, configRevision = 0, config = new { documentUrl = nextUrl } });
             AssertSuccess(saved);
             Assert.Equal(nextUrl, saved.GetProperty("data").GetProperty("config").GetProperty("documentUrl").GetString());
