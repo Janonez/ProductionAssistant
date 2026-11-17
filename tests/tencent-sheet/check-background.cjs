@@ -4,6 +4,9 @@ const assert=require('node:assert/strict');
 const {TencentDocsBrowser}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/browser.cjs');
 const {TencentSheetClient}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/client.cjs');
 const {dispatch}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/runner.cjs');
+const {TencentSession}=require('../../src/ProductionAssistant.App/Assets/TencentSheet/session.cjs');
+let authAllowed=true;
+TencentSession.prototype.verify=async config=>({authentication:authAllowed?'authenticated':'unknown',authenticationSource:'server',documentAccess:'allowed',editPermission:'editable',documentIdentity:config.documentUrl});
 let calls=[],conflict=false,failWrite=false,inspectionFailures=0,inspectionCode='AnchorContentPending';
 TencentDocsBrowser.prototype.open=async(_,headless)=>{calls.push(['open',headless]);};
 TencentDocsBrowser.prototype.close=async()=>{calls.push(['close']);};
@@ -39,6 +42,10 @@ async function main(){
     assert.equal(calls.filter(call=>call[0]==='write').length,0);
   }
   inspectionFailures=0;calls=[];
+  authAllowed=false;
+  await assert.rejects(dispatch({...request,operation:'background'}),e=>e.code==='WritePreflightUnconfirmed'&&e.phase==='check');
+  assert.equal(calls.filter(call=>call[0]==='write').length,0,'unknown authentication never reaches writing');
+  authAllowed=true;calls=[];
   await dispatch({...request,operation:'sessionOpen'});
   assert.deepEqual(calls,[['open',false]]);
   await dispatch({operation:'sessionClose'});

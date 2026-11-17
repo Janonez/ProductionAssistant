@@ -10,7 +10,7 @@ const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke }))
 const firstUrl = 'https://docs.qq.com/sheet/one', secondUrl = 'https://docs.qq.com/sheet/two'
 const closed: DocumentSessionEvidence = { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown', verifiedAt: null, message: '' }
-const connected: DocumentSessionEvidence = { state: 'authenticated', browserOpen: true, authentication: 'authenticated', authenticationSource: 'server', documentAccess: 'allowed', editPermission: 'editable', verifiedAt: '2026-11-16T01:30:00Z', documentName: '集团日报', message: '' }
+const connected: DocumentSessionEvidence = { state: 'authenticated', browserOpen: true, authentication: 'authenticated', authenticationSource: 'server', authenticationObservedAt: '2026-11-16T01:30:00Z', documentAccess: 'allowed', editPermission: 'editable', verifiedAt: '2026-11-16T01:30:00Z', documentCheckedAt: '2026-11-16T01:30:00Z', documentType: 'spreadsheet', documentIdentity: firstUrl, targetDocumentUrl: firstUrl, documentName: '集团日报', message: '' }
 let root: Root, container: HTMLDivElement
 const ready = vi.fn(), active = vi.fn(), dirty = vi.fn()
 const button = (name: string, parent: ParentNode = document) => [...parent.querySelectorAll<HTMLButtonElement>('button')].find(element => element.textContent?.trim() === name)!
@@ -44,8 +44,8 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 
 it.each([
   ['unconfigured', '', '连接'], ['idle', '未检测', '检测'], ['checking', '检测中', undefined],
-  ['connected', '已连接', '打开文档'], ['notLoggedIn', '登录已失效', '扫码登录'],
-  ['invalidLink', '不是表格链接', '更换文档'], ['readOnly', '只有查看权限', '打开文档'], ['unavailable', '无法打开', '重新检测'],
+  ['connected', '已连接', '打开文档'], ['notLoggedIn', '需要登录', '扫码登录'],
+  ['invalidLink', '不是表格链接', '更换文档'], ['readOnly', '只有查看权限', '打开文档'], ['permissionUnknown', '权限未知', '重新核验'], ['unavailable', '无法打开', '重新检测'],
 ] as [ConnectionStatus, string, string | undefined][])('renders %s in the same outline Item with exactly its primary action', async (state, badge, primary) => {
   const action = vi.fn()
   await act(async () => root.render(<DocumentConnectionItem connection={{ state, documentName: '很长的集团日报名称'.repeat(30) }} url={state === 'unconfigured' ? '' : firstUrl} draft="" editing={state === 'unconfigured'} busy={state === 'checking'} onDraft={vi.fn()} onAction={action} onCancel={vi.fn()} onCopy={vi.fn()} onClear={vi.fn()} />))
@@ -70,15 +70,15 @@ it('disables empty and whitespace URLs, permits a valid URL and submits once via
   let resolve!: (value: { id: string }) => void
   invoke.mockImplementationOnce(() => new Promise(done => { resolve = done }))
   await act(async () => { submit(); submit() })
-  expect(invoke).toHaveBeenCalledTimes(1); expect(invoke).toHaveBeenCalledWith('tencentSheet.create', { documentUrl: secondUrl })
+  expect(invoke).toHaveBeenCalledTimes(1); expect(invoke).toHaveBeenCalledWith('tencentSheet.create', { documentUrl: secondUrl, requestId: expect.stringMatching(/^[a-f0-9]{32}$/) })
   await act(async () => resolve({ id: 'new' }))
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: secondUrl }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: secondUrl, id: 'new', configRevision: 0 }, 60000)
   expect(container.querySelector('[data-connection-state=connected]')).toBeNull()
 })
 
 it('reads the existing saved-document status and uses the returned real name', async () => {
   invoke.mockResolvedValue(connected); await mount()
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: firstUrl }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: firstUrl, id: 'one', configRevision: 8 }, 60000)
   expect(container.querySelector('[aria-label="文档名称"]')?.textContent).toBe('集团日报')
   expect(ready).toHaveBeenLastCalledWith(true)
   await click(button('打开文档'))
@@ -110,21 +110,21 @@ it('can edit and cancel without changing the persisted URL, then saves with the 
   await mount(); await menu('更换文档')
   expect(container.querySelector<HTMLInputElement>('input')?.value).toBe(firstUrl)
   await change(secondUrl); await click(button('取消'))
-  expect(container.querySelector('input')).toBeNull()
+  expect(container.querySelector('#submission-document-url')).toBeNull()
   expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.save')).toBe(false)
   await menu('更换文档'); await change(secondUrl)
   invoke.mockImplementation(async (operation, payload) => operation === 'tencentSheet.save' ? { id: 'one', configRevision: 9, config: { documentUrl: payload.config.documentUrl } } : connected)
   await act(async () => { submit(); submit() })
   expect(invoke.mock.calls.filter(([operation]) => operation === 'tencentSheet.save')).toHaveLength(1)
   expect(invoke).toHaveBeenCalledWith('tencentSheet.save', { id: 'one', config: { documentUrl: secondUrl }, configRevision: 8 })
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: secondUrl }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: secondUrl, id: 'one', configRevision: 9 }, 60000)
 })
 it('retains the draft and original configuration when saving fails', async () => {
   await mount(); await menu('更换文档'); await change(secondUrl)
   invoke.mockRejectedValueOnce(new Error('配置已变化'))
   await act(async () => { submit() })
   expect(container.querySelector<HTMLInputElement>('input')?.value).toBe(secondUrl)
-  expect(toast.error).toHaveBeenCalledWith('配置已变化')
+  expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('配置已变化'))
   await click(button('取消')); await menu('更换文档')
   expect(container.querySelector<HTMLInputElement>('input')?.value).toBe(firstUrl)
 })
@@ -139,29 +139,62 @@ it('suppresses duplicate checks while showing a Spinner and no primary action', 
   expect(container.querySelector('[aria-label="正在检测文档连接"]')).not.toBeNull()
   await act(async () => resolve(connected)); expect(ready).toHaveBeenLastCalledWith(true)
 })
-it('uses the same session for QR login and re-verifies on returning to the app', async () => {
+it('opens a Metis QR dialog without opening Edge for login', async () => {
   invoke.mockResolvedValue({ ...closed, browserOpen: true, state: 'login-required', authentication: 'required' })
   await mount(); await click(button('扫码登录'))
-  expect(invoke).toHaveBeenLastCalledWith('tencentSheet.sessionOpen', { documentUrl: firstUrl }, 60000)
-  invoke.mockResolvedValue(connected)
-  await act(async () => window.dispatchEvent(new Event('focus')))
-  expect(invoke).toHaveBeenLastCalledWith('tencentSheet.sessionVerify', { documentUrl: firstUrl }, 60000)
-  expect(ready).toHaveBeenLastCalledWith(true)
+  expect(document.querySelector('[role=dialog]')?.textContent).toContain('扫码登录腾讯文档')
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionLoginBegin', { documentUrl: firstUrl, id: 'one', configRevision: 8 }, 35000)
+  expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.sessionOpen')).toBe(false)
+  expect(ready).toHaveBeenLastCalledWith(false)
 })
-it('explains the unavailable shared-session clearing action without calling a new backend operation', async () => {
+it('offers login for unknown authentication while preserving the unknown badge and manual recheck', async () => {
+  invoke.mockResolvedValue({ ...closed, state: 'unavailable', browserOpen: true, code: 'AuthenticationUnknown', message: '尚未确认登录状态。' })
+  await mount()
+  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('无法打开')
+  expect(ready).toHaveBeenLastCalledWith(false)
+  await menu()
+  expect([...document.querySelectorAll('[role=menuitem]')].map(el => el.textContent)).toContain('重新检测')
+  await act(async () => document.querySelector('[role=menu]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))); await settle()
+  await click(button('登录'))
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionLoginBegin', { documentUrl: firstUrl, id: 'one', configRevision: 8 }, 35000)
+  expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.sessionOpen')).toBe(false)
+})
+it('prompts for login when the backend confirms missing local cookie credentials, without labelling it expired', async () => {
+  invoke.mockResolvedValue({ ...closed, browserOpen: true, state: 'login-required', code: 'LoginCredentialsMissing', message: '当前专属会话没有保存的 Cookie 登录资料。' })
+  await mount()
+  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('需要登录')
+  expect(button('扫码登录')).toBeDefined();expect(ready).toHaveBeenLastCalledWith(false)
+})
+it('requires confirmation of shared scope before clearing and preserves the saved document', async () => {
   await mount(); await menu('清除登录状态')
   const dialog = document.querySelector('[role=alertdialog]')!
-  expect(dialog.textContent).toContain('当前版本暂不支持清除登录状态')
-  expect(dialog.textContent).toContain('多个腾讯文档可能共用')
-  expect(button('清除登录状态', dialog).disabled).toBe(true)
-  await click(button('清除登录状态', dialog))
+  expect(dialog.textContent).toContain('全部腾讯文档和旧任务')
+  expect(dialog.textContent).toContain('登录资料及缓存')
+  expect(button('清除登录状态', dialog).disabled).toBe(false)
   expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.sessionClear')).toBe(false)
   await click(button('取消', dialog)); await settle()
   await menu('更换文档'); expect(container.querySelector<HTMLInputElement>('input')?.value).toBe(firstUrl)
 })
+it('shows clear success only for backend acknowledgement and keeps the document configuration', async () => {
+  invoke.mockImplementation(async operation => operation === 'tencentSheet.sessionClear' ? { ...closed, code: 'LoginCleared' } : connected)
+  await mount(); await menu('清除登录状态')
+  await click(button('清除登录状态', document.querySelector('[role=alertdialog]')!))
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionClear', { documentUrl: firstUrl, id: 'one', configRevision: 8, confirmClear: true }, 60000)
+  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('需要登录')
+  expect(toast.success).toHaveBeenCalledWith('登录资料及专属浏览器缓存已清空')
+  await menu('更换文档'); expect(container.querySelector<HTMLInputElement>('input')?.value).toBe(firstUrl)
+})
+it('never keeps a connected badge or claims success after incomplete clearing', async () => {
+  invoke.mockImplementation(async operation => operation === 'tencentSheet.sessionClear' ? { ...closed, state: 'unavailable', code: 'ClearIncomplete', message: '清除结果尚未确认。' } : connected)
+  await mount(); await menu('清除登录状态')
+  await click(button('清除登录状态', document.querySelector('[role=alertdialog]')!))
+  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('无法打开')
+  expect(ready).toHaveBeenLastCalledWith(false);expect(toast.success).not.toHaveBeenCalled()
+})
 it.each([
   { ...connected, editPermission: 'read-only' }, { ...connected, editPermission: 'unknown' },
   { ...connected, authenticationSource: null }, { ...connected, authentication: 'unknown' }, { ...connected, verifiedAt: null },
+  { ...connected, documentIdentity: secondUrl }, { ...connected, authenticationStale: true }, { ...connected, authenticationObservedAt: null },
   { ...connected, browserOpen: false }, { ...connected, documentAccess: 'denied', state: 'access-denied' },
 ] as DocumentSessionEvidence[])('never enables picking for incomplete or read-only evidence %j', async result => {
   invoke.mockResolvedValue(result); await mount()

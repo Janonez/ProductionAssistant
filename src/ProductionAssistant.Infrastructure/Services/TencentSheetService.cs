@@ -8,6 +8,7 @@ namespace ProductionAssistant.Services;
 
 public sealed class TencentSheetPreflightException(string message) : InvalidOperationException(message);
 public sealed class TencentProfileBusyException() : InvalidOperationException("专用浏览器配置正被其他进程使用，请先结束该会话。");
+public sealed class TencentOperationBusyException() : InvalidOperationException("已有文档操作正在进行，请等待完成。");
 
 // Persistent stdio worker: no listening port and no credentials sent to the frontend.
 public sealed class TencentSheetService : IAsyncDisposable
@@ -38,7 +39,7 @@ public sealed class TencentSheetService : IAsyncDisposable
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
         if (!await _gate.WaitAsync(0, timeout.Token))
-            throw new InvalidOperationException("已有文档操作正在进行，请等待完成。");
+            throw new TencentOperationBusyException();
         try
         {
             lock (_cancellationGate) _activeOperation = timeout;

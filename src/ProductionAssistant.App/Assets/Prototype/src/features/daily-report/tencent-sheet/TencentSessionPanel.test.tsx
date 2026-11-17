@@ -31,7 +31,7 @@ it('reads status automatically once even in StrictMode and immediately displays 
   await act(async () => button('重新检查').click());
   expect(invoke).toHaveBeenLastCalledWith('tencentSheet.sessionVerify', { documentUrl: url }, 60000);
   expect(container.textContent).toContain('后端确认登录与访问');
-  expect(container.textContent).toContain('未知（本阶段不试写）');
+  expect(container.textContent).toContain('未知（只读检查）');
   expect(container.textContent).toContain('最近检查');
   invoke.mockResolvedValue(closed);
   await act(async () => button('关闭浏览器').click());

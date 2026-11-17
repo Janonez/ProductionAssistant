@@ -210,7 +210,7 @@ async function main(){
     await page.getByRole('button',{name:'重新检查',exact:true}).click();
     await sessionSummary.filter({hasText:/^登录与访问已确认$/}).waitFor();
     assert.deepEqual(await session.getByRole('definition').allTextContents(),['运行中','已登录','可访问']);
-    assert.equal(await sessionSummary.filter({hasText:/^编辑权限：未知（本阶段不试写）$/}).count(),1);
+    assert.equal(await sessionSummary.filter({hasText:/^编辑权限：未知（只读检查）$/}).count(),1);
     await page.evaluate(()=>window.sessionState='access-denied');
     await page.getByRole('button',{name:'重新检查',exact:true}).click();
     await sessionSummary.filter({hasText:/^无文档访问权限$/}).waitFor();
