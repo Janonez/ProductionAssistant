@@ -3,19 +3,11 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import { GroupSubmissionPage } from './GroupSubmissionPage'
 
-const state = vi.hoisted(() => {
-  let loadModule!: () => void
-  const moduleReady = new Promise<void>(resolve => { loadModule = resolve })
-  return { invoke: vi.fn(), moduleReady, loadModule }
-})
+const state = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke: state.invoke }))
-vi.mock('./SubmissionSettings', async importOriginal => {
-  await state.moduleReady
-  return importOriginal()
-})
 afterEach(() => vi.unstubAllGlobals())
 
-it('keeps fixed overview content and distinguishes module, configuration, error, retry and ready settings', async () => {
+it('renders settings on the first click and confines config reads and failures to the document section', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   let list!: (value: unknown) => void, rejectConfig!: (error: Error) => void, loadConfig!: (value: unknown) => void
   state.invoke.mockImplementation((operation: string) => {
@@ -39,13 +31,11 @@ it('keeps fixed overview content and distinguishes module, configuration, error,
     expect(button('配置文档连接').disabled).toBe(false)
     await act(async () => button('配置文档连接').click())
     expect(button('设置').getAttribute('aria-selected')).toBe('true')
-    expect(panel().textContent).toContain('正在加载设置界面')
+    expect(panel().textContent).not.toContain('正在加载设置界面')
     expect(headings()).toEqual(['网页配置', '业务配置', '执行规则'])
+    expect(button('新建业务').disabled).toBe(true)
     expect(panel().querySelector('[aria-label="本次填报数据"]')).toBeNull()
-    await act(async () => state.loadModule())
-    await act(async () => { await vi.dynamicImportSettled() })
-    expect(panel().textContent).toContain('正在读取设置配置')
-    expect(headings()).toEqual(['网页配置', '业务配置', '执行规则'])
+    expect(panel().querySelector('[aria-label="正在读取网页配置"]')).not.toBeNull()
     expect(panel().querySelector('form')).toBeNull()
     await act(async () => list({ tasks: [{ id: 'group', taskType: 'tencent_sheet_fill', name: '文档' }] }))
     await act(async () => rejectConfig(new Error('配置读取中断')))
@@ -57,9 +47,9 @@ it('keeps fixed overview content and distinguishes module, configuration, error,
     expect(panel().querySelector('[role=alert]')?.textContent).toContain('配置读取中断')
     await act(async () => { button('设置').focus(); button('设置').click() })
     await act(async () => button('重新读取文档配置').click())
-    expect(panel().textContent).toContain('正在读取设置配置')
+    expect(panel().querySelector('[aria-label="正在读取网页配置"]')).not.toBeNull()
     await act(async () => loadConfig({ id: 'group', config: { documentUrl: 'https://docs.qq.com/sheet/example' } }))
-    expect(panel().querySelector('[aria-label="集团填报设置加载"]')).toBeNull()
+    expect(panel().querySelector('[aria-label="网页配置加载"]')).toBeNull()
     expect(panel().querySelector('[aria-label="集团填报设置"]')).not.toBeNull()
     expect(headings()).toEqual(['网页配置', '业务配置', '执行规则'])
     expect(state.invoke.mock.calls.some(([operation]) => /create|save|write|sessionOpen/.test(operation))).toBe(false)

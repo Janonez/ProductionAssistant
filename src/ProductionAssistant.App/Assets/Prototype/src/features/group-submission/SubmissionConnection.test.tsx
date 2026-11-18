@@ -33,6 +33,7 @@ function Harness({ initial = firstUrl }: { initial?: string }) {
 }
 const mount = async (initial = firstUrl) => act(async () => root.render(<Harness initial={initial} />))
 beforeEach(() => {
+  localStorage.clear()
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   invoke.mockReset().mockResolvedValue(closed)
   vi.spyOn(toast, 'success').mockReturnValue('success')
@@ -45,7 +46,7 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 it.each([
   ['unconfigured', '', '连接'], ['idle', '未检测', '检测'], ['checking', '检测中', undefined],
   ['connected', '已连接', '打开文档'], ['notLoggedIn', '需要登录', '扫码登录'],
-  ['invalidLink', '不是表格链接', '更换文档'], ['readOnly', '只有查看权限', '打开文档'], ['permissionUnknown', '权限未知', '重新核验'], ['unavailable', '无法打开', '重新检测'],
+  ['invalidLink', '不是表格链接', '更换文档'], ['readOnly', '只有查看权限', '打开文档'], ['accessDenied', '无权访问', '重新检测'], ['unavailable', '无法打开', '重新检测'],
 ] as [ConnectionStatus, string, string | undefined][])('renders %s in the same outline Item with exactly its primary action', async (state, badge, primary) => {
   const action = vi.fn()
   await act(async () => root.render(<DocumentConnectionItem connection={{ state, documentName: '很长的集团日报名称'.repeat(30) }} url={state === 'unconfigured' ? '' : firstUrl} draft="" editing={state === 'unconfigured'} busy={state === 'checking'} onDraft={vi.fn()} onAction={action} onCancel={vi.fn()} onCopy={vi.fn()} onClear={vi.fn()} />))
@@ -83,6 +84,41 @@ it('reads the existing saved-document status and uses the returned real name', a
   expect(ready).toHaveBeenLastCalledWith(true)
   await click(button('打开文档'))
   expect(invoke).toHaveBeenLastCalledWith('tencentSheet.sessionOpen', { documentUrl: firstUrl }, 60000)
+})
+it('restores the connected display and skips repeat probes on remount and focus', async () => {
+  invoke.mockResolvedValue(connected)
+  await mount()
+  await act(async () => root.unmount())
+  root = createRoot(container)
+  invoke.mockClear()
+  await mount()
+  expect(container.querySelector('[data-connection-state=connected]')?.textContent).toContain('已连接')
+  expect(ready).toHaveBeenLastCalledWith(true)
+  await act(async () => window.dispatchEvent(new Event('focus')))
+  expect(invoke).not.toHaveBeenCalled()
+  await menu('重新检测')
+  expect(invoke).toHaveBeenCalledOnce()
+  expect(ready).toHaveBeenLastCalledWith(true)
+  invoke.mockResolvedValue({ ...closed, state: 'login-required', authentication: 'required' })
+  await menu('重新检测')
+  expect(container.querySelector('[data-connection-state=notLoggedIn]')).not.toBeNull()
+  expect(localStorage.length).toBe(0)
+})
+it('keeps editing available after temporary errors and reports confirmed access denial', async () => {
+  invoke.mockResolvedValue(connected)
+  await mount()
+  invoke.mockRejectedValueOnce(new Error('temporary'))
+  await menu('重新检测')
+  expect(container.querySelector('[data-connection-state=connected]')).not.toBeNull()
+  expect(ready).toHaveBeenLastCalledWith(true)
+  expect(localStorage.length).toBe(1)
+  invoke.mockResolvedValue({ ...connected, state: 'access-denied', documentAccess: 'denied' })
+  await menu('重新检测')
+  expect(container.querySelector('[data-connection-state=accessDenied]')?.textContent).toContain('无权访问')
+  expect(localStorage.length).toBe(0)
+})
+it('shows connected after the server acknowledges login independently of edit-permission evidence', () => {
+  expect(connectionFromSession({ ...connected, loginState: 'authenticated', documentIdentity: null, documentAccess: 'unknown', editPermission: 'unknown' }, firstUrl, 8).state).toBe('connected')
 })
 it.each([undefined, '', '   '])('uses 腾讯文档 if title retrieval returns %j', async documentName => {
   invoke.mockResolvedValue({ ...connected, documentName }); await mount()
@@ -192,7 +228,7 @@ it('never keeps a connected badge or claims success after incomplete clearing', 
   expect(ready).toHaveBeenLastCalledWith(false);expect(toast.success).not.toHaveBeenCalled()
 })
 it.each([
-  { ...connected, editPermission: 'read-only' }, { ...connected, editPermission: 'unknown' },
+  { ...connected, editPermission: 'read-only' },
   { ...connected, authenticationSource: null }, { ...connected, authentication: 'unknown' }, { ...connected, verifiedAt: null },
   { ...connected, documentIdentity: secondUrl }, { ...connected, authenticationStale: true }, { ...connected, authenticationObservedAt: null },
   { ...connected, browserOpen: false }, { ...connected, documentAccess: 'denied', state: 'access-denied' },

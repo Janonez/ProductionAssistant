@@ -15,11 +15,14 @@ let siteValidation=null;
 let sheetValidation=null;
 let siteTestCell=null;
 const signature=(config,plan,jobId)=>JSON.stringify({config,plan,jobId});
-async function verifyWrite(config) {
-  const result=await session.run('sessionVerify',config);
+async function verifyWrite(config,plan) {
+  const permissionTargets=plan.rows.map(row=>({sheetName:plan.sheet,address:row.address}));
+  const result=await session.run('sessionVerify',{...config,permissionTargets});
   if(result.authentication!=='authenticated'||result.authenticationSource!=='server'||result.authenticationStale||
     result.documentAccess!=='allowed'||result.editPermission!=='editable'||!result.documentIdentity)
     throw Object.assign(Error('填写前未能确认当前认证、目标表格及编辑权限，本次未开始填写。'),{code:'WritePreflightUnconfirmed',phase:'check'});
+  const denied=result.permissionCheck?.targets.find(target=>target.eligibility==='denied');
+  if(denied)throw Object.assign(Error('当前账号无权填写 '+plan.sheet+' · '+denied.address+'，本次未开始填写。'),{code:'WriteTargetAccessDenied',phase:'check'});
 }
 function normalize(raw={}) {
   const config=core.validate(raw);
@@ -174,7 +177,7 @@ async function dispatch(request) {
             await browser.open(config,true);
             inspection=await client.inspect(config,plan);
             if(!inspection.prewriteVerified||inspection.conflict)throw Error('后台检查未通过或目标格已有内容，本次未填写。');
-            await verifyWrite(config);
+            await verifyWrite(config,plan);
             break;
           } catch(error) {
             const transient=error.code==='AnchorContentPending' || (error.code==='ControlUnavailable'&&!error.ambiguous) || /net::ERR_(?:CONNECTION_RESET|CONNECTION_TIMED_OUT|NETWORK_CHANGED)/.test(error.message);
@@ -197,7 +200,7 @@ async function dispatch(request) {
   if(operation==='write') {
     const saved=confirmation;confirmation=null;
     if(!saved||saved.token!==request.token||saved.expires<Date.now()||saved.signature!==signature(config,plan,request.jobId))throw Error('预览已失效，请重新检查本次数据。');
-    await verifyWrite(config);
+    await verifyWrite(config,plan);
     return client.write(config,plan,saved.inspection);
   }
   throw Error('不支持的填报操作。');

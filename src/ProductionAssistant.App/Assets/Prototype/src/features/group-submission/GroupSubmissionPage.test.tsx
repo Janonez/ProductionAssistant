@@ -3,9 +3,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { GroupSubmissionPage } from './GroupSubmissionPage'
-// These integration cases use the real, loaded settings. The separate loading
-// suite controls module delivery; Vite compilation is not a timed UI action here.
-import './SubmissionSettings'
 import { settleModuleImports } from '../../test-utils/settle-module-imports'
 import type { SubmissionJob, SubmissionRun } from './types'
 
@@ -104,7 +101,7 @@ it('shows all settings sections without secondary navigation and retains the ove
   await mount(); await tab('设置')
   expect(container.querySelector('nav[aria-label="填报设置"]')).toBeNull()
   expect([...container.querySelectorAll('[aria-label="集团填报设置"] h2')].map(element => element.textContent)).toEqual(['网页配置', '业务配置', '执行规则'])
-  expect(container.querySelectorAll('[aria-label="集团填报设置"] [data-slot=separator]')).toHaveLength(2)
+  expect(container.querySelectorAll('[aria-label="集团填报设置"] [data-slot=separator]')).toHaveLength(0)
   await tab('概览')
   await act(async () => button('检查文档连接').click())
   expect(button('设置').getAttribute('aria-selected')).toBe('true')
@@ -121,8 +118,9 @@ it('saves the real document link with its revision and checks the newly saved ta
   expect(job.config.rules).toEqual({ custom: { rowStep: 3 } })
   expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new', id: 'group', configRevision: 9 }, 60000)
   expect(container.querySelector('[data-connection-state=connected]')).toBeNull()
+  const calls = invoke.mock.calls.length
   await act(async () => window.dispatchEvent(new Event('focus')))
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new', id: 'group', configRevision: 9 }, 60000)
+  expect(invoke).toHaveBeenCalledTimes(calls)
 })
 it('returns to the configured row after save and preserves a replacement draft across tabs until cancelled', async () => {
   await mount(); await tab('设置'); await changeUrl('https://docs.qq.com/sheet/saved')
@@ -155,7 +153,7 @@ it('does not overwrite the saved target on a rejected save and blocks duplicate 
   await act(async () => { submit(); submit() })
   expect(invoke.mock.calls.filter(([operation]) => operation === 'tencentSheet.save')).toHaveLength(1)
   expect(button('连接').disabled).toBe(true)
-  expect(button('概览').disabled).toBe(true)
+  expect(button('概览').disabled).toBe(false)
   await act(async () => reject(new Error('任务配置已变化，请重新打开后再修改。')))
   expect(toast.error).toHaveBeenCalledWith('任务配置已变化，请重新打开后再修改。')
   expect(job.config.documentUrl).toContain('/original')
@@ -176,26 +174,19 @@ it('creates one persisted connection without a generic task wizard and restores 
   expect(container.querySelector('[aria-label="文档名称"]')?.textContent).toBe('腾讯文档')
 })
 
-it('retains a business created before the first document connection is saved', async () => {
-  tasks = []; await mount(); await tab('设置')
-  await act(async () => button('新建业务').click())
-  const originalScroll = HTMLElement.prototype.scrollIntoView
-  HTMLElement.prototype.scrollIntoView = vi.fn()
-  try {
-    const trigger = document.querySelector<HTMLButtonElement>('[data-slot=dialog-content] [role=combobox]')!
-    await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })))
-    const option = document.querySelector<HTMLElement>('[role=option]')!
-    await act(async () => { option.focus(); option.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })) })
-    const next = [...document.querySelectorAll<HTMLButtonElement>('[data-slot=dialog-content] button')].find(element => element.textContent === '下一步')!
-    await act(async () => next.click())
-    await act(async () => document.querySelector<HTMLButtonElement>('[data-slot=dialog-content] [aria-label=关闭]')!.click())
-  } finally { HTMLElement.prototype.scrollIntoView = originalScroll }
-  expect(container.querySelectorAll('[aria-label="业务列表"] tbody tr')).toHaveLength(1)
-  await changeUrl('https://docs.qq.com/sheet/new-with-business'); await act(async () => { submit() })
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.get', { id: 'created' })
-  expect(container.querySelectorAll('[aria-label="业务列表"] tbody tr')).toHaveLength(1)
-  expect(container.querySelector('[aria-label="业务列表"] tbody')?.textContent).toContain('未设置位置')
-  expect(container.querySelector('[aria-label="业务列表"] [role=switch]')).toBeNull()
+it('allows all tabs while a document probe runs and reuses that request when returning', async () => {
+  const normal = invoke.getMockImplementation()!
+  let finish!: (value: typeof closed) => void
+  invoke.mockImplementation((operation, payload) => operation === 'tencentSheet.sessionVerify'
+    ? new Promise(resolve => { finish = resolve }) : normal(operation, payload))
+  await mount(); await tab('设置')
+  expect(container.querySelector('[data-connection-state=checking]')).not.toBeNull()
+  expect(button('新建业务').disabled).toBe(true)
+  await tab('记录')
+  expect(button('记录').getAttribute('aria-selected')).toBe('true')
+  await tab('概览'); await tab('设置')
+  expect(invoke.mock.calls.filter(([operation]) => operation === 'tencentSheet.sessionVerify')).toHaveLength(1)
+  await act(async () => finish(closed))
 })
 
 it('keeps the created identity when its first read fails, so retry cannot create another record', async () => {

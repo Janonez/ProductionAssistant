@@ -35,6 +35,7 @@ function clickSidebar(container: HTMLDivElement, label: string) {
 }
 
 it('enters group submission without an automation fallback while its list and configuration are pending', async () => {
+  await import('../features/group-submission/GroupSubmissionPage')
   let finishList!: (value: unknown) => void, finishJob!: (value: unknown) => void
   invoke.mockImplementation((operation: string) => {
     if (operation === 'automation.list') return new Promise(resolve => { finishList = resolve })
@@ -55,6 +56,7 @@ it('enters group submission without an automation fallback while its list and co
     await act(async () => root.render(<App />))
     observer.observe(container, { childList: true, subtree: true, characterData: true })
     await act(async () => clickSidebar(container, '集团填报'))
+    await settleModuleImports()
     const workbench = container.querySelector('[aria-label="集团填报工作台"]')!
     expect(workbench).not.toBeNull()
     expect([...workbench.querySelectorAll('[role=tab]')].map(tab => tab.textContent)).toEqual(['概览', '记录', '设置'])

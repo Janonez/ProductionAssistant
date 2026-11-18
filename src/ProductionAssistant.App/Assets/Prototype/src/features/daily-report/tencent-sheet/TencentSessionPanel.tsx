@@ -4,13 +4,6 @@ import { invoke } from '../../../bridge/index';
 import { Button } from '../../../components/ui/button';
 import { useTheme } from '../../../components/layout/ThemeProvider';
 
-export type TencentPermissionCheck = {
-  document: { value: 'editable' | 'read-only' | 'unknown'; reason: string; source?: string; observedAt?: string }
-  model: { value: 'complete' | 'unknown'; reason: string }
-  targets: { sheetId?: string; sheetName?: string; address: string; label?: string; protection: 'protected' | 'unprotected' | 'unknown'; eligibility: 'eligible' | 'denied' | 'unknown'; reason: string }[]
-  checkedAt: string; expiresAt: string; generation: number; pageGeneration: number; userGeneration: number
-}
-
 export type TencentSessionStatus = {
   state: 'closed' | 'login-required' | 'authenticated' | 'access-denied' | 'loading' | 'unverified' | 'unavailable' | 'profile-busy';
   browserOpen: boolean;
@@ -27,7 +20,7 @@ export type TencentSessionStatus = {
   documentIdentity?: string | null; documentType?: string; documentName?: string | null; documentCheckedAt?: string | null;
   interaction?: 'none' | 'qr' | 'manual'; loginState?: 'loading' | 'consent' | 'waiting' | 'scanned' | 'expired' | 'authenticated' | 'failed' | 'timeout' | 'cancelled';
   loginOperationId?: string | null; loginWaitUntil?: string | null; qrImage?: string | null;
-  pageGeneration?: number; permissionCheck?: TencentPermissionCheck | null;
+  pageGeneration?: number;
 };
 type Action = 'Status' | 'Open' | 'Verify' | 'Close';
 const busyText: Record<Action, string> = { Open: '正在打开并检查…', Verify: '正在重新检查登录与文档访问…', Status: '正在读取浏览器状态…', Close: '正在关闭浏览器…' };

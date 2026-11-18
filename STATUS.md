@@ -1,5 +1,16 @@
 # ProductionAssistant 交接状态
 
+## Electron 首屏与集团填报设置（2026-11-18，完整验证通过，待人工验收）
+
+- 分支 `codex/startup-submission-settings` 基于 PR #96 的 `3e0a8e1`。上轮 STATUS 和 dist 差异按用户授权保存在 stash `fe5cfc97957a0e76f7284da6b0e2e6348b858adb`。
+- Electron 默认页在 Sidecar 就绪前已显示真实生产消息表单，可先录入。配置读取、解析和入库等待服务 Ready。首屏异步准备集团填报模块，设置与工作台同批加载，实际配置读取和重试只占网页配置区。
+- 网页配置按任务及配置版本恢复「已连接」，短期证据到期无需重新核验即可编辑配置。明确登录失效、只读或访问拒绝才改变连接显示。切换标签、模块和窗口焦点不重发检测，执行规则共用连接状态。
+- 移除设置页的手填工作表和格号权限面板。Bridge 拒绝位置权限参数，手动与后台的实际填报 Worker 按业务日期计算目标，批量核验，明确拒绝时在写入前停。检测层次、存储与生命周期方案见 [腾讯文档权限检查](docs/tencent-permission-check.md)。
+- 业务配置移除分区线和多余列，固定标题按钮，并覆盖两种空状态、异常位置徽章、键盘编辑和删除确认。业务与执行规则仍通过已有草稿适配器运行。
+- 连接调整后完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 通过。覆盖前端、浏览器连接矩阵、Electron 122/122、.NET 379/379 和 Development 发布。新构建 `c4ad456c-3a5e-48fe-abc7-92bf07561217` 含 124 份前端资源。
+- 隔离 Electron 每版 3 次有效采样。首次绘制中位数 524 → 392 ms，首次进入集团填报 133 → 116 ms，首次打开设置 400 → 100 ms，进入工作台再开设置 533 → 216 ms。基线一次首屏 19.5 秒，记录到主进程事件循环延迟及单次资源请求耗时 4.1 秒，触发原因未定。真实窗口通过配置读取延迟、局部失败、重试检查。记录在 `artifacts/startup-submission-settings`。
+- 人工验收从项目根目录运行 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`。仓库仍有旧 WinUI 发布入口，本次未修改其宿主代码，也未执行业务写入、调度或稳定版更新。
+
 ## Skeleton 整理（2026-11-18，实现及完整验证通过，待人工验收）
 
 - 需求分支 `codex/skeleton-loading`，基线 `91ca643`。原 STATUS / dist 差异已备份，335 个文件及 SHA256 清单保留在 `artifacts/skeleton-loading/baseline-20261117-163759`。

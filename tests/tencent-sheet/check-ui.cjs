@@ -45,6 +45,14 @@ async function main(){
           if(request.operation.endsWith('Close'))window.sessionState='closed';
           const state=window.sessionState||'closed',authenticated=['authenticated','access-denied'].includes(state);
           data={state,browserOpen:state!=='closed',authentication:authenticated?'authenticated':state==='login-required'?'required':'unknown',documentAccess:state==='authenticated'?'allowed':state==='access-denied'?'denied':'unknown',editPermission:'unknown',verifiedAt:null,message:'本地会话 UI 测试状态'};
+          if(request.operation==='tencentSheet.sessionVerify' && window.verifyGroupConnection){
+            window.verifyGroupConnection=false;
+            const checkedAt=new Date().toISOString(), targetDocumentUrl=request.payload.documentUrl;
+            data={...data,state:'authenticated',browserOpen:true,authentication:'authenticated',authenticationSource:'server',
+              authenticationObservedAt:checkedAt,verifiedAt:checkedAt,documentCheckedAt:checkedAt,documentAccess:'allowed',
+              editPermission:'editable',documentType:'spreadsheet',documentIdentity:targetDocumentUrl,targetDocumentUrl,
+              permissionCheck:{expiresAt:checkedAt}};
+          }
         }
         if(request.operation==='tencentSheet.save'){Object.assign(config,request.payload.config);window.savedConfig=request.payload.config;data={id:'fixture',config,businessDate:'2026-08-31'};}
         if(request.operation==='tencentSite.open')data={message:'已打开本地模拟文档'};

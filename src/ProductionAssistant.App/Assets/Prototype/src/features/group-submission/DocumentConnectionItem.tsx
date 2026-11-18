@@ -15,8 +15,8 @@ export type DocumentSessionEvidence = Omit<TencentSessionStatus, 'editPermission
   authenticationSource?: 'server' | null
 }
 
-export type ConnectionStatus = 'unconfigured' | 'idle' | 'checking' | 'connected' | 'notLoggedIn' | 'invalidLink' | 'readOnly' | 'permissionUnknown' | 'unavailable'
-export type DocumentConnectionState = { state: ConnectionStatus; documentName?: string; checkedAt?: string; expiresAt?: string; reason?: string; loginExpired?: boolean; loginAvailable?: boolean }
+export type ConnectionStatus = 'unconfigured' | 'idle' | 'checking' | 'connected' | 'notLoggedIn' | 'invalidLink' | 'readOnly' | 'accessDenied' | 'unavailable'
+export type DocumentConnectionState = { state: ConnectionStatus; documentName?: string; checkedAt?: string; reason?: string; loginExpired?: boolean; loginAvailable?: boolean }
 export type ConnectionAction = 'connect' | 'check' | 'open' | 'login' | 'replace'
 const states: Record<ConnectionStatus, { label?: string; action?: ConnectionAction; button?: string; className?: string }> = {
   unconfigured: { action: 'connect', button: '连接' },
@@ -26,7 +26,7 @@ const states: Record<ConnectionStatus, { label?: string; action?: ConnectionActi
   notLoggedIn: { label: '需要登录', action: 'login', button: '扫码登录', className: 'border-destructive/40 text-destructive' },
   invalidLink: { label: '不是表格链接', action: 'replace', button: '更换文档', className: 'border-destructive/40 text-destructive' },
   readOnly: { label: '只有查看权限', action: 'open', button: '打开文档', className: 'border-destructive/40 text-destructive' },
-  permissionUnknown: { label: '权限未知', action: 'check', button: '重新核验' },
+  accessDenied: { label: '无权访问', action: 'check', button: '重新检测', className: 'border-destructive/40 text-destructive' },
   unavailable: { label: '无法打开', action: 'check', button: '重新检测', className: 'border-destructive/40 text-destructive' },
 }
 
@@ -43,28 +43,28 @@ export function connectionFromSession(result: DocumentSessionEvidence, expectedT
   if (!result || typeof result.browserOpen !== 'boolean') throw new Error('文档检测响应无效')
   if ((expectedTarget && result.targetDocumentUrl && result.targetDocumentUrl !== expectedTarget)
     || (expectedRevision !== undefined && result.configRevision !== undefined && result.configRevision !== null && result.configRevision !== expectedRevision)) return { state: 'unavailable', reason: '文档配置已变化，请重新检测。' }
-  const evidence = { documentName: result.documentName?.trim() || undefined, checkedAt: result.documentCheckedAt ?? result.authenticationObservedAt ?? undefined, expiresAt: result.permissionCheck?.expiresAt, reason: result.message || undefined,
+  const evidence = { documentName: result.documentName?.trim() || undefined, checkedAt: result.documentCheckedAt ?? result.authenticationObservedAt ?? undefined, reason: result.message || undefined,
     loginAvailable: result.authentication === 'unknown' && ['AuthenticationUnknown', 'SessionTimeout'].includes(result.code ?? '') }
   let identity: string | undefined
   try { const target = new URL(result.targetDocumentUrl ?? ''); identity = target.origin + target.pathname.replace(/\/$/, '') } catch { /* Unknown target cannot establish a connection. */ }
   if (result.code === 'InvalidDocumentUrl' || result.code === 'NotSpreadsheet') return { state: 'invalidLink', ...evidence }
   if (result.authentication === 'required') return { state: 'notLoggedIn', ...evidence, loginExpired: !!result.authenticationPreviouslyConfirmed }
   if (result.state === 'login-required' && result.code === 'LoginCredentialsMissing') return { state: 'notLoggedIn', ...evidence, loginExpired: false }
-  if (result.state === 'unavailable' || result.state === 'access-denied' || result.state === 'profile-busy') return { state: 'unavailable', ...evidence }
+  if (result.state === 'access-denied' || result.documentAccess === 'denied' || result.code === 'AccessDenied') return { state: 'accessDenied', ...evidence }
   if (result.browserOpen && result.documentAccess === 'allowed' && result.editPermission === 'read-only') return { state: 'readOnly', ...evidence }
-  if (result.browserOpen && result.authentication === 'authenticated' && result.documentAccess === 'allowed' && result.editPermission === 'unknown') return { state: 'permissionUnknown', ...evidence }
-  if (result.browserOpen && result.authentication === 'authenticated' && result.authenticationSource === 'server' && !result.authenticationStale
-    && result.documentType === 'spreadsheet' && result.documentIdentity === identity && identity && result.targetDocumentUrl
-    && result.documentAccess === 'allowed' && result.editPermission === 'editable'
-    && result.verifiedAt && Number.isFinite(Date.parse(result.verifiedAt))
-    && result.authenticationObservedAt && Number.isFinite(Date.parse(result.authenticationObservedAt))
-    && result.documentCheckedAt && Number.isFinite(Date.parse(result.documentCheckedAt))) return { state: 'connected', ...evidence, reason: undefined }
-  if (result.code) return { state: 'unavailable', ...evidence }
+  const authenticated = result.browserOpen && result.authentication === 'authenticated' && result.authenticationSource === 'server'
+    && !result.authenticationStale && !!result.authenticationObservedAt && Number.isFinite(Date.parse(result.authenticationObservedAt))
+  const verifiedDocument = result.documentType === 'spreadsheet' && !!identity && result.documentIdentity === identity
+    && result.documentAccess === 'allowed' && !!result.verifiedAt && Number.isFinite(Date.parse(result.verifiedAt))
+    && !!result.documentCheckedAt && Number.isFinite(Date.parse(result.documentCheckedAt))
+  if (authenticated && (verifiedDocument || (result.loginState === 'authenticated' && !!expectedTarget && result.targetDocumentUrl === expectedTarget)))
+    return { state: 'connected', ...evidence, reason: undefined }
+  if (result.code || result.state === 'unavailable' || result.state === 'profile-busy') return { state: 'unavailable', ...evidence }
   return { state: 'idle', ...evidence }
 }
 
-export function DocumentConnectionItem({ connection, url, draft, editing, busy, locked, onDraft, onAction, onCancel, onCopy, onClear }: {
-  connection: DocumentConnectionState; url: string; draft: string; editing: boolean; busy: boolean; locked?: boolean
+export function DocumentConnectionItem({ connection, url, draft, editing, busy, checking, locked, onDraft, onAction, onCancel, onCopy, onClear }: {
+  connection: DocumentConnectionState; url: string; draft: string; editing: boolean; busy: boolean; checking?: boolean; locked?: boolean
   onDraft: (value: string) => void; onAction: (action: ConnectionAction) => void; onCancel: () => void; onCopy: () => void; onClear: () => void
 }) {
   const view = connection.state === 'unavailable' && connection.loginAvailable ? { ...states.unavailable, action: 'login' as const, button: '登录' } : states[connection.state]
@@ -74,7 +74,7 @@ export function DocumentConnectionItem({ connection, url, draft, editing, busy, 
     <ItemContent className="min-w-0 flex-row items-center gap-2">
       {editing ? <Input id="submission-document-url" aria-label="文档链接" type="text" inputMode="url" autoComplete="off" autoFocus={!!url} value={draft} placeholder="粘贴腾讯文档链接" disabled={busy || locked} onChange={event => onDraft(event.target.value)} className="h-9 min-w-0 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent" />
         : <><Tooltip><TooltipTrigger asChild><ItemTitle tabIndex={0} aria-label="文档名称" className="block min-w-0 truncate">{name}</ItemTitle></TooltipTrigger><TooltipContent className="max-w-sm break-all">{url}</TooltipContent></Tooltip>
-          {view.label && <Badge variant="outline" className={'shrink-0 gap-1 ' + (view.className ?? '')} role="status" aria-live="polite">{connection.state === 'checking' && <Spinner aria-label="正在检测文档连接" />}{connection.state === 'notLoggedIn' && connection.loginExpired ? '登录已失效' : view.label}</Badge>}
+          {view.label && <Badge variant="outline" className={'shrink-0 gap-1 ' + (view.className ?? '')} role="status" aria-live="polite">{(checking || connection.state === 'checking') && <Spinner aria-label="正在检测文档连接" />}{connection.state === 'notLoggedIn' && connection.loginExpired ? '登录已失效' : view.label}</Badge>}
           {connection.reason && !['checking', 'idle'].includes(connection.state) && <span className="min-w-0 truncate text-xs text-muted-foreground" title={connection.reason}>{connection.reason}</span>}</>}
     </ItemContent>
     <ItemActions className="shrink-0 gap-1">
