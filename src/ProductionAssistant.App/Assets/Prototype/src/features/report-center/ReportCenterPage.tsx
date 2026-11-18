@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Copy, FileSpreadsheet, LoaderCircle, Settings2, X } from 'lucide-react'
 import { invoke } from '../../bridge/index'
-import { ROUTES } from '../../routes/routeTable'
-import { RouteSkeleton, SkeletonLines } from '../../components/layout/LoadingSkeleton'
+import { useLocalData } from '../../app/LocalData'
 import DatePicker from '../../components/ui/DatePicker'
 import type { ReportCenterState, ReportRunProgress, ReportRunSummary } from '../../lib/types'
 
@@ -20,11 +19,12 @@ const monthLabel = (date: string) => date ? `${date.slice(0, 4)} 年 ${Number(da
 const stageLabels = { prepare: '准备中', collect: '正在导出日报', parse: '正在读取数据', summary: '正在生成汇总', complete: '正在完成' }
 
 export function ReportCenterPage() {
-  const [state, setState] = useState<ReportCenterState>()
+  const local = useLocalData()
+  const [state, setState] = useState<ReportCenterState>(() => local.peek<ReportCenterState>('report.getState')!)
   const [range, setRange] = useState(period)
   const [config, setConfig] = useState<Config>(blankConfig)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [busy, setBusy] = useState<'load' | 'save' | 'auth' | 'run' | undefined>('load')
+  const [busy, setBusy] = useState<'load' | 'save' | 'auth' | 'run' | undefined>(state ? undefined : 'load')
   const [error, setError] = useState('')
   const [settingsError, setSettingsError] = useState('')
   const [result, setResult] = useState<ReportRunSummary>()
@@ -40,7 +40,7 @@ export function ReportCenterPage() {
   async function load() {
     const version = ++operation.current
     locked.current = true; setBusy('load'); setError('')
-    try { const next = await invoke<ReportCenterState>('report.getState'); if (version === operation.current) setState(next) }
+    try { const next = await local.read<ReportCenterState>('report.getState'); if (version === operation.current) setState(next) }
     catch (error) { if (version === operation.current) setError(errorText(error)) }
     finally { if (version === operation.current) { locked.current = false; setBusy(undefined) } }
   }
@@ -66,6 +66,7 @@ export function ReportCenterPage() {
       const next = await invoke<ReportCenterState>('report.saveConfig', payload)
       if (version !== operation.current) return
       setState(next); setSettingsOpen(false); setConfig(blankConfig); setResult(undefined); setProgress(undefined); setFailed(false); setError('')
+      local.set('report.getState', next)
     } catch (error) { if (version === operation.current) setSettingsError(errorText(error)) }
     finally { if (version === operation.current) { locked.current = false; setBusy(undefined) } }
   }
@@ -75,7 +76,7 @@ export function ReportCenterPage() {
     locked.current = true; setBusy('auth'); setError('')
     try {
       await invoke('report.authenticate', undefined, 10 * 60 * 1000)
-      const next = await invoke<ReportCenterState>('report.getState')
+      const next = await local.read<ReportCenterState>('report.getState', undefined, true)
       if (version === operation.current) setState(next)
     } catch (error) { if (version === operation.current) setError(errorText(error)) }
     finally { if (version === operation.current) { locked.current = false; setBusy(undefined) } }
@@ -100,7 +101,6 @@ export function ReportCenterPage() {
     catch { setError('无法复制，请选中文件路径手动复制。') }
   }
 
-  if (busy === 'load' && !state) return <RouteSkeleton route={ROUTES.reportCenter} />
   return <div className="page report-center-page">
     <header className="report-header"><h1>文件统计汇总</h1><div className="report-header-actions">
       <span className="report-status">{busy === 'load' ? '加载中' : state?.authenticated ? '已验证登录' : '未验证登录'}</span>
@@ -133,7 +133,7 @@ export function ReportCenterPage() {
             <dl className="report-result-stats"><div><dt>日报</dt><dd>{result.parsedReports} / {result.plannedReports} 份</dd></div><div><dt>设备</dt><dd>{result.deviceCount} 台</dd></div></dl>
             <div className="report-output"><span>文件位置</span><p>{result.summaryPath}</p><button className="secondary" onClick={copyPath}><Copy />{copied ? '已复制' : '复制路径'}</button></div>
             <details className="report-details"><summary>汇总明细</summary><p>数据点：{result.actualDataPoints} / {result.expectedDataPoints}</p>{result.warnings.map((warning, index) => <p key={index}>{warning}</p>)}</details>
-          </> : <div className="report-empty">{busy === 'run' ? <SkeletonLines rows={4} label="正在加载汇总结果" /> : <FileSpreadsheet />}<strong>{busy === 'run' ? '正在生成汇总' : failed ? '未生成汇总文件' : '尚未生成汇总'}</strong><p>{busy === 'run' ? '完成后可在这里查看文件。' : failed ? '处理错误后，可重新汇总。' : '选择统计范围后开始汇总。'}</p></div>}
+          </> : <div className="report-empty">{busy === 'run' || busy === 'load' ? <LoaderCircle className="spin" /> : <FileSpreadsheet />}<strong>{busy === 'load' ? '正在读取报表配置' : busy === 'run' ? '正在生成汇总' : failed ? '未生成汇总文件' : '尚未生成汇总'}</strong><p>{busy === 'load' ? '配置读取完成后即可选择统计范围。' : busy === 'run' ? '完成后可在这里查看文件。' : failed ? '处理错误后，可重新汇总。' : '选择统计范围后开始汇总。'}</p></div>}
         </div>
       </section>
     </div>

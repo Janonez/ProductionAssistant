@@ -83,7 +83,7 @@ async function main(){
       window.groupFlashes=[];
       window.groupObserver=new MutationObserver(()=>{
         if(document.querySelector('[data-current-page-title]')?.textContent==='集团填报'){
-          const legacy=document.querySelector('.automation-list-page');
+          const legacy=document.querySelector('[data-page-route] .automation-list-page');
           if(legacy)window.groupFlashes.push(legacy.textContent);
         }
       });
@@ -133,6 +133,12 @@ async function main(){
     await historyDialog.getByRole('cell',{name:'0 吨',exact:true}).waitFor();
     await historyDialog.getByText('刷新回读未确认',{exact:true}).waitFor();
     await historyDialog.getByRole('button',{name:'关闭',exact:true}).click();
+    const historyReads=await page.evaluate(()=>window.operations.filter(operation=>operation==='tencentSheet.runs').length);
+    await page.evaluate(()=>{window.retainedHistory=document.querySelector('[aria-label="集团填报历史"]');window.retainedSettings=document.querySelector('[aria-label="集团填报设置"]');});
+    for(const tab of ['设置','记录','设置','记录'])await workbench.getByRole('tab',{name:tab,exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.operations.filter(operation=>operation==='tencentSheet.runs').length),historyReads,'tab navigation reuses local history');
+    assert.equal(await page.evaluate(()=>window.retainedHistory===document.querySelector('[aria-label="集团填报历史"]')&&window.retainedSettings===document.querySelector('[aria-label="集团填报设置"]')),true,'settings and history retain their DOM');
+    assert.equal(await workbench.locator('[data-slot=skeleton],.skeleton-block').count(),0,'local group content has no skeleton');
     await workbench.getByRole('tab',{name:'概览',exact:true}).click();
     for(const width of [1600,960]){
       await page.setViewportSize({width,height:900});
@@ -142,6 +148,7 @@ async function main(){
         for(const tab of ['记录','设置','概览']){
           await workbench.getByRole('tab',{name:tab,exact:true}).click();
           if(tab==='记录'){
+            await workbench.getByRole('button',{name:'刷新记录',exact:true}).click();
             if(count===0)await workbench.getByRole('cell',{name:'暂无执行记录。',exact:true}).waitFor();
             else await page.waitForFunction(count=>document.querySelector('[aria-label="集团填报历史"] tbody')?.rows.length===count,count);
           }

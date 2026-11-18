@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useCallback, useState, type ReactNode } from 'react'
-import { RouteSkeleton } from '../components/layout/LoadingSkeleton'
+import { Spinner } from '../components/ui/spinner'
+import { LocalDataBootstrap, LocalDataProvider } from './LocalData'
 import { navigateInDocument } from '../routes/navigation'
 import { useHostRoute } from '../hooks/useHostRoute'
 import { RouteReady } from '../routes/RouteReady'
@@ -32,8 +33,11 @@ class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void
 
 export function App() {
   const { route, loadId, taskType } = useHostRoute()
-  const groupSubmission = route === ROUTES.dailyReport && taskType === 'tencent_sheet_fill'
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const pageKey = `${route}:${taskType}`
+  const [visited, setVisited] = useState([{ route, taskType, key: pageKey }])
+  if (!visited.some(page => page.key === pageKey)) setVisited([...visited, { route, taskType, key: pageKey }])
+  const pages = [{ route, taskType, key: pageKey }, ...visited.filter(page => page.key !== pageKey)]
 
 
   const goTo = (tag: string) => { navigateInDocument(tag) }
@@ -43,25 +47,29 @@ export function App() {
     window.dispatchEvent(new Event('production-settings-updated'))
   }, [])
 
-  return <ThemeProvider>
+  return <ThemeProvider><LocalDataProvider>
     <AppLayout route={route} taskType={taskType} navigate={goTo} openSettings={() => setSettingsOpen(true)}>
-      <div
-        key={`${route}:${taskType}`}
-        className={groupSubmission ? 'min-w-0' : `pa-legacy-content ${route === ROUTES.productionMessage || route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}`}
-        data-shadcn-surface={groupSubmission ? '' : undefined}
-        data-page-route={route}
+      <LocalDataBootstrap enabled={taskType !== null} />{pages.map(page => {
+        const active = page.key === pageKey
+        const group = page.route === ROUTES.dailyReport && page.taskType === 'tencent_sheet_fill'
+        return <div
+        key={page.key}
+        hidden={!active}
+        style={active ? undefined : { display: 'none' }}
+        className={group ? 'min-w-0' : `pa-legacy-content ${page.route === ROUTES.productionMessage || page.route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}`}
+        data-shadcn-surface={group ? '' : undefined}
+        data-page-route={active ? page.route : undefined}
       >
         <LoadBoundary>
-          <Suspense fallback={<RouteSkeleton route={route} />}>
-            <RouteReady route={route} loadId={loadId} />
+          <Suspense fallback={<p role="status" aria-label="正在加载页面" className="flex items-center gap-2"><Spinner />正在加载页面…</p>}>
+            {active && <RouteReady route={page.route} loadId={loadId} />}
             <LocalServiceBoundary>
-            {taskType === null ? <p role="alert">任务分类无效，请从左侧重新选择业务分类。</p> : route === ROUTES.productionMessage ? <ProductionMessagePage /> : route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : route === ROUTES.planPdf ? <PlanPdfPage /> : route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : groupSubmission ? <GroupSubmissionPage /> : route === ROUTES.dailyReport ? <AutomationPage taskType={taskType} openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
-
+            {page.taskType === null ? <p role="alert">任务分类无效，请从左侧重新选择业务分类。</p> : page.route === ROUTES.productionMessage ? <ProductionMessagePage /> : page.route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{page.route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : page.route === ROUTES.planPdf ? <PlanPdfPage /> : page.route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : group ? <GroupSubmissionPage /> : page.route === ROUTES.dailyReport ? <AutomationPage taskType={page.taskType} openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
             </LocalServiceBoundary>
           </Suspense>
         </LoadBoundary>
-      </div>
+      </div>})}
     </AppLayout>
     {settingsOpen && <LoadBoundary onClose={closeSettings}><SettingsModal open onClose={closeSettings} /></LoadBoundary>}
-  </ThemeProvider>
+  </LocalDataProvider></ThemeProvider>
 }

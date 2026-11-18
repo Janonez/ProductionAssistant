@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { invoke } from '../../bridge/index'
+import { useLocalData } from '../../app/LocalData'
+import { Spinner } from '../../components/ui/spinner'
 import { Button } from '../../components/ui/button'
 import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
@@ -9,14 +10,15 @@ import type { SubmissionRun } from './types'
 
 const sources: Record<string, string> = { manual: '手动填报', 'background-test': '后台测试', automatic: '定时填报' }
 export function SubmissionHistory({ id }: { id?: string }) {
-  const [runs, setRuns] = useState<SubmissionRun[]>([]), [error, setError] = useState(''), [loading, setLoading] = useState(false)
+  const local = useLocalData()
+  const [runs, setRuns] = useState<SubmissionRun[]>(() => local.peek<{ runs: SubmissionRun[] }>('tencentSheet.runs', { id })?.runs ?? []), [error, setError] = useState(''), [loading, setLoading] = useState(() => !!id && !local.peek('tencentSheet.runs', { id }))
   const generation = useRef(0), inFlight = useRef(false)
-  const load = useCallback(async () => {
+  const load = useCallback(async (refresh = false) => {
     if (!id || inFlight.current) return
     const current = ++generation.current
-    inFlight.current = true; setLoading(true); setError('')
+    inFlight.current = true; setLoading(refresh || !local.peek('tencentSheet.runs', { id })); setError('')
     try {
-      const result = await invoke<{ runs: SubmissionRun[] }>('tencentSheet.runs', { id })
+      const result = await local.read<{ runs: SubmissionRun[] }>('tencentSheet.runs', { id }, refresh)
       if (!Array.isArray(result.runs)) throw new Error('历史记录响应无效，请重新读取。')
       if (current === generation.current) setRuns(result.runs)
     } catch (failure) {
@@ -24,12 +26,12 @@ export function SubmissionHistory({ id }: { id?: string }) {
     } finally {
       if (current === generation.current) { inFlight.current = false; setLoading(false) }
     }
-  }, [id])
+  }, [id, local])
   useEffect(() => {
-    inFlight.current = false; setRuns([]); void load()
+    inFlight.current = false; setRuns(local.peek<{ runs: SubmissionRun[] }>('tencentSheet.runs', { id })?.runs ?? []); void load()
     return () => { generation.current++; inFlight.current = false }
   }, [load])
-  return <Card><CardHeader className="flex flex-row items-center justify-between gap-3"><CardTitle><h2>历史记录</h2></CardTitle><Button variant="outline" disabled={!id || loading} onClick={load}>刷新记录</Button></CardHeader>
+  return <Card><CardHeader className="flex flex-row items-center justify-between gap-3"><CardTitle><h2>历史记录</h2></CardTitle><Button variant="outline" disabled={!id || loading} onClick={() => void load(true)}>{loading && <Spinner />}刷新记录</Button></CardHeader>
     <CardContent className="space-y-4">
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {loading && <p role="status" className="text-sm text-muted-foreground">正在读取历史记录…</p>}

@@ -1,5 +1,25 @@
 # ProductionAssistant 交接状态
 
+## Skeleton 整理（2026-11-18，实现及完整验证通过，待人工验收）
+
+- 需求分支 `codex/skeleton-loading`，基线 `91ca643`。原 STATUS / dist 差异已备份，335 个文件及 SHA256 清单保留在 `artifacts/skeleton-loading/baseline-20261117-163759`。
+- 已先盘点再修改，逐项结论见 [加载状态盘点](docs/skeleton-loading-audit.md)。移除本地页面、模块、WinUI 启动层、固定控件及按钮操作的骨架；只保留数据库查询结果与腾讯业务取数的远程表格骨架。统一 hook 延迟 200ms、显示至少 300ms；旧结果刷新保留内容。
+- 本地配置、清单、任务配置/记录在服务 Ready 后并行读入应用内存，同请求复用 Promise；设置对话框重开仍丢弃未保存明文。访问过的路由、集团填报标签和已打开的任务详情保留挂载。执行规则与记录共用历史缓存；明确刷新才重读。认证、权限证据及远程结果不进入本地配置缓存；无效任务分类不启动预读，保留原 Ready 握手语义。
+- 完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 无 SkipRestore / SyncRelease，退出 0；原日志 `artifacts/skeleton-loading/verify-attempt2-20261118.log`。React 52 文件、482 通过 / 1 既有跳过；TypeScript / Vite、浏览器及原 32 组 UI 矩阵、Electron 122/122、.NET 379/379、Release 构建（含 WinUI XAML）及 Development 发布通过。
+- 新测试核对设置→记录→设置及跨路由返回的 DOM 身份、无本地骨架和 list/get/runs/settings 各一次读取；浏览器在 1600 / 960px、空 / 60 条记录下内容边缘稳定。生成的集团填报概览与窄版任务配置截图已查看；这些是隔离浏览器夹具，不代表真实 Electron 现场或腾讯业务写入验收。
+- Build ID `9c8d413e-fded-4391-ae63-f3f067895455`；源 dist、源不可变 Renderer、Development 兼容目录和不可变 Renderer 各 124 文件，清单 / 大小 / SHA256 一致，缺失、差异及多余均 0。dist 是本次前端修改所需的实质构建更新，按授权保留；未还原原件或清理旧备份。
+- 验证历史保留：专项测试曾发现标题 / Tabs 测试操作错误及执行规则重复读取；首轮完整 verify 的 12 项失败涉及无效分类预读回归与旧的卸载 / 重读 / 清空断言，均修正后重新完整通过。原失败日志 `verify-attempt1-20261118.log` 未覆盖；此前补丁上下文和只读路径错误已报告，未用强制手段。
+- 下次入口：用户已授权提交、推送和合并，PR 的 verify 通过后执行 squash 合并。Development 人工验收仍待进行，检查「设置→记录→设置」及切页返回无骨架闪烁、本地页面无骨架。本次验证使用隔离数据。
+
+## PR #95 已合并，合并后完整 verify 通过（2026-11-17）
+
+- 用户通知后核对 GitHub：PR #95 已为 MERGED，合并提交 `91ca6436106a729c44ee303b6f23ce5ed7c649ee`；CI run #202 的 verify job 为 success。未重复执行合并。主目录已切回 main 并 `pull --ff-only`，main / origin/main 均为该提交，文件内容与需求分支一致。
+- 合并后完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 不带 SkipRestore / SyncRelease，退出 0：React 49 文件、478 通过 / 1 既有跳过；TypeScript / Vite、浏览器及原 32 组 UI 矩阵、Electron 122/122、.NET 379/379、Release 构建和 Development 发布通过。原始日志 `artifacts/p3-permissions/post-merge-95-verify.log`。
+- Development 新 Build ID `d741384d-5bca-4f54-9d24-b1b44c9e6dc1`；124 文件与源 dist 及源 / Development 不可变 Renderer 清单、大小、SHA256 一致。authentication / browser / session / runner / permissions 五脚本在源码、Sidecar Release、Development 一致。没有启动应用或执行真实腾讯业务写入，Production / 版本 / 标签 / Release 未变。
+- 已核对本次 `codex/group-document-backend` 顶端等于 PR head `941fbeda41fbe2ade60e9441084a50e880c6749b`；完整哈希和分支名已追加到上级工作区 branch-backup-20261012.txt 并回读一致，仅删除了该已合并本地分支。既存 hotfix 分支与工作树未操作。
+- verify 生成了 dist 实质构建差异，已检查 `git diff --stat --ignore-cr-at-eol` 并报告，保留全部生成物及本交接修改，未自动还原、清理、暂存或提交。完整本机收尾记录与三项 Git 原始输出在 `artifacts/p3-permissions/post-merge-95-summary.md`。
+- 下次入口：用户决定本次合并后 dist 构建差异的处理方式。权限功能与工程说明已进入 main；真实平台未验证边界仍见下方 P3 记录，不把自动化通过扩大为所有权限情形或写入 / 云端保存验收。
+
 ## P3 腾讯文档权限检测（2026-11-17，完整验证及真实界面只读链路通过，Git 交付已授权）
 
 - 继续 `codex/group-document-backend`，基线 `aa3d8de`；原 599 项文件备份及 SHA256 清单在 `artifacts/p3-permissions/baseline*`。实现验证阶段保留前序未提交修改，未切分支或操作既存 hotfix 工作树。用户随后明确授权提交、推送和创建 PR，交付包含本分支累计的网页连接后端、企业微信会话及 P3 权限检测；不授权合并。正式写入 runner 与既有写入方法相对 P3 开始未改；未更新 Production / 版本 / 标签 / Release。

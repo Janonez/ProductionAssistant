@@ -46,7 +46,7 @@ it('opens only on request and contains no manual value or old template controls'
   expect(container.textContent).not.toContain('网页控件录制');
   await act(async () => container.querySelector<HTMLButtonElement>('#tencent-tab-control')!.click());
   expect(container.textContent).toContain('网页控件录制');
-  expect(container.querySelector('input[type="url"]')).toBeNull();
+  expect(container.querySelector('input[type="url"]')?.closest('[hidden]')).not.toBeNull();
   expect(invoke.mock.calls.map(call => call[0])).toEqual(['tencentSheet.get', 'tencentSheet.sessionStatus']);
 });
 
@@ -90,7 +90,7 @@ it('starts without preset business and binds a custom data snapshot to inspectio
   await act(async () => button('后台自动测试并填写').click());
   const background = invoke.mock.calls.find(call => call[0] === 'tencentSheet.backgroundTest');
   expect(background?.[1]).toEqual({ id: 'job', businessDate: undefined });
-  expect(container.querySelector('[role="status"]')?.textContent).toBe('已完成×');
+  expect(container.querySelector('.toast[role="status"]')?.textContent).toBe('已完成×');
   expect(container.querySelector('[role="alert"]')).toBeNull();
   expect(button('后台自动测试并填写').disabled).toBe(false);
   await act(async () => button('测试与上线').click());

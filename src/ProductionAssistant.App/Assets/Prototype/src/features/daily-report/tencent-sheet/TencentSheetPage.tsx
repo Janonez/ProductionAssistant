@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { invoke } from "../../../bridge/index";
-import { TaskSkeleton, SkeletonLines } from '../../../components/layout/LoadingSkeleton';
+import { RemoteTableSkeleton } from '../../../components/layout/LoadingSkeleton';
+import { useDelayedSkeleton } from '../../../hooks/useDelayedSkeleton';
+import { useLocalData } from '../../../app/LocalData';
 import DatePicker from "../../../components/ui/DatePicker";
 import { TencentTemplateTeaching, type LearnedRule } from "./TencentTemplateTeaching";
 import { TencentWebControls, type WebControls } from "./TencentWebControls";
@@ -46,8 +48,11 @@ export function TencentSheetCreate({ onCreated, onCancel }: AutomationTaskCreate
 }
 
 export function TencentSheetPage({ id, changed, back, name }: { id: string; changed: () => void; back?: () => void; name?: string }) {
+  const local = useLocalData();
   const tabs = [{ id: "doc", label: "文档与账号" }, { id: "control", label: "网页控件" }, { id: "fields", label: "业务字段" }, { id: "rule", label: "执行规则" }, { id: "test", label: "测试与上线" }];
-  const [tab, setTab] = useState("doc"), [testMode, setTestMode] = useState("front"), [adding, setAdding] = useState(false);
+  const [tab, changeTab] = useState("doc"), [testMode, setTestMode] = useState("front"), [adding, setAdding] = useState(false);
+  const [controlOpened, setControlOpened] = useState(false);
+  const setTab = (value: string) => { if (value === 'control') setControlOpened(true); changeTab(value); };
   const [runs, setRuns] = useState<{ id: string; time: string; status: string; businessDate: string; message?: string; error?: string }[]>();
   const [job, setJob] = useState<Job>(), [busy, setBusy] = useState(""), [notice, setNotice] = useState(""), [failed, setFailed] = useState(false);
   const [manual, setManual] = useState(false), [date, setDate] = useState("");
@@ -61,6 +66,8 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
   const [selectedField, setSelectedField] = useState(""), [bindingField, setBindingField] = useState("");
   const fieldWorkflow = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<DataResult>();
+  const [dataCurrent, setDataCurrent] = useState(false);
+  const showDataSkeleton = useDelayedSkeleton(busy === '获取 Teable 数据', !!data);
   useEffect(() => {
     if (!notice || failed) return;
     const timer = window.setTimeout(() => setNotice(""), 2400);
@@ -70,7 +77,7 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
   const load = () => invoke<Job>("tencentSheet.get", { id }).then(acceptJob);
   useEffect(() => {
     let active = true;
-    invoke<Job>("tencentSheet.get", { id }).then(job => { if (active) acceptJob(job); }).catch(error => { if (active) { setFailed(true); setNotice(message(error)); } });
+    local.read<Job>("tencentSheet.get", { id }).then(job => { if (active) acceptJob(job); }).catch(error => { if (active) { setFailed(true); setNotice(message(error)); } });
     return () => { active = false; };
   }, [id]);
   useEffect(() => { if (selectedField || bindingField) fieldWorkflow.current?.scrollIntoView?.({ block: "start" }); }, [selectedField, bindingField]);
@@ -79,7 +86,7 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
     try { await run(); } catch (error) { setFailed(true); setNotice(message(error)); }
     finally { setBusy(""); }
   }
-  function invalidate() { setData(undefined); setPreview(undefined); }
+  function invalidate() { setData(undefined); setDataCurrent(false); setPreview(undefined); }
   function edit(config: Config) { setJob(current => current && { ...current, config }); setDirty(true); invalidate(); }
   async function updateField(field: BusinessField, notion?: NotionBinding) {
     invalidate();
@@ -100,7 +107,7 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
     if (result.sheets) setSheets([...new Set(result.sheets)]);
     await load();
   }
-  if (!job) return notice ? <div className="notice" role="alert">{notice}</div> : <TaskSkeleton kind="tencent" />;
+  if (!job) return notice ? <div className="notice" role="alert">{notice}</div> : <p role="status"><LoaderCircle className="spin" />正在读取填报配置…</p>;
   const config = job.config;
   const controlsReady = !!(config.webControls?.sheetTab && config.webControls.cellAddressBox && config.webControls.cellEditor);
   const fields = config.fields ?? [];
@@ -113,8 +120,8 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
     {job.enabled && <div className="banner"><p>定时填报当前处于<strong>已启用</strong>状态。修改任何配置前，请先停用，避免与正在运行的任务冲突。</p><button className="btn btn-secondary" disabled={blocked} onClick={() => action("停用定时填报", async () => { await invoke("automation.setEnabled", { taskType: "tencent_sheet_fill", id, enabled: false }, 60000); await load(); changed(); setNotice("已停用定时填报，现在可以修改配置。"); })}>立即停用</button></div>}
     <div className="status-strip">{[{ ok: controlsReady, text: controlsReady ? "网页控件已录制" : "网页控件待录制" }, { ok: fields.length > 0 && fields.every(field => field.notion && config.rules?.[field.id]), text: `业务字段 ${fields.filter(field => field.notion && config.rules?.[field.id]).length}/${fields.length} 已绑定` }, { ok: !!job.enabled, text: job.enabled ? "定时已启用" : "定时未启用" }].map(item => <span key={item.text} className={`status-chip ${item.ok ? "ok" : "pending"}`}><span className="dot" />{item.text}</span>)}</div>
     <div className="tabs" role="tablist" aria-label="腾讯文档配置">{tabs.map((item, index) => <button key={item.id} id={`tencent-tab-${item.id}`} role="tab" aria-selected={tab === item.id} aria-controls={`tencent-panel-${item.id}`} tabIndex={tab === item.id ? 0 : -1} disabled={blocked} className={`tab ${tab === item.id ? "active" : ""}`} onClick={() => setTab(item.id)} onKeyDown={event => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length; setTab(tabs[next].id); document.getElementById(`tencent-tab-${tabs[next].id}`)?.focus(); }}>{item.label}</button>)}</div>
-    <div className="panel active" key={tab} role="tabpanel" id={`tencent-panel-${tab}`} aria-labelledby={`tencent-tab-${tab}`}>
-    {tab === "doc" && <>
+    <div className="panel active" role="tabpanel" id={`tencent-panel-${tab}`} aria-labelledby={`tencent-tab-${tab}`}>
+    <div hidden={tab !== 'doc'} style={tab === 'doc' ? undefined : { display: 'none' }}>
     <fieldset disabled={blocked} className="card tencent-sheet-panel"><h2>目标文档</h2><p className="hint">填报的目标腾讯共享表格。目标格已有内容时会自动停止，不会覆盖。</p>
       <div data-shadcn-surface="" className="space-y-2"><label htmlFor={`document-url-${id}`}>文档链接</label><Input id={`document-url-${id}`} type="url" disabled={job.enabled} value={config.documentUrl} onChange={event => edit({ ...config, documentUrl: event.target.value })} />
         <p className="text-sm text-muted-foreground">{config.documentUrl !== savedUrl ? "链接尚未保存。保存后才能检查新文档；离开页面会放弃未保存修改。" : "文档链接已保存。切换页面或重启应用后自动恢复。"}</p>
@@ -127,8 +134,8 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
       </details>
     </fieldset>
     <TencentSessionPanel key={id} documentUrl={savedUrl} disabled={dirty || !!busy || teaching || recording} onActive={setSessionBusy} />
-    </>}
-    {tab === "control" && <TencentWebControls key={id} id={id} value={config.webControls} disabled={!!busy || teaching || !!binding || dirty || !!job.enabled} onActive={active => { setRecording(active); if (active) invalidate(); }} onSaved={async () => { await load(); invalidate(); changed(); }} />}
+    </div>
+    <div hidden={tab !== 'control'} style={tab === 'control' ? undefined : { display: 'none' }}>{controlOpened && <TencentWebControls key={id} id={id} value={config.webControls} disabled={!!busy || teaching || !!binding || dirty || !!job.enabled} onActive={active => { setRecording(active); if (active) invalidate(); }} onSaved={async () => { await load(); invalidate(); changed(); }} />}</div>
     {tab === "fields" && <>
     <fieldset disabled={blocked || dirty || job.enabled} className="card tencent-sheet-panel"><div className="add-field-toggle"><div><h2>已绑定的业务字段</h2><p className="hint">取数、月份和填写位置共用本次业务日期。</p></div><button className="secondary" onClick={() => setAdding(!adding)}>+ 添加业务字段</button></div>
       {adding && <div className="add-field-form open"><div className="tencent-sheet-grid"><label>业务字段名称<input value={fieldName} placeholder="例如：合格数量" onChange={event => setFieldName(event.target.value)} /></label><label>单位（可选）<input value={fieldUnit} placeholder="例如：件" onChange={event => setFieldUnit(event.target.value)} /></label></div>
@@ -147,9 +154,9 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
     {testMode === "front" && <fieldset disabled={blocked || dirty} className="test-mode active tencent-test-fields"><p className="test-desc">浏览器可见，手动核对数据与填写位置。获取数据和检查位置不会写入；点击确认填报后才会真实写入文档。</p>
       <label className="tencent-sheet-date-mode"><input type="checkbox" checked={manual} onChange={event => { setManual(event.target.checked); invalidate(); }} />指定补填日期</label>
       {manual ? <DatePicker label="本次业务日期" disabled={!!busy} value={date} onChange={value => { setDate(value); invalidate(); }} /> : <p>按已保存规则计算的业务日期：{data?.date ?? job.businessDate ?? "获取数据时确定"}。本次取数后日期固定，检查与填报沿用同一天。</p>}
-      {<button className="secondary" disabled={!fields.length || (manual && !date) || fields.some(field => (!config.rules?.[field.id] || !field.notion))} onClick={() => action("获取 Teable 数据", async () => { invalidate(); setData(await invoke<DataResult>("tencentSheet.fetch", { id, businessDate: manual ? date : undefined }, 300000)); setNotice("取数完成，请核对来源、日期和数值后检查网页位置。"); })}>获取本次 Teable 数据</button>}
-      {busy === "获取 Teable 数据" && !data && <SkeletonLines rows={4} label="正在加载业务数据" />}{data && <div className="tencent-sheet-table"><p>业务日期：{data.date}</p><table><thead><tr><th>业务字段</th><th>数值</th><th>来源与范围</th><th>记录数</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.value} {row.unit}</td><td>{row.source} · {row.period}</td><td>{row.recordCount}</td></tr>)}</tbody></table></div>}
-      <button className="primary" disabled={!fields.length || (manual && !date) || !data} onClick={() => action("检查填报位置", async () => { setPreview(undefined); const result = await invoke<Preview>("tencentSheet.inspect", { id, dataToken: data?.dataToken, businessDate: data?.date ?? (manual ? date : undefined) }, 300000); setPreview(result); setNotice(result.message); changed(); })}>检查本次数据与位置</button>
+      {<button className="secondary" disabled={!fields.length || (manual && !date) || fields.some(field => (!config.rules?.[field.id] || !field.notion))} onClick={() => action("获取 Teable 数据", async () => { setPreview(undefined); setDataCurrent(false); setData(await invoke<DataResult>("tencentSheet.fetch", { id, businessDate: manual ? date : undefined }, 300000)); setDataCurrent(true); setNotice("取数完成，请核对来源、日期和数值后检查网页位置。"); })}>{busy === '获取 Teable 数据' && <LoaderCircle className="spin" />}获取本次 Teable 数据</button>}
+      {showDataSkeleton && <div className="tencent-sheet-table" aria-label="正在加载业务数据"><p>业务日期：{manual ? date : job.businessDate ?? '正在读取'}</p><RemoteTableSkeleton columns={['业务字段', '数值', '来源与范围', '记录数']} rows={fields.length} /></div>}{data && !showDataSkeleton && <div className="tencent-sheet-table" aria-busy={busy === '获取 Teable 数据'}><p>业务日期：{data.date}</p><table><thead><tr><th>业务字段</th><th>数值</th><th>来源与范围</th><th>记录数</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.id}><td>{row.name}</td><td>{row.value} {row.unit}</td><td>{row.source} · {row.period}</td><td>{row.recordCount}</td></tr>)}</tbody></table></div>}
+      <button className="primary" disabled={!fields.length || (manual && !date) || !data || !dataCurrent} onClick={() => action("检查填报位置", async () => { setPreview(undefined); const result = await invoke<Preview>("tencentSheet.inspect", { id, dataToken: data?.dataToken, businessDate: data?.date ?? (manual ? date : undefined) }, 300000); setPreview(result); setNotice(result.message); changed(); })}>检查本次数据与位置</button>
     </fieldset>
     }
     {testMode === "back" && <fieldset disabled={blocked || dirty} className="test-mode active tencent-test-fields">
@@ -164,7 +171,7 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
       <p>{preview.conflict ? "目标格已有内容，本次不可写入。" : "将仅填写以上空白单元格。确认有效期为 2 分钟。"}</p>
       <button className="primary" disabled={blocked || !preview.token || preview.conflict} onClick={() => action("填报并确认保存", async () => { const current = preview; setPreview(undefined); const result = await invoke<{ message: string }>("tencentSheet.write", { id, dataToken: data?.dataToken, businessDate: current.date, token: current.token }, 310000); setNotice(result.message); changed(); })}>确认填报以上 {preview.rows.length} 项</button>
     </section>}
-    <details className="tencent-run-history"><summary onClick={() => { if (!runs) action("读取运行记录", async () => { const result = await invoke<{ runs: NonNullable<typeof runs> }>("tencentSheet.runs", { id }); setRuns(result.runs); }); }}>运行记录</summary>{busy === "读取运行记录" && !runs && <SkeletonLines label="正在加载运行记录" />}{runs?.map(run => <div key={run.id}><p>{run.time} · {run.businessDate} · {run.status}</p><p>{run.error || run.message}</p></div>)}{runs?.length === 0 && <p>暂无运行记录</p>}</details>
+    <details className="tencent-run-history"><summary onClick={() => { if (!runs && !busy) action("读取运行记录", async () => { const result = await local.read<{ runs: NonNullable<typeof runs> }>("tencentSheet.runs", { id }); setRuns(result.runs); }); }}>运行记录</summary>{busy === "读取运行记录" && !runs && <p role="status"><LoaderCircle className="spin" />正在读取运行记录…</p>}{runs?.map(run => <div key={run.id}><p>{run.time} · {run.businessDate} · {run.status}</p><p>{run.error || run.message}</p></div>)}{runs?.length === 0 && <p>暂无运行记录</p>}</details>
     </>}
     </div>
     <div className={`toast ${notice ? "show" : ""} ${failed ? "error" : ""}`} role={failed ? "alert" : "status"}>{notice}{notice && <button className="ghost" aria-label="关闭提示" onClick={() => setNotice("")}>×</button>}</div>

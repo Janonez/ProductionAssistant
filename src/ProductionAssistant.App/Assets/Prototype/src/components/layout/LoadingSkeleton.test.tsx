@@ -9,7 +9,7 @@ const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-it('keeps task placeholders until data arrives and shows an empty state only after loading', async () => {
+it('keeps fixed task controls without skeletons and shows empty only after local loading', async () => {
   let resolve!: (value: unknown) => void
   invoke.mockImplementation(() => new Promise(done => { resolve = done }))
   const container = document.createElement('div'), root = createRoot(container)
@@ -17,9 +17,11 @@ it('keeps task placeholders until data arrives and shows an empty state only aft
   try {
     await act(async () => root.render(<AutomationPage />))
     expect(container.querySelector('[aria-busy="true"]')).toBeTruthy()
-    expect(container.querySelectorAll('.daily-job-card')).toHaveLength(3)
+    expect(container.querySelectorAll('.daily-job-card')).toHaveLength(0)
+    expect(container.querySelectorAll('.skeleton-block, [data-slot=skeleton]')).toHaveLength(0)
+    expect(container.querySelector('h1')?.textContent).toBe('任务清单')
     expect(container.textContent).not.toContain('还没有自动化任务')
-    expect(container.querySelector('button')).toBeNull()
+    expect(container.querySelector('button')?.disabled).toBe(true)
     await act(async () => resolve({ tasks: [] }))
     expect(container.querySelector('[aria-busy="true"]')).toBeNull()
     expect(container.textContent).toContain('还没有自动化任务')
@@ -47,12 +49,13 @@ it('retains iframe content identity and reserved height across loading', () => {
   setRegionLoading(panel, true)
   expect(panel.getAttribute('aria-busy')).toBe('true')
   setRegionLoading(panel, true)
-  expect(panel.querySelectorAll('.skeleton-region-placeholder')).toHaveLength(1)
-  expect(panel.querySelectorAll('.skeleton-block')).toHaveLength(3)
+  expect(panel.querySelectorAll('[data-loading-status]')).toHaveLength(1)
+  expect(panel.querySelectorAll('.skeleton-block')).toHaveLength(0)
+  expect(field.style.visibility).toBe('')
   setRegionLoading(panel, false)
-  expect(panel.querySelector('.skeleton-region-placeholder')).toBeNull()
+  expect(panel.querySelector('[data-loading-status]')).toBeNull()
   expect(panel.firstChild).toBe(field)
   expect(field.value).toBe('未保存内容')
-  expect(panel.style.minHeight).toBe('100px')
+  expect(panel.style.minHeight).toBe('')
   expect(panel.hasAttribute('aria-busy')).toBe(false)
 })

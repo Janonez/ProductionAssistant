@@ -1,24 +1,22 @@
-// Keep iframe DOM identities and dimensions intact while data is being read.
+// Preserve existing content and DOM identity during iframe actions and local reads.
 export function setRegionLoading(element: HTMLElement | null | undefined, loading: boolean) {
   if (!element) return
-  if (loading) element.style.minHeight = `${Math.max(element.getBoundingClientRect().height, 100)}px`
-  element.classList.toggle('skeleton-region', loading)
-  const placeholder = element.querySelector(':scope > .skeleton-region-placeholder')
+  const status = element.querySelector(':scope > [data-loading-status]')
   if (loading) {
     element.setAttribute('aria-busy', 'true')
-    if (!placeholder) {
-      const overlay = element.ownerDocument.createElement('span')
-      overlay.className = 'skeleton-region-placeholder'
-      overlay.setAttribute('aria-hidden', 'true')
-      for (let i = 0; i < 3; i++) {
-        const line = element.ownerDocument.createElement('span')
-        line.className = 'skeleton-block'
-        overlay.append(line)
-      }
-      element.append(overlay)
+    if (!status) {
+      const row = element.ownerDocument.createElement('span')
+      row.className = 'region-loading-status'
+      row.dataset.loadingStatus = ''
+      row.setAttribute('role', 'status')
+      const spinner = element.ownerDocument.createElement('span')
+      spinner.className = 'status-loader'
+      spinner.setAttribute('aria-hidden', 'true')
+      row.append(spinner, element.ownerDocument.createTextNode('正在读取…'))
+      element.append(row)
     }
   } else {
     element.removeAttribute('aria-busy')
-    placeholder?.remove()
+    status?.remove()
   }
 }

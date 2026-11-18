@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Database, LoaderCircle, Play, Rows3, Sigma } from 'lucide-react'
 import { invoke } from '../../bridge/index'
-import { ROUTES } from '../../routes/routeTable'
-import { RouteSkeleton, SkeletonLines } from '../../components/layout/LoadingSkeleton'
+import { RemoteTableSkeleton } from '../../components/layout/LoadingSkeleton'
+import { useLocalData } from '../../app/LocalData'
+import { useDelayedSkeleton } from '../../hooks/useDelayedSkeleton'
 import { ChoicePicker } from '../../components/ui/FormPickers'
 import DatePicker from '../../components/ui/DatePicker'
 import type { DatabaseSource as Source, DatabaseDataset as Dataset, DatabaseField as Field, DatabaseInspectResult as Result, DatabaseState, DatabaseSchema } from './types'
@@ -10,11 +11,13 @@ import type { DatabaseSource as Source, DatabaseDataset as Dataset, DatabaseFiel
 const today = new Date().toISOString().slice(0, 10)
 
 export function DatabaseViewerPage() {
-  const [provider, setProvider] = useState('')
-  const [usesBusinessSections, setUsesBusinessSections] = useState(false)
-  const [businessSections, setBusinessSections] = useState<string[]>([])
+  const local = useLocalData()
+  const [cached] = useState(() => local.peek<DatabaseState>('database.getState'))
+  const [provider, setProvider] = useState(cached?.provider ?? '')
+  const [usesBusinessSections, setUsesBusinessSections] = useState(cached?.usesBusinessSections ?? false)
+  const [businessSections, setBusinessSections] = useState<string[]>(cached?.businessSections ?? [])
   const [businessSection, setBusinessSection] = useState('')
-  const [sources, setSources] = useState<Source[]>([])
+  const [sources, setSources] = useState<Source[]>(cached?.sources ?? [])
   const [sourceId, setSourceId] = useState('')
   const [datasets, setDatasets] = useState<Dataset[]>([])
   const [datasetId, setDatasetId] = useState('')
@@ -25,12 +28,13 @@ export function DatabaseViewerPage() {
   const [businessDate, setBusinessDate] = useState(today)
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
-  const [busy, setBusy] = useState('load')
+  const [busy, setBusy] = useState(cached ? '' : 'load')
   const [error, setError] = useState('')
   const [result, setResult] = useState<Result>()
+  const showSkeleton = useDelayedSkeleton(busy === 'query', !!result)
 
   useEffect(() => {
-    invoke<DatabaseState>('database.getState')
+    local.read<DatabaseState>('database.getState')
       .then(value => { setProvider(value.provider); setUsesBusinessSections(value.usesBusinessSections); setBusinessSections(value.businessSections); setSources(value.sources) })
       .catch(reason => setError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setBusy(''))
@@ -72,7 +76,6 @@ export function DatabaseViewerPage() {
   const needsCustomRange = rangeKind === 'week' || rangeKind === 'custom'
   const canQuery = sourceId && datasetId && (!supportsDateRanges || dateFieldId && (!needsCustomRange || startDate && endDate))
 
-  if (busy === 'load') return <RouteSkeleton route={ROUTES.databaseViewer} />
   return <div className="page database-viewer-page">
     <header><div><h1>数据库查看</h1><p>按当前适配器提供的目录选择数据库并查看真实 View；目录层级不会由界面写死。</p></div><span className="database-provider"><Database />当前适配器：{provider || '读取中'}</span></header>
     <section className="database-query-panel">
@@ -90,12 +93,12 @@ export function DatabaseViewerPage() {
       <div className="database-query-actions"><button className="primary" disabled={!canQuery || !!busy} onClick={inspect}>{busy === 'query' ? <LoaderCircle className="spin" /> : <Play />}{busy === 'query' ? '正在查询…' : '执行查询'}</button></div>
     </section>
     {error && <div className="notice error" role="alert"><AlertCircle /><div><strong>查询失败</strong><span>{error}</span></div></div>}
-    {busy === 'query' && !result && <section className="database-result"><SkeletonLines rows={6} label="正在加载查询结果" /></section>}
-    {result ? <section className="database-result" aria-busy={busy === 'query'}>
+    {showSkeleton && <section className="database-result" aria-label="正在加载查询结果" aria-busy="true"><div className="database-result-head"><div><h2>{sources.find(source => source.id === sourceId)?.name} · {selectedDataset?.name}</h2><p>正在查询…</p></div><dl><div><dt><Rows3 />命中记录</dt><dd><span className="skeleton-block" aria-hidden="true">&nbsp;</span></dd></div>{supportsDateRanges && <div><dt><Sigma />{selectedValue?.name || '累计值'}</dt><dd><span className="skeleton-block" aria-hidden="true">&nbsp;</span></dd></div>}</dl></div><div className="database-table-wrap"><RemoteTableSkeleton columns={visibleFields.map(field => field.name)} details={visibleFields.map(field => field.type)} rows={4} /></div></section>}
+    {result && !showSkeleton ? <section className="database-result" aria-busy={busy === 'query'}>
       <div className="database-result-head"><div><h2>{result.sourceName} · {result.datasetName}</h2><p>{supportsDateRanges ? `${result.startDate} ～ ${result.endDate}` : '完整 View 结果'}</p></div><dl><div><dt><Rows3 />命中记录</dt><dd>{result.recordCount}</dd></div>{supportsDateRanges && <div><dt><Sigma />{selectedValue?.name || '累计值'}</dt><dd>{result.total ?? '—'}</dd></div>}</dl></div>
       <div className="database-table-wrap"><table><thead><tr>{visibleFields.map(field => <th key={field.id}>{field.name}<small>{field.type}</small></th>)}</tr></thead><tbody>{result.records.map(record => <tr key={record.id}>{visibleFields.map(field => <td key={field.id}>{formatValue(record.values[field.id])}</td>)}</tr>)}</tbody></table></div>
       {result.truncated && <p className="database-truncated">结果仅展示前 200 条，命中数量和累计值按全部记录计算。</p>}
-    </section> : !busy && !error && <section className="database-empty"><Database /><h2>{usesBusinessSections ? '选择业务板块、数据库和 View 后执行查询' : '选择数据库和 View 后执行查询'}</h2><p>普通 View 显示完整结果；“本年截止今日”可进一步选择日期口径。所有操作均为只读。</p></section>}
+    </section> : !busy && !showSkeleton && !error && <section className="database-empty"><Database /><h2>{usesBusinessSections ? '选择业务板块、数据库和 View 后执行查询' : '选择数据库和 View 后执行查询'}</h2><p>普通 View 显示完整结果；“本年截止今日”可进一步选择日期口径。所有操作均为只读。</p></section>}
   </div>
 }
 

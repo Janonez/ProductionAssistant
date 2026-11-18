@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, RefreshCw, Settings2 } from "lucide-react";
 import { invoke } from "../../bridge/index";
-import { SkeletonLines } from '../../components/layout/LoadingSkeleton';
+import { useLocalData } from '../../app/LocalData';
 import DatePicker from "../../components/ui/DatePicker";
 import { ChoicePicker } from "../../components/ui/FormPickers";
 import type { BindingState, Draft, ImportField, ImportResult } from "../../lib/types";
@@ -47,6 +47,7 @@ function fieldStatus(status: string) {
   return ({ new: "新增", same: "一致", confirm: "待确认", exception: "异常", unchecked: "待检查" } as Record<string, string>)[status] || "异常";
 }
 export default function ProductionMessagePage() {
+  const local = useLocalData();
   const [rawMessage, setRawMessage] = useState("");
   const [parsedMessage, setParsedMessage] = useState("");
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -67,7 +68,7 @@ export default function ProductionMessagePage() {
   const needsReparse = parsed && rawMessage !== parsedMessage;
   const locked = Boolean(busy);
   useEffect(() => {
-    invoke<BindingState>("production.getBindings").then((value) => {
+    local.read<BindingState>("production.getBindings").then((value) => {
       setBindings(value);
       setBindingSelections({ cutting: value.selected.cutting || "", towerDaily: value.selected.towerDaily || "" });
     }).catch((cause) => setBindingError(errorText(cause)));
@@ -77,7 +78,7 @@ export default function ProductionMessagePage() {
     setBindingError("");
     try {
       await invoke("production.saveBindings", bindingSelections, 120000);
-      const value = await invoke<BindingState>("production.getBindings");
+      const value = await local.read<BindingState>("production.getBindings", undefined, true);
       setBindings(value); setBindingOpen(false);
     } catch (cause) { setBindingError(errorText(cause)); }
   }
@@ -190,7 +191,7 @@ export default function ProductionMessagePage() {
       </section>
 
       <section className="review-pane">
-        {!parsed ? <div className="review-empty"><h2>解析结果</h2>{busy === 'parse' ? <SkeletonLines rows={5} label="正在加载解析结果" /> : <p>解析消息后，数据库检查结果将在这里显示。</p>}
+        {!parsed ? <div className="review-empty"><h2>解析结果</h2>{busy === 'parse' ? <p role="status"><span className="status-loader" />正在解析消息…</p> : <p>解析消息后，数据库检查结果将在这里显示。</p>}
           {(bindingError || bindings?.configured === false || bindings && (!bindings.cutting.bound || !bindings.towerDaily.bound)) && <div className="pm-notice" role="alert">{bindingError || (bindings?.configured === false ? "数据库连接尚未配置。" : "数据库已变更，请点击右上角“数据库绑定”重新选择下料和塔筒主数据库。")}</div>}
         </div> : <>
           <div className="review-header"><h2>解析结果</h2><div className="review-summary"><span>新增<strong>{summary.newFields}</strong></span><i>·</i><span>一致<strong>{summary.same}</strong></span><i>·</i><span>待确认<strong>{summary.confirm}</strong></span><i>·</i><span>异常<strong>{summary.exception}</strong></span></div></div>
