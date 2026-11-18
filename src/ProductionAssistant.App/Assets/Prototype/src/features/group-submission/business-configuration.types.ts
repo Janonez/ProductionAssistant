@@ -1,7 +1,6 @@
 import { formatDate } from '../../lib/calendar'
 
-// Replaceable frontend view data; not backend DTOs or persisted automation rules.
-export type BusinessDataOption = { value: string; label: string }
+export type BusinessDataOption = { value: string; label: string; sourceId?: string; fieldId?: string }
 export type PositionSample = { date: string; cell: string }
 export type ConfiguredPosition = {
   status: 'configured'
@@ -20,29 +19,28 @@ export type ExecutionRules = {
   time: string
   weekdays: number[]
   missingData: 'wait' | 'skip'
-  retryMinutes: 5 | 10 | 15 | 30
+  retryMinutes: number
   retryUntil: string
-  notify: boolean
-  catchUp: boolean
 }
-export const defaultExecutionRules: ExecutionRules = {
-  automatic: false, time: '09:00', weekdays: [1, 2, 3, 4, 5, 6, 0],
-  missingData: 'wait', retryMinutes: 10, retryUntil: '18:00', notify: false, catchUp: false,
+export type SubmissionConfiguration = {
+  revision: number
+  businesses: BusinessListItem[]
+  rules: ExecutionRules
+  hasBusiness: boolean
+  nextRunAt: string | null
+  dataOptions: BusinessDataOption[]
 }
+export type ConfigurationChange = { rules: ExecutionRules } | { business: BusinessListItem } | { deleteBusinessId: string }
+export type ConfigurationSaveResult = { configuration?: SubmissionConfiguration; error?: string; fieldErrors?: Record<string, string>; conflict?: boolean }
+export type SaveConfiguration = (change: ConfigurationChange) => Promise<ConfigurationSaveResult>
 export type PickEvent =
   | { type: 'waiting' }
   | { type: 'confirmed'; cell: string }
   | { type: 'cancelled' | 'timeout' }
   | { type: 'error'; code: string; message: string }
 export type PickSession = { subscribe: (listener: (event: PickEvent) => void) => () => void; cancel: () => void }
-export interface SubmissionSettingsAdapter {
+export interface SubmissionPositionAdapter {
   isMock: boolean
-  readBusinessDrafts: () => BusinessListItem[]
-  writeBusinessDrafts: (items: readonly BusinessListItem[]) => void
-  subscribeBusinessDrafts: (listener: () => void) => () => void
-  readRuleDraft: () => ExecutionRules
-  listDataSources: () => Promise<readonly BusinessDataOption[]>
-  saveRules: (rules: ExecutionRules) => Promise<ExecutionRules>
   startPick: (businessId: string, date: string) => PickSession
   recognizePosition: (first: PositionSample, second: PositionSample) => Promise<ConfiguredPosition | null>
 }

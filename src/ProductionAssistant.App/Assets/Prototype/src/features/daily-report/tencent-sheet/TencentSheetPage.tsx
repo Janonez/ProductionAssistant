@@ -26,7 +26,7 @@ type Config = {
   businessDateRule?: BusinessDateRule;
   executionSchedule?: ExecutionSchedule;
 };
-type Job = { id: string; config: Config; configRevision?: number; validated?: boolean; businessDate?: string; enabled?: boolean };
+type Job = { id: string; config: Config; configRevision?: number; jobRevision?: number; validated?: boolean; businessDate?: string; enabled?: boolean };
 type Preview = { date: string; sheet: string; token?: string; conflict: boolean; message: string; rows: { label: string; address: string; value: number; current: string; action: string }[] };
 type DataResult = { dataToken: string; date: string; values: Record<string, number>; rows: { id: string; name: string; value: number; unit: string; source: string; period: string; recordCount: number }[] };
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -98,7 +98,7 @@ export function TencentSheetPage({ id, changed, back, name }: { id: string; chan
     }
     changed();
   }
-  async function save() { if (!job) return; const saved = await invoke<Job>("tencentSheet.save", { id, config: job.config, configRevision: job.configRevision ?? 0 }); acceptJob(saved); setDirty(false); invalidate(); changed(); }
+  async function save() { if (!job) return; const saved = await invoke<Job>("tencentSheet.save", { id, config: job.config, configRevision: job.configRevision ?? 0, ...(job.jobRevision !== undefined && { jobRevision: job.jobRevision }) }); acceptJob(saved); setDirty(false); invalidate(); changed(); }
   async function connect(operation: "recognize") {
     if (dirty) await save();
     invalidate();

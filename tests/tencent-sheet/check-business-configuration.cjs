@@ -11,6 +11,7 @@ module.exports = async function checkBusinessConfiguration(page) {
   const rows = business.getByRole('table', { name: '业务列表', exact: true, includeHidden: true }).locator('tbody tr');
   const stepOne = page.getByRole('dialog', { name: /^(新建业务|编辑业务)$/ });
   const stepTwo = page.getByRole('dialog', { name: '设置填报位置', exact: true });
+  await settings.getByRole('heading', { name: '执行规则', exact: true }).waitFor();
   assert.equal(await settings.locator('nav').count(), 0);
   assert.deepEqual(await settings.locator('h2').allTextContents(), ['网页配置', '业务配置', '执行规则']);
   assert.equal(await settings.locator('[data-slot=separator]').count(), 0);
@@ -31,21 +32,30 @@ module.exports = async function checkBusinessConfiguration(page) {
   await empty.click();
   assert.equal(await stepOne.getByRole('button', { name: '下一步', exact: true }).isDisabled(), true);
   const sources = stepOne.getByRole('combobox');
-  await sources.click(); await page.getByRole('option', { name: '设备运行时长（示例）', exact: true }).click();
-  assert.equal(await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).inputValue(), '设备运行时长（示例）');
+  await sources.click(); await page.getByRole('option', { name: '设备 · 运行时长', exact: true }).click();
+  assert.equal(await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).inputValue(), '设备 · 运行时长');
   await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).fill('自定义业务');
-  await sources.click(); await page.getByRole('option', { name: '成品入库量（示例）', exact: true }).click();
+  await sources.click(); await page.getByRole('option', { name: '设备 · 入库量', exact: true }).click();
   assert.equal(await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).inputValue(), '自定义业务');
   await stepOne.getByRole('button', { name: '下一步', exact: true }).click(); await stepTwo.waitFor();
-  assert.equal(await rows.count(), 1);
-  assert.equal(await rows.first().getAttribute('aria-label'), '编辑业务：自定义业务');
-  assert.equal(await stepTwo.getByRole('button', { name: '选择单元格', exact: true }).first().isEnabled(), true);
+  assert.equal(await rows.count(), 0);
   await stepTwo.getByRole('button', { name: '关闭', exact: true }).click();
   await stepTwo.waitFor({ state: 'hidden' });
-  await business.getByRole('row', { name: '编辑业务：自定义业务', exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await rows.count(), 0);
+  await create.click(); await stepOne.waitFor();
+  await sources.click(); await page.getByRole('option', { name: '设备 · 入库量', exact: true }).click();
+  await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).fill('自定义业务');
+  await stepOne.getByRole('button', { name: '下一步', exact: true }).click(); await stepTwo.waitFor();
+  for (const point of ['第一点', '第二点']) {
+    const group = stepTwo.getByRole('group', { name: point, exact: true });
+    await group.getByRole('button', { name: '选择单元格', exact: true }).click();
+    await group.getByRole('button', { name: '重新选择', exact: true }).waitFor();
+  }
+  await stepTwo.getByRole('button', { name: '保存', exact: true }).click();
+  await business.getByRole('row', { name: '编辑业务：自定义业务', exact: true }).waitFor();
   assert.equal(await rows.count(), 1);
   assert.equal(await rows.first().getByRole('cell').first().locator('span').first().textContent(), '自定义业务');
-  assert.ok((await rows.first().textContent()).includes('未设置位置'));
+  assert.equal(await rows.first().locator('[data-slot=badge]').count(), 0);
   assert.equal(await rows.first().getByRole('switch').count(), 0);
   assert.deepEqual(await business.locator('th').allTextContents(), ['业务名称', '操作']);
   assert.equal(await business.getByRole('table').evaluate(table => {
@@ -61,8 +71,8 @@ module.exports = async function checkBusinessConfiguration(page) {
   assert.equal(await stepOne.getByRole('button', { name: '删除业务', exact: true }).count(), 0);
   await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).fill('修改后业务');
   await stepOne.getByRole('button', { name: '下一步', exact: true }).click(); await stepTwo.waitFor();
-  assert.equal(await stepTwo.getByRole('button', { name: '选择单元格', exact: true }).first().isEnabled(), true);
-  await stepTwo.getByRole('button', { name: '关闭', exact: true }).click();
+  assert.equal(await stepTwo.getByRole('button', { name: '重新选取位置', exact: true }).isEnabled(), true);
+  await stepTwo.getByRole('button', { name: '保存', exact: true }).click();
   await stepTwo.waitFor({ state: 'hidden' });
   assert.ok((await rows.first().textContent()).includes('修改后业务'));
   assert.equal(await page.getByRole('dialog').count(), 0);
@@ -72,6 +82,18 @@ module.exports = async function checkBusinessConfiguration(page) {
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click(); await stepOne.waitFor();
   await stepOne.getByRole('button', { name: '取消', exact: true }).click();
   await stepOne.waitFor({ state: 'hidden' });
+  const execution = settings.getByRole('region', { name: '执行规则', exact: true });
+  await page.evaluate(() => { window.rejectGroupSave = true; });
+  await execution.getByRole('switch', { name: '自动填报', exact: true }).click();
+  await execution.getByRole('alert').filter({ hasText: '请刷新后核对你的修改' }).waitFor();
+  assert.equal(await execution.getByRole('switch', { name: '自动填报', exact: true }).isChecked(), true);
+  await execution.getByRole('button', { name: '刷新配置', exact: true }).click();
+  await execution.getByRole('button', { name: '重试保存', exact: true }).click();
+  await execution.getByText('已保存', { exact: true }).waitFor();
+  await execution.getByText(/下次执行：.*08:45/).waitFor();
+  await execution.getByLabel('执行时间', { exact: true }).fill('10:15');
+  await execution.getByText(/下次执行：.*10:15/).waitFor();
+  await execution.getByText('已保存', { exact: true }).waitFor();
   await actions().click(); await page.getByRole('menuitem', { name: '删除', exact: true }).click();
   const confirmation = page.getByRole('alertdialog', { name: '删除业务', exact: true });
   await confirmation.waitFor(); assert.ok((await confirmation.textContent()).includes('修改后业务')); assert.equal(await rows.count(), 1);
@@ -79,10 +101,11 @@ module.exports = async function checkBusinessConfiguration(page) {
   await actions().click(); await page.getByRole('menuitem', { name: '删除', exact: true }).click();
   await confirmation.getByRole('button', { name: '删除业务', exact: true }).click(); await confirmation.waitFor({ state: 'hidden' });
   assert.equal(await rows.count(), 0);
-  await settings.getByRole('switch', { name: '自动填报', exact: true }).click();
-  await page.locator('[data-sonner-toast]').filter({ hasText: '仅保留在当前页面，尚未保存到后端' }).waitFor();
+  await execution.getByText(/下次执行：—/).waitFor();
+  await execution.getByText(/没有可填报的业务/).waitFor();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  assert.deepEqual(await page.evaluate(() => window.operations), operationsAfterCheck, 'businesses and execution-rule preview reuse the connection state without extra checks or writes');
+  assert.deepEqual(await page.evaluate(() => window.operations.filter(operation => !operation.startsWith('groupSubmission.'))),
+    operationsAfterCheck.filter(operation => !operation.startsWith('groupSubmission.')), 'configuration saves do not recheck the connection or call business write operations');
   for (const width of [1600, 960, 720, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const layout = await settings.evaluate(element => ({ width: element.getBoundingClientRect().width, overflow: element.scrollWidth > element.clientWidth }));
@@ -93,5 +116,5 @@ module.exports = async function checkBusinessConfiguration(page) {
   }
   await page.setViewportSize({ width: 1200, height: 900 });
   await workbench.getByRole('tab', { name: '概览', exact: true }).click();
-  console.log('PASS: shared settings width, unified input, honest idle detection, bordered business table, removed enable state, unchanged two-step editing, gated picks, deletion confirmation and local rule toast');
+  console.log('PASS: confirmed business saves, acknowledged scheduling changes, conflict recovery, empty-business guard, and unchanged document connection');
 };

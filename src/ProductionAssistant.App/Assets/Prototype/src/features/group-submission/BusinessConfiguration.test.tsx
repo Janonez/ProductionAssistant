@@ -1,12 +1,15 @@
-import { act } from 'react'
+import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { BusinessConfiguration } from './BusinessConfiguration'
-import { createSubmissionSettingsMock } from './submission-settings.mock'
-import type { BusinessDataOption, BusinessListItem, ConfiguredPosition, PickEvent, SubmissionSettingsAdapter } from './business-configuration.types'
+import { createPositionPreview } from './submission-settings.mock'
+import { configurationFixture } from './submission-configuration.test-fixture'
+import type { BusinessDataOption, BusinessListItem, ConfigurationChange, ConfiguredPosition, PickEvent, SubmissionPositionAdapter } from './business-configuration.types'
 
 const options: BusinessDataOption[] = [{ value: 'source-a', label: '数据库指标甲' }, { value: 'source-b', label: '数据库指标乙' }]
-let container: HTMLDivElement, root: Root, adapter: SubmissionSettingsAdapter, configured: BusinessListItem, mountId = 0
+let container: HTMLDivElement, root: Root, adapter: SubmissionPositionAdapter, configured: BusinessListItem, mountId = 0
+const rejectSave = vi.fn()
+const calls = vi.fn()
 let captures: { emit: (event: PickEvent) => void; late: (event: PickEvent) => void; cancel: ReturnType<typeof vi.fn> }[]
 const originalScroll = HTMLElement.prototype.scrollIntoView
 const dialog = () => document.querySelector<HTMLElement>('[data-slot=dialog-content]')!
@@ -19,7 +22,20 @@ const changeName = async (value: string) => act(async () => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
 })
-const mount = async (items: BusinessListItem[] = [], canPick = true, sources = options) => act(async () => root.render(<BusinessConfiguration key={++mountId} initialItems={items} dataOptions={sources} adapter={adapter} canPick={canPick} />))
+function Harness({ initialItems, canPick, sources }: { initialItems: BusinessListItem[]; canPick: boolean; sources: BusinessDataOption[] }) {
+  const [items, setItems] = useState(initialItems)
+  async function save(change: ConfigurationChange) {
+    calls(change)
+    const error = rejectSave()
+    if (error) return error
+    const businesses = 'business' in change ? [...items.filter(item => item.id !== change.business.id), change.business]
+      : 'deleteBusinessId' in change ? items.filter(item => item.id !== change.deleteBusinessId) : items
+    setItems(businesses)
+    return { configuration: { ...configurationFixture(), businesses } }
+  }
+  return <BusinessConfiguration items={items} dataOptions={sources} adapter={adapter} canPick={canPick} save={save} refresh={async () => undefined} />
+}
+const mount = async (items: BusinessListItem[] = [], canPick = true, sources = options) => act(async () => root.render(<Harness key={++mountId} initialItems={items} canPick={canPick} sources={sources} />))
 async function chooseSource(label: string) {
   const trigger = dialog().querySelector<HTMLButtonElement>('[role=combobox]')!
   await act(async () => { trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })) }); await settle()
@@ -42,7 +58,8 @@ beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 10, 13, 12))
   HTMLElement.prototype.scrollIntoView = vi.fn()
-  captures = []; const mock = createSubmissionSettingsMock()
+  rejectSave.mockReset(); calls.mockClear()
+  captures = []; const mock = createPositionPreview()
   adapter = { ...mock, startPick: vi.fn(() => {
     let listener: ((event: PickEvent) => void) | undefined, last: ((event: PickEvent) => void) | undefined
     const cancel = vi.fn(() => listener?.({ type: 'cancelled' }))
@@ -71,16 +88,15 @@ it('requires a source and autofills its name until the user edits it', async () 
   await changeName('自己命名'); await chooseSource(options[0].label)
   expect(dialog().querySelector<HTMLInputElement>('#business-name')!.value).toBe('自己命名')
 })
-it('commits once on Next and keeps an incomplete business when step two closes', async () => {
+it('keeps an incomplete business inside the dialog and discards it on Cancel', async () => {
   await click(button('新建业务', container)); await chooseSource(options[0].label)
   await act(async () => { const form = dialog().querySelector('form')!; form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) })
   expect(dialog().querySelector('[data-slot=dialog-title]')?.textContent).toBe('设置填报位置')
   expect(button('保存', dialog()).disabled).toBe(true)
-  expect(rows()).toHaveLength(1)
+  expect(rows()).toHaveLength(0)
   await click(dialog().querySelector<HTMLElement>('[aria-label=关闭]')!); await settle()
-  expect(rows()[0].textContent).toContain('未设置位置')
-  expect(rows()[0].querySelector('[role=switch]')).toBeNull()
-  expect(adapter.readBusinessDrafts()[0]).not.toHaveProperty('enabled')
+  expect(rows()).toHaveLength(0)
+  expect(calls).not.toHaveBeenCalled()
   expect(dialog()).toBeNull()
 })
 it('offers a real empty source Select without fabricated options', async () => {
@@ -121,6 +137,7 @@ it('recognizes two supplied cells, previews three days and saves without inventi
   expect(dialog().textContent).toContain('已识别：每天向右移 1 列')
   expect(dialog().querySelectorAll('tbody tr')).toHaveLength(3)
   await click(button('保存', dialog())); await settle()
+  expect(calls).toHaveBeenCalledOnce()
   expect(rows()[0].querySelector('[data-slot=badge]')).toBeNull()
   expect(rows()[0].textContent).not.toMatch(/起|每天|步长|日期轴/)
   expect(rows()[0].textContent).not.toMatch(/F9|G9/)
@@ -143,8 +160,20 @@ it('edits through the same wizard, keeps the saved position when reselecting is 
   await click(button('取消重新选取', dialog()))
   expect(button('保存', dialog()).disabled).toBe(false)
   await click(dialog().querySelector<HTMLElement>('[aria-label=关闭]')!); await settle()
-  expect(rows()[0].textContent).toContain('修改后名称')
+  expect(rows()[0].textContent).toContain('已有业务')
   expect(rows()[0].textContent).not.toContain('B12:AF12')
+})
+it('retains a rejected name and both picked cells so the user can correct the field and save', async () => {
+  rejectSave.mockReturnValueOnce({ error: '请检查标记的字段。', fieldErrors: { 'business.name': '业务名称已存在。' } })
+  await create(); await selectPoint(0, 'F9'); await selectPoint(1, 'G9')
+  await click(button('保存', dialog())); await settle()
+  expect(rows()).toHaveLength(0)
+  expect(dialog().querySelector('#business-name-error')?.textContent).toContain('业务名称已存在')
+  expect(dialog().querySelector<HTMLInputElement>('#business-name')?.value).toBe('任意业务')
+  await changeName('修改后名称'); await next()
+  expect(button('保存', dialog()).disabled).toBe(false)
+  await click(button('保存', dialog())); await settle()
+  expect(rows()[0].textContent).toContain('修改后名称')
 })
 it('uses two columns and badges only for missing or invalid positions', async () => {
   await mount([configured, { id: 'new', name: '未配置业务', position: { status: 'unconfigured' } },

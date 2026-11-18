@@ -2,6 +2,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, expect, it, vi } from 'vitest'
 import { GroupSubmissionPage } from './GroupSubmissionPage'
+import { configurationFixture } from './submission-configuration.test-fixture'
 
 const state = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke: state.invoke }))
@@ -14,6 +15,7 @@ it('renders settings on the first click and confines config reads and failures t
     if (operation === 'automation.list') return new Promise(resolve => { list = resolve })
     if (operation === 'tencentSheet.get') return new Promise((resolve, reject) => { loadConfig = resolve; rejectConfig = reject })
     if (operation === 'tencentSheet.runs') return Promise.resolve({ runs: [] })
+    if (operation === 'groupSubmission.getConfiguration') return Promise.resolve(configurationFixture())
     throw new Error(operation)
   })
   const container = document.createElement('div'); document.body.append(container)

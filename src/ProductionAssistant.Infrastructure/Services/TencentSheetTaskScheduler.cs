@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -8,6 +9,35 @@ namespace ProductionAssistant.Services;
 
 public static class TencentSheetTaskScheduler
 {
+    private sealed record WeeklySchedule(DayOfWeek[] Days, TimeOnly[] Times)
+    {
+        public static WeeklySchedule Create(IEnumerable<int> days, IEnumerable<string> times) =>
+            new(days.Select(day => (DayOfWeek)day).ToArray(), times.Select(time => TimeOnly.ParseExact(time, "HH:mm", CultureInfo.InvariantCulture)).ToArray());
+
+        public DateTimeOffset? Next(DateTimeOffset now, TimeZoneInfo timeZone)
+        {
+            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, timeZone).DateTime);
+            // A week can include a skipped local time at the daylight-saving transition.
+            for (var day = 0; day <= 14; day++)
+            {
+                var date = today.AddDays(day);
+                if (!Days.Contains(date.DayOfWeek)) continue;
+                foreach (var time in Times.Order())
+                {
+                    var local = date.ToDateTime(time);
+                    if (timeZone.IsInvalidTime(local)) continue;
+                    var offset = timeZone.IsAmbiguousTime(local) ? timeZone.GetAmbiguousTimeOffsets(local).Max() : timeZone.GetUtcOffset(local);
+                    var candidate = new DateTimeOffset(local, offset);
+                    if (candidate > now) return candidate;
+                }
+            }
+            return null;
+        }
+    }
+
+    public static DateTimeOffset? NextGroupSubmissionRun(GroupSubmissionRules rules, bool hasBusiness, DateTimeOffset now, TimeZoneInfo timeZone) =>
+        rules.Automatic && hasBusiness ? WeeklySchedule.Create(rules.Weekdays, [rules.Time]).Next(now, timeZone) : null;
+
     public static bool IsAvailable => RuntimeEnvironment.Current.SchedulerEnabled;
     public static string TaskName(string id)
     {
@@ -19,14 +49,15 @@ public static class TencentSheetTaskScheduler
     {
         _ = TaskName(id);
         TencentSheetService.ValidateExecutionRules(config);
-        var schedule = config["executionSchedule"]?.AsObject() ?? throw new InvalidOperationException("请先保存执行星期和时刻。");
+        var executionSchedule = config["executionSchedule"]?.AsObject() ?? throw new InvalidOperationException("请先保存执行星期和时刻。");
+        var schedule = WeeklySchedule.Create(executionSchedule["weekdays"]!.AsArray().Select(day => (int)day!),
+            executionSchedule["times"]!.AsArray().Select(time => (string)time!));
         XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
         XElement E(string name, params object[] content) => new(ns + name, content);
-        string[] days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         return new XDocument(E("Task", new XAttribute("version", "1.2"),
-            E("Triggers", schedule["times"]!.AsArray().Select(time => E("CalendarTrigger",
-                E("StartBoundary", $"2026-01-01T{(string)time!}:00+08:00"), E("Enabled", "true"),
-                E("ScheduleByWeek", E("WeeksInterval", "1"), E("DaysOfWeek", schedule["weekdays"]!.AsArray().Select(day => E(days[(int)day!])).ToArray())))).ToArray()),
+            E("Triggers", schedule.Times.Select(time => E("CalendarTrigger",
+                E("StartBoundary", $"2026-01-01T{time.ToString("HH:mm", CultureInfo.InvariantCulture)}:00+08:00"), E("Enabled", "true"),
+                E("ScheduleByWeek", E("WeeksInterval", "1"), E("DaysOfWeek", schedule.Days.Select(day => E(day.ToString())).ToArray())))).ToArray()),
             E("Principals", E("Principal", new XAttribute("id", "Author"), E("UserId", userId), E("LogonType", "InteractiveToken"), E("RunLevel", "LeastPrivilege"))),
             E("Settings", E("MultipleInstancesPolicy", "IgnoreNew"), E("DisallowStartIfOnBatteries", "false"), E("StopIfGoingOnBatteries", "false"),
                 E("StartWhenAvailable", "false"), E("Enabled", "true"), E("ExecutionTimeLimit", "PT15M")),

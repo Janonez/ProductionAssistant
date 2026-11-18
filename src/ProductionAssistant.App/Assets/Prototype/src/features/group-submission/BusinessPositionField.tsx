@@ -6,13 +6,13 @@ import { Button } from '../../components/ui/button'
 import { Spinner } from '../../components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { BusinessDatePicker } from './BusinessDatePicker'
-import { defaultPositionDates, directionText, positionSummary, type BusinessPosition, type ConfiguredPosition, type PickSession, type SubmissionSettingsAdapter } from './business-configuration.types'
+import { defaultPositionDates, directionText, positionSummary, type BusinessPosition, type ConfiguredPosition, type PickSession, type SubmissionPositionAdapter } from './business-configuration.types'
 
 type Point = { date: string; cell?: string; status: 'idle' | 'waiting' | 'selected' }
 export function BusinessPositionField({ businessId, position, adapter, canPick, reselect = false, onCandidate, onWaiting }: {
   businessId: string
   position: BusinessPosition
-  adapter: SubmissionSettingsAdapter
+  adapter: SubmissionPositionAdapter
   canPick: boolean
   reselect?: boolean
   onCandidate: (position: ConfiguredPosition | undefined) => void

@@ -22,6 +22,7 @@ function installFixture() {
     if(request.operation==='automation.list')data={tasks:state==='unconfigured'?[]:[{id:'ui-fixture',name:'隔离 UI 夹具',taskType:'tencent_sheet_fill'}]};
     if(request.operation==='tencentSheet.get')data={id:'ui-fixture',config,configRevision:1};
     if(request.operation==='tencentSheet.runs')data={runs:[]};
+    if(request.operation==='groupSubmission.getConfiguration')data={revision:0,businesses:[],rules:{automatic:false,time:'09:00',weekdays:[1,2,3,4,5,6,0],missingData:'wait',retryMinutes:10,retryUntil:'18:00'},hasBusiness:false,nextRunAt:null,dataOptions:[]};
     if(request.operation==='tencentSheet.save'){config.documentUrl=request.payload.config.documentUrl;data={id:'ui-fixture',config,configRevision:2};}
     if(request.operation==='tencentSheet.create'){config.documentUrl=request.payload.documentUrl;data={id:'ui-fixture'};}
     if(request.operation.startsWith('tencentSheet.session')){

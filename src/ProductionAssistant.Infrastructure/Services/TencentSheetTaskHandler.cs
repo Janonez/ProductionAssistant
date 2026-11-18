@@ -30,6 +30,8 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
     }
     public static JsonObject Find(string id) => Load().OfType<JsonObject>().FirstOrDefault(job => (string?)job["id"] == id)
         ?? throw new InvalidOperationException("找不到腾讯文档填报任务。");
+    public static int JobRevision(JsonNode? job) => (int?)job?["jobRevision"] ?? (int?)job?["configRevision"] ?? 0;
+
     public static void Save(JsonObject job, bool updateRun = false)
     {
         lock (StoreLock)
@@ -39,12 +41,16 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
             {
                 var jobs = Load();
                 var old = jobs.FirstOrDefault(item => (string?)item?["id"] == (string?)job["id"]);
-                var revision = (int?)old?["configRevision"] ?? 0;
-                if (old is not null && ((int?)job["configRevision"] ?? 0) != revision)
+                var revision = JobRevision(old);
+                if (old is not null && JobRevision(job) != revision)
                     throw new InvalidOperationException("任务配置已被其他操作修改，请重新打开后再保存。");
-                if ((bool?)old?["enabled"] == true && !JsonNode.DeepEquals(old?["config"], job["config"]))
+                var changed = old is not null && !JsonNode.DeepEquals(old["config"], job["config"]);
+                if ((bool?)old?["enabled"] == true && changed)
                     throw new InvalidOperationException("请先停用定时填报，再修改填写配置。");
-                job["configRevision"] = old is not null && !JsonNode.DeepEquals(old["config"], job["config"]) ? revision + 1 : revision;
+                job["jobRevision"] = changed ? checked(revision + 1) : revision;
+                var documentRevision = (int?)old?["configRevision"] ?? 0;
+                var documentChanged = old is not null && !JsonNode.DeepEquals(old["config"]?["documentUrl"], job["config"]?["documentUrl"]);
+                job["configRevision"] = documentChanged ? checked(documentRevision + 1) : documentRevision;
                 if (old is not null && !updateRun)
                     foreach (var key in new[] { "runs", "lastRun", "backgroundValidatedConfig" }) job[key] = old[key]?.DeepClone();
                 if (old is not null) jobs.Remove(old);

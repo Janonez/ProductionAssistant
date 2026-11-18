@@ -1,5 +1,15 @@
 # ProductionAssistant 交接状态
 
+## 集团填报配置持久化（2026-11-18，完整本地验证通过，待人工验收）
+
+- 主目录需求分支 `codex/group-submission-config`，基线 `c0d8dbc`。本次交付包含源码、测试和匹配的 Renderer 产物，按用户指示仅做本地提交。
+- Sidecar 通过 `groupSubmission.getConfiguration` 和 `groupSubmission.saveConfiguration` 管理运行环境数据目录下的 `group-submission-configuration.json`。根字段为 `revision`、`businesses`、`rules`。原子保存锁住读、比较和替换，损坏文件另存 `.corrupt-*.bak` 并记录诊断。缺文件时默认关闭，计划时间为 `09:00`。
+- `configRevision` 原来比较整个旧任务配置，现在只随文档链接变化。旧任务整体并发校验使用 `jobRevision`。新配置有独立 `revision`，业务位置关联原文档 ID 和版本。连接摘要仍沿用现有存储。
+- 业务取自本机 Teable 表和字段映射，选格仍为示例预览。业务只在 Dialog 最终确认时保存，执行规则防抖保存，字段错误和冲突保留输入。配置没有旧 `localStorage` 草稿。现有腾讯文档调度器读取已保存规则并算下一时刻，关闭或没有可用业务时返回空。旧任务仍由 Windows 任务计划读取原配置，错过时不补跑。新规则的任务注册、真实取数、写入和通知为后续任务。
+- 完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 复验退出 0。React 477 通过、1 项既有跳过，浏览器含 36 个连接场景，Electron 122/122，.NET 389/389，Release 构建和 Development 发布通过。初次完整验证因旧 Bridge 白名单总数断言失败，获逐文件授权后已修正。
+- Development Renderer Build `2485eff5-ebc6-48c9-9f1d-7a62198f7f9e`，源码、发布及不可变目录各 124 个文件，SHA-256 无差异。隔离 Electron 真正关闭并重启后，恢复 1 条业务及 `10:35`、周一周三、12 分钟、`18:30` 的规则。保存 `revision` 为 3，文档 `configRevision` 为 7，旧任务文件逐字节一致，外部业务操作为 0。首次沙箱内启动探针超时，后续探针发现执行时间未被自动化输入，改为逐键输入并读回后通过。Production 未更新。
+- 下次入口：用户在 Development 人工查看集团填报配置闭环，并决定后续 Git 交付。真实腾讯文档操作和运行计划触发仍待后续链路验收。
+
 ## Electron 首屏与集团填报设置（2026-11-18，完整验证通过，待人工验收）
 
 - 分支 `codex/startup-submission-settings` 基于 PR #96 的 `3e0a8e1`。上轮 STATUS 和 dist 差异按用户授权保存在 stash `fe5cfc97957a0e76f7284da6b0e2e6348b858adb`。
