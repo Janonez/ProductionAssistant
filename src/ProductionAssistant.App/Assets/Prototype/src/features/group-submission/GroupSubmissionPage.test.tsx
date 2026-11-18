@@ -73,7 +73,7 @@ it('opens the business workbench with four empty metrics, backend date, and no r
   expect(panel.textContent).toContain('尚未接入')
   expect(panel.textContent).not.toMatch(/DOM|iframe|原值|选择器/)
   expect(container.querySelector('.automation-list-page')).toBeNull()
-  expect(invoke).toHaveBeenCalledWith('automation.list', { taskType: 'tencent_sheet_fill' })
+  expect(invoke).toHaveBeenCalledWith('automation.list')
   expect(invoke).toHaveBeenCalledWith('tencentSheet.get', { id: 'group' })
   expect(invoke.mock.calls.some(([operation]) => /fetch|inspect|write|setEnabled|backgroundTest/.test(operation))).toBe(false)
   await act(async () => button('检查文档连接').click())

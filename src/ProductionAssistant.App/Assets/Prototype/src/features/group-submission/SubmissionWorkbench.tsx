@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
-import { Skeleton } from '../../components/ui/skeleton'
 import { Card, CardContent } from '../../components/ui/card'
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '../../components/ui/table'
 
@@ -21,7 +20,7 @@ export function SubmissionWorkbench({ businessDate, connected, configure, loadin
   return <Card><CardContent className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="space-y-2"><label htmlFor="submission-date" className="text-sm font-medium">填报日期</label>
-        {loading ? <Skeleton aria-label="正在读取填报日期" className="h-9 w-44" /> : <Input id="submission-date" className="w-44" type="date" value={date} disabled={!connected} onChange={event => setDate(event.target.value)} />}</div>
+        <Input id="submission-date" aria-label={loading ? '正在读取填报日期' : '填报日期'} aria-busy={loading} className="w-44" type="date" value={date} disabled={!connected || loading} onChange={event => setDate(event.target.value)} /></div>
       <p className="text-sm text-muted-foreground">获取数据 → 检查目标 → 确认填报</p>
     </div>
     <SubmissionDataTable />

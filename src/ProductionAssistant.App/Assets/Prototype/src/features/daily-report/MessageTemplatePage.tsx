@@ -7,7 +7,8 @@ import html from './message-template.html?raw';
 import interFont from '../../../../Fonts/Inter.ttf?url';
 import chineseFont from '../../../../Fonts/NotoSansSC.ttf?url';
 import { invoke } from '../../bridge/index';
-import { TaskSkeleton } from '../../components/layout/LoadingSkeleton';
+import { Spinner } from '../../components/ui/spinner';
+import { useLocalData, type LocalData } from '../../app/LocalData';
 import skeletonStyles from '../../skeleton.css?raw';
 import { setRegionLoading } from '../../lib/skeletonRegion';
 import { getDailyMetrics } from './dailyFieldCache';
@@ -16,6 +17,7 @@ import { mountTemplate, mountStoredDocument, snapshotEditor, timeScopes, type To
 
 type Job = DailyJobDetail & { metricSourceIds?:string[] };
 export function MessageTemplatePage({id,back,changed,openSettings}:{id:string;back:()=>void;changed:()=>unknown;openSettings?:()=>void}) {
+  const local = useLocalData();
   const frame=useRef<HTMLIFrameElement>(null);
   const [error,setError]=useState('');
   const [loading,setLoading]=useState(true);
@@ -24,24 +26,26 @@ export function MessageTemplatePage({id,back,changed,openSettings}:{id:string;ba
     const el=frame.current!;
     setLoading(true);setError('');
     el.onload=()=>{if(!disposed && el.contentDocument?.getElementById('editor'))void Promise.resolve(el.contentDocument.fonts?.ready).then(()=>{if(!disposed)setLoading(false)})};
-    invoke<Job>('daily.get',{id}).then(job=>{
+    local.read<Job>('daily.get',{id}).then(job=>{
       if(disposed)return;
-      const runtime=createMessageRuntime(job,{back,changed,openSettings});
+      const runtime=createMessageRuntime(job,{back,changed,openSettings,readLocal:local.read});
       (el as any).dailyRuntime=runtime;
       // The approved Demo is the source of the live surface, including its script.
       el.srcdoc=html.replace("../../src/ProductionAssistant.App/Assets/Fonts/Inter.ttf",new URL(interFont,window.location.href).href).replace("../../src/ProductionAssistant.App/Assets/Fonts/NotoSansSC.ttf",new URL(chineseFont,window.location.href).href);
     }).catch(e=>{if(!disposed)setError(String(e.message||e))});
     return()=>{disposed=true;el.onload=null;(el as any).dailyRuntime?.dispose();};
   },[id]);
-  return <div className="message-template-host">{error&&<p role="alert">{error}</p>}<iframe ref={frame} title="日报消息模板" style={{visibility:loading?'hidden':undefined}} />{loading&&!error&&<TaskSkeleton />}</div>;
+  return <div className="message-template-host">{error&&<p role="alert">{error}</p>}<iframe ref={frame} title="日报消息模板" style={{visibility:loading?'hidden':undefined}} />{loading&&!error&&<p className="local-load-status" role="status"><Spinner />正在读取任务配置…</p>}</div>;
 }
 
-export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()=>unknown;openSettings?:()=>void}) {
+export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()=>unknown;openSettings?:()=>void;readLocal?:LocalData['read']}) {
   let disposed=false,sending=false;
   let dateRoot:Root|undefined;
   let document:Document|undefined;
   let serial:Promise<any>=Promise.resolve();
   let revision=0;
+  let runsLoaded=false;
+  const readLocal: LocalData['read'] = callbacks.readLocal ?? ((operation,payload)=>invoke(operation,payload));
   let lastResult:any;
   const day=new Date();
   const definitions:TokenChoice[]=job.fields.map(field=>({key:field.placeholder,label:field.label.replace(' · ',''),metric:`${field.databaseId||field.binding?.dataSourceId}:${field.businessId||field.binding?.businessMetricId}`,scope:timeScopes.find(s=>JSON.stringify(s.spec)===JSON.stringify(field.dateRangeSpec))?.key||'legacy',keywords:field.label,field}));
@@ -58,7 +62,7 @@ export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()
   }
   async function settingsUpdated(){
     try{
-      const fresh=await invoke<Job>('daily.get',{id});
+      const fresh=await readLocal<Job>('daily.get',{id});
       if(disposed)return;
       job.notificationConfigured=fresh.notificationConfigured;
       job.sources=fresh.sources;
@@ -107,6 +111,7 @@ export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()
     preview(root:HTMLElement,date:string){
       const preview=document?.querySelector<HTMLElement>('#preview');
       setRegionLoading(preview, true);
+      setRegionLoading(document?.querySelector<HTMLElement>('#preview-generate'), true);
       const snapshot=snapshotEditor(root),current=++revision;
       const task=serial.catch(()=>{}).then(async()=>{
         if(disposed||current!==revision)return {succeeded:false,text:'',message:'内容已修改，请重新生成预览',errors:[]};
@@ -115,7 +120,7 @@ export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()
         const answer={...result,errors:result.fieldErrors||[],message:result.succeeded?'已生成 · '+date:result.message};
         if(current===revision&&!disposed)lastResult=answer;
         return answer;
-      }).finally(()=>setRegionLoading(preview, false));serial=task;return task;
+      }).finally(()=>{setRegionLoading(preview, false);setRegionLoading(document?.querySelector<HTMLElement>('#preview-generate'), false)});serial=task;return task;
     },
     async send(root:HTMLElement,kind:'test'|'today',date:string){
       if(sending)return;
@@ -167,7 +172,7 @@ export function createMessageRuntime(job:Job,callbacks:{back:()=>void;changed:()
       dateRoot.render(<MessageDatePicker input={doc.querySelector<HTMLInputElement>('#date')!} />);
       window.addEventListener('production-settings-updated',settingsUpdated);
       const runs=doc.querySelector<HTMLDetailsElement>('#runs')!;
-      runs.ontoggle=async()=>{if(!runs.open)return;const body=runs.querySelector('p')!;setRegionLoading(body,true);try{const result=await invoke<{runs:DailyRun[]}>('daily.runs',{id});body.textContent=result.runs.length?'':'暂无运行记录';for(const run of result.runs){const row=doc.createElement('div');row.textContent=`${run.time} · ${run.status} · ${run.businessDate}${run.error?' · '+run.error:''}`;body.append(row)}}catch(e){body.textContent=String(e)}finally{setRegionLoading(body,false)}};
+      runs.ontoggle=async()=>{if(!runs.open||runsLoaded)return;runsLoaded=true;const body=runs.querySelector('p')!;setRegionLoading(body,true);try{const result=await readLocal<{runs:DailyRun[]}>('daily.runs',{id});body.textContent=result.runs.length?'':'暂无运行记录';for(const run of result.runs){const row=doc.createElement('div');row.textContent=`${run.time} · ${run.status} · ${run.businessDate}${run.error?' · '+run.error:''}`;body.append(row)}}catch(e){runsLoaded=false;body.textContent=String(e)}finally{setRegionLoading(body,false)}};
       if(!job.notificationConfigured){const banner=doc.createElement('div');banner.className='notice';banner.dataset.notificationNotice='';banner.append(doc.createTextNode('通知渠道尚未配置。 '));const link=doc.createElement('button');link.textContent='通知设置';link.onclick=callbacks.openSettings||null;banner.append(link);doc.querySelector('#message')!.before(banner)}
       controls();loadMetrics().catch(e=>status(String(e)));
     },

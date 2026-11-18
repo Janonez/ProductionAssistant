@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '../bridge/index'
+import { useLocalData } from './LocalData'
 import { clearDailyFieldCache } from '../features/daily-report/dailyFieldCache'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import { Button } from '../components/ui/button'
@@ -43,9 +44,10 @@ const navItems: { key: SettingsPage; label: string; keywords: string; icon: Reac
 ]
 
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const local = useLocalData()
   const [page, setPage] = useState<SettingsPage>('connection')
   const [query, setQuery] = useState('')
-  const [state, setState] = useState<SettingsState | null>(null)
+  const [state, setState] = useState<SettingsState | null>(() => local.peek<SettingsState>('settings.open') ?? null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('settings.open')
@@ -57,7 +59,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     if (!open) return
     setBusy('settings.open')
     setError('')
-    invoke<SettingsState>('settings.open')
+    local.read<SettingsState>('settings.open')
       .then(value => setState(value))
       .catch(reason => setError(reason instanceof Error ? reason.message : '设置加载失败，请重试。'))
       .finally(() => setBusy(''))
@@ -77,6 +79,8 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
       const result = await invoke<SettingsResult>(operation, payload, 60000)
       if (operation === 'settings.refreshDataSources' || operation === 'settings.saveConnection') clearDailyFieldCache(true)
       setState(result.state)
+      local.clear()
+      local.set('settings.open', result.state)
       setMessage(result.message)
       return true
     } catch (reason) {

@@ -7,18 +7,20 @@ import html from './notion-fill.html?raw';
 import interFont from '../../../../../Fonts/Inter.ttf?url';
 import chineseFont from '../../../../../Fonts/NotoSansSC.ttf?url';
 import { invoke } from '../../../bridge/index';
-import { TaskSkeleton } from '../../../components/layout/LoadingSkeleton';
+import { Spinner } from '../../../components/ui/spinner';
+import { useLocalData, type LocalData } from '../../../app/LocalData';
 import skeletonStyles from '../../../skeleton.css?raw';
 import { setRegionLoading } from '../../../lib/skeletonRegion';
 import type { NotionFillJobDetail, NotionFillRun, NotionFillRunNowResult, NotionFillSourceTestResult, NotionFillTestResult } from '../../../lib/types';
 
-type Callbacks = { back: () => void; changed: () => unknown; openSettings?: () => void };
+type Callbacks = { back: () => void; changed: () => unknown; openSettings?: () => void; readLocal?: LocalData['read'] };
 const yesterday = () => {
   const date = new Date(); date.setDate(date.getDate() - 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
 export function NotionFillPage({ id, ...callbacks }: Callbacks & { id: string }) {
+  const local = useLocalData();
   const frame = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -28,9 +30,9 @@ export function NotionFillPage({ id, ...callbacks }: Callbacks & { id: string })
     const el = frame.current!;
     setError('');
     setLoading(true);
-    invoke<NotionFillJobDetail>('notionFill.get', { id }).then(job => {
+    local.read<NotionFillJobDetail>('notionFill.get', { id }).then(job => {
       if (disposed) return;
-      runtime = createNotionFillRuntime(job, callbacks);
+      runtime = createNotionFillRuntime(job, { ...callbacks, readLocal: local.read });
       el.onload = () => { if (!disposed && el.contentDocument?.getElementById('date-picker')) {
         try { runtime!.connect(el.contentDocument); void Promise.resolve(el.contentDocument.fonts?.ready).then(() => { if (!disposed) setLoading(false); }); }
         catch (error) { setError(String(error)); }
@@ -41,7 +43,7 @@ export function NotionFillPage({ id, ...callbacks }: Callbacks & { id: string })
     }).catch(e => { if (!disposed) setError(String(e.message || e)); });
     return () => { disposed = true; el.onload = null; runtime?.dispose(); };
   }, [id]);
-  return <div className="message-template-host">{error && <p role="alert">{error}</p>}<iframe ref={frame} title="原材料自动入库" style={{visibility: loading ? 'hidden' : undefined}} />{loading && !error && <TaskSkeleton kind="notion" />}</div>;
+  return <div className="message-template-host">{error && <p role="alert">{error}</p>}<iframe ref={frame} title="原材料自动入库" style={{visibility: loading ? 'hidden' : undefined}} />{loading && !error && <p className="local-load-status" role="status"><Spinner />正在读取任务配置…</p>}</div>;
 }
 
 export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks: Callbacks) {
@@ -49,6 +51,8 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
   let doc: Document;
   let dateRoot: Root | undefined;
   let disposed = false, busy = false, revision = 0, runsRevision = 0;
+  let runsLoaded = false, runsLoading = false;
+  const readLocal: LocalData['read'] = callbacks.readLocal ?? ((operation, payload) => invoke(operation, payload));
   let selectedDate = yesterday();
   let preview: NotionFillTestResult | undefined;
   let draftEnabled = job.isEnabled;
@@ -73,6 +77,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
     doc.querySelectorAll<HTMLButtonElement | HTMLInputElement>('#settings button, #settings input').forEach(el => el.disabled = busy);
     button('toggle').disabled = busy || !job.schedulingAvailable;
     button('preview').textContent = busy ? '处理中…' : '生成预览';
+    setRegionLoading(button('preview'), busy);
     node('name').textContent = job.name;
     node('enabled').textContent = job.isEnabled ? (job.schedulerInstalled ? '已启用' : '计划异常') : '未启用';
     node('target-name').textContent = job.targetDataSourceName;
@@ -127,20 +132,27 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
     node('runs-body').replaceChildren(...rows);
     if (!runs.length) node('runs-body').textContent = '暂无运行记录';
   }
-  async function loadRuns() {
+  async function loadRuns(refresh = false) {
+    if (runsLoading || (runsLoaded && !refresh)) return;
+    runsLoading = true;
     const version = ++runsRevision;
     setRegionLoading(node('runs-body'), true);
     try {
-      const result = await invoke<{ runs: NotionFillRun[] }>('notionFill.runs', { id: job.id });
-      if (!disposed && version === runsRevision) renderRuns(result.runs);
+      const result = await readLocal<{ runs: NotionFillRun[] }>('notionFill.runs', { id: job.id }, refresh);
+      if (!disposed && version === runsRevision) { renderRuns(result.runs); runsLoaded = true; }
     } catch (error) {
       if (!disposed && version === runsRevision) node('runs-body').textContent = `运行记录读取失败：${errorText(error)}；重新展开可重试。`;
-    } finally { if (!disposed && version === runsRevision) setRegionLoading(node('runs-body'), false); }
+    } finally { runsLoading = false; if (!disposed && version === runsRevision) setRegionLoading(node('runs-body'), false); }
   }
   function changed() { Promise.resolve(callbacks.changed()).catch(() => undefined); }
   async function read(sourceOnly: boolean) {
     if (busy || !selectedDate) return;
-    busy = true; clearPreview('正在读取…');
+    const previousPreview = preview;
+    busy = true; preview = undefined;
+    if (!previousPreview) {
+      node('source-empty').querySelector('strong')!.textContent = '正在读取…';
+      node('target-empty').querySelector('strong')!.textContent = '正在检查…';
+    }
     setRegionLoading(node('source-empty'), true); setRegionLoading(node('target-empty'), true);
     const version = revision;
     controls(); message('');
@@ -156,8 +168,10 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       changed();
     } catch (error) {
       if (disposed || version !== revision) return;
-      clearPreview('本次预览未完成'); node('source-error').hidden = false; node('source-error').textContent = errorText(error);
-    } finally { if (!disposed) { setRegionLoading(node('source-empty'), false); setRegionLoading(node('target-empty'), false); busy = false; controls(); void loadRuns(); } }
+      if (!previousPreview) clearPreview('本次预览未完成');
+      else { node('target-status').hidden = false; node('target-status').textContent = '更新失败，保留上次结果，请重新预览。'; }
+      node('source-error').hidden = false; node('source-error').textContent = errorText(error);
+    } finally { if (!disposed) { setRegionLoading(node('source-empty'), false); setRegionLoading(node('target-empty'), false); busy = false; controls(); void loadRuns(true); } }
   }
   async function run() {
     if (busy || !preview || !dialog('confirm').open) return;
@@ -174,7 +188,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
       message(result.created ? '数据库写入成功。' : '该日期已有记录，本次已跳过。'); changed();
     } catch (error) {
       if (!disposed) { clearPreview('执行未完成，请重新预览'); message(errorText(error), true); }
-    } finally { if (!disposed) { busy = false; controls(); void loadRuns(); } }
+    } finally { if (!disposed) { busy = false; controls(); void loadRuns(true); } }
   }
   function configChanged() {
     return input('task-name').value.trim() !== job.name || input('url').value.trim().replace(/\/+$/, '') !== job.sourcePageUrl ||
@@ -214,7 +228,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
         if (result.enabled !== desiredEnabled) throw new Error(result.message || '定时任务状态未更新');
         saved = true;
       }
-      const fresh = await invoke<NotionFillJobDetail>('notionFill.get', { id: job.id });
+      const fresh = await readLocal<NotionFillJobDetail>('notionFill.get', { id: job.id }, true);
       if (disposed) return;
       job = fresh; dialog('settings').close();
       message(connectionChanged ? '配置已保存，请重新预览后启用。' : '任务设置已保存。');
@@ -226,7 +240,7 @@ export function createNotionFillRuntime(initial: NotionFillJobDetail, callbacks:
     if (busy || disposed) return;
     const version = revision;
     try {
-      const fresh = await invoke<NotionFillJobDetail>('notionFill.get', { id: job.id });
+      const fresh = await readLocal<NotionFillJobDetail>('notionFill.get', { id: job.id });
       if (disposed || busy || version !== revision) return;
       job = fresh; clearPreview('系统设置已更新，请重新预览'); controls();
       message(job.notionConfigured ? '系统设置已更新，点击“生成预览”读取数据。' : '数据库连接尚未配置，仍可仅测试 93 读取。');

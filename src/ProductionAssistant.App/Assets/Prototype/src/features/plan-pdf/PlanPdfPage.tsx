@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { FileCheck2, FolderOpen, LoaderCircle, X } from 'lucide-react'
 import { invoke } from '../../bridge/index'
-import { SkeletonLines } from '../../components/layout/LoadingSkeleton'
 import '../../plan-pdf.css'
 
 interface Audit {
@@ -84,10 +83,10 @@ export function PlanPdfPage() {
             <div className="plan-issues">{audit.issues.filter(issue => filter === '全部' || issue.severity === filter).map((issue, index) => <article key={index}><div><span className={issue.severity === '错误' ? 'plan-severity-error' : ''}>{issue.severity}</span><strong>{issue.sheet}{issue.location && ` · ${issue.location}`}</strong><span>{issue.canAutoFix ? '可自动修复' : '需手动处理'}</span></div><p>{issue.message}</p></article>)}{!audit.issues.some(issue => filter === '全部' || issue.severity === filter) && <p className="plan-clear">{audit.issues.length ? `没有${filter}` : '未发现检查问题'}</p>}</div>
             <div className="plan-next"><span>{errors ? '时间等业务错误必须在 Excel 中手动处理，再重新检查；格式警告可单独修复。' : audit.canExport ? '检查通过，可以导出候选 PDF。' : '格式警告必须修复并复查通过后才能导出。'}</span><button className="secondary" disabled={!!busy || !canRepair} onClick={() => setConfirm('repair')}>{audit.repaired ? '再次修复' : '备份并修复'}</button></div>
             {repair && <details className="plan-details"><summary>备份与修复明细</summary><p>已调整 {repair.changedCells} 个单元格、{repair.changedRows} 行。</p><p>备份：{repair.backupPath}</p></details>}
-          </> : busy === 'audit' ? <SkeletonLines rows={7} label="正在加载计划检查结果" /> : <div className="plan-empty"><FileCheck2 /><strong>尚未检查计划</strong><p>选择月度目录后，查看需要处理的问题。</p></div>}
+          </> : busy === 'audit' ? <p role="status"><LoaderCircle className="spin" />正在检查计划…</p> : <div className="plan-empty"><FileCheck2 /><strong>尚未检查计划</strong><p>选择月度目录后，查看需要处理的问题。</p></div>}
         </section>
         <section className="plan-result"><div className="plan-pane-heading"><h2>导出结果</h2>{output && <span>{output.files.length} 份 PDF</span>}</div>
-          {output ? <><div className="plan-file-list">{output.files.map(file => <p key={file}>{fileName(file)}</p>)}</div><div className="plan-output"><span>文件位置</span><p>{output.outputFolder}</p><button className="secondary" disabled={!!busy} onClick={() => void execute('openOutput')}><FolderOpen />打开输出目录</button></div></> : <div className="plan-empty">{busy === 'export' ? <SkeletonLines rows={4} label="正在加载导出文件" /> : <FileCheck2 />}<strong>{busy === 'export' ? '正在生成候选 PDF' : '尚未导出'}</strong><p>处理全部错误和警告后，在当前月度目录的“生产助手预览”文件夹生成 11 份候选 PDF。</p></div>}
+          {output ? <><div className="plan-file-list">{output.files.map(file => <p key={file}>{fileName(file)}</p>)}</div><div className="plan-output"><span>文件位置</span><p>{output.outputFolder}</p><button className="secondary" disabled={!!busy} onClick={() => void execute('openOutput')}><FolderOpen />打开输出目录</button></div></> : <div className="plan-empty">{busy === 'export' ? <LoaderCircle className="spin" /> : <FileCheck2 />}<strong>{busy === 'export' ? '正在生成候选 PDF' : '尚未导出'}</strong><p>处理全部错误和警告后，在当前月度目录的“生产助手预览”文件夹生成 11 份候选 PDF。</p></div>}
           <div className="plan-export-action"><button className="primary" disabled={!!busy || !audit?.canExport} onClick={() => setConfirm('export')}>{output ? '重新导出 PDF' : '导出 PDF'}</button></div>
         </section>
       </div>

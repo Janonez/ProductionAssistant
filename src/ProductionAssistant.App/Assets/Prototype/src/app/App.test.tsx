@@ -604,7 +604,7 @@ describe('shared operation sidebar', () => {
 
       const settingsCalls = invoke.mock.calls.filter(([operation]) => operation === 'settings.open' || operation === 'settings.close')
       expect(settingsCalls).toEqual([
-        ['settings.open'], ['settings.open'],
+        ['settings.open'],
       ])
       expect(order).toEqual([
         'production-settings-updated',

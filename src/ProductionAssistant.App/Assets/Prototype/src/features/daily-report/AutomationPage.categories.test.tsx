@@ -15,7 +15,8 @@ const summary = (taskType: string, id: string, name: string): AutomationTaskSumm
   taskType, id, name, taskTypeName: taskType, schedule: '手动', isEnabled: false,
   schedulingAvailable: true, status: 'ready', schedulerMessage: '', connectionStatus: '', lastRun: '暂无运行记录',
 })
-const names = () => [...container.querySelectorAll('.automation-task-name')].map(button => button.textContent)
+const current = () => container.querySelector('[data-page-route]') ?? container
+const names = () => [...current().querySelectorAll('.automation-task-name')].map(button => button.textContent)
 const button = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === name)!
 const navigate = async (name: string) => act(async () => {
   container.querySelector<HTMLButtonElement>(`.sidebar-nav button[aria-label="${name}"]`)!.click()
@@ -81,7 +82,7 @@ it('switches categories through the real sidebar and restores the URL-selected c
     if (taskType === 'tencent_sheet_fill') {
       expect(container.querySelector('[aria-label="集团填报工作台"]')).not.toBeNull()
       expect(container.querySelectorAll('[role=tab]')).toHaveLength(3)
-      expect(container.querySelector('.automation-list-page')).toBeNull()
+      expect(current().querySelector('.automation-list-page')).toBeNull()
       expect(container.querySelector('[data-page-route]')?.classList.contains('pa-legacy-content')).toBe(false)
     }
   }
@@ -145,7 +146,7 @@ it.each(['unknown', 'DAILY_REPORT', ' daily_report '])('rejects an invalid URL c
   expect(navigation.querySelector('[aria-current=page]')).toBeNull()
   expect(invoke.mock.calls.some(([operation]) => operation === 'automation.list')).toBe(false)
   await navigate('集团填报')
-  expect(container.querySelector('[role=alert]')).toBeNull()
+  expect(current().querySelector('[role=alert]')).toBeNull()
   expect(names()).toEqual([])
   expect(container.querySelector('[aria-label="集团填报工作台"]')).not.toBeNull()
   expect(new URLSearchParams(location.search).get('taskType')).toBe('tencent_sheet_fill')

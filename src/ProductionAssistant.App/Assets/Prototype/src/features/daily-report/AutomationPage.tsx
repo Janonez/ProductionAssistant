@@ -5,7 +5,7 @@ import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "r
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertTriangle, ArrowLeft, ArrowRight, Ellipsis, FileText, LoaderCircle, Plus, RotateCw, Trash2 } from "lucide-react";
 import { invoke } from "../../bridge/index";
-import { AutomationSkeleton, SkeletonLines } from '../../components/layout/LoadingSkeleton';
+import { useLocalData } from '../../app/LocalData';
 import type { AutomationTaskSummary } from "../../lib/types";
 import { automationTaskTypes, findAutomationTaskType, type AutomationRunView, type AutomationTaskTypeDefinition } from "./automationTaskTypes";
 import { ROUTES, navigationModule, type AutomationTaskFilter } from "../../routes/routeTable";
@@ -19,9 +19,12 @@ const errorNotice = (error: unknown): NoticeValue => ({
 });
 
 export function AutomationPage({ openSettings, taskType = "" }: { openSettings?: () => void; taskType?: AutomationTaskFilter }) {
-  const [tasks, setTasks] = useState<AutomationTaskSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const local = useLocalData();
+  const [tasks, setTasks] = useState<AutomationTaskSummary[]>(() => local.peek<{ tasks: AutomationTaskSummary[] }>('automation.list')?.tasks ?? []);
+  const [loading, setLoading] = useState(() => !local.peek('automation.list'));
   const [selected, setSelected] = useState<AutomationTaskSummary>();
+  const [opened, setOpened] = useState<AutomationTaskSummary[]>([]);
+  if (selected && !opened.some(task => task.taskType === selected.taskType && task.id === selected.id)) setOpened([...opened, selected]);
   const [focusStep, setFocusStep] = useState("");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState<NoticeValue>();
@@ -33,7 +36,7 @@ export function AutomationPage({ openSettings, taskType = "" }: { openSettings?:
   const visibleTasks = taskType ? tasks.filter(task => task.taskType === taskType) : tasks;
   const creatableTypes = automationTaskTypes.filter(definition => availableTypes.includes(definition.taskType) && (!taskType || definition.taskType === taskType));
   const title = navigationModule(ROUTES.dailyReport, taskType)!.name;
-  const refresh = () => invoke<{ tasks: AutomationTaskSummary[]; availableTaskTypes?: string[] }>("automation.list").then((value) => {
+  const refresh = (force = true) => local.read<{ tasks: AutomationTaskSummary[]; availableTaskTypes?: string[] }>("automation.list", undefined, force).then((value) => {
     if (value.availableTaskTypes) setAvailableTypes(value.availableTaskTypes);
     const nextTasks = Array.isArray(value.tasks) ? value.tasks : tasks;
     setTasks(nextTasks);
@@ -43,7 +46,7 @@ export function AutomationPage({ openSettings, taskType = "" }: { openSettings?:
     return nextTasks;
   });
 
-  useEffect(() => { refresh().catch((error) => setNotice(errorNotice(error))).finally(() => setLoading(false)); }, []);
+  useEffect(() => { refresh(false).catch((error) => setNotice(errorNotice(error))).finally(() => setLoading(false)); }, []);
   useEffect(() => {
     setSelected(undefined); setFocusStep(""); setNotice(undefined);
     setMenu(undefined); setDeleteTarget(undefined); setCreateOpen(false); setCreateType("");
@@ -92,31 +95,22 @@ export function AutomationPage({ openSettings, taskType = "" }: { openSettings?:
     try {
       await invoke("automation.delete", { taskType: task.taskType, id: task.id });
       setDeleteTarget(undefined);
+      setOpened(current => current.filter(item => item.taskType !== task.taskType || item.id !== task.id));
       await refresh();
     } catch (error) { setNotice(errorNotice(error)); }
     finally { setBusy(""); }
   }
 
-  if (loading) return <AutomationSkeleton />;
-  if (selected) {
-    const definition = findAutomationTaskType(selected.taskType);
-    if (definition) return <AutomationTaskDetail openSettings={openSettings} task={selected} definition={definition} focusStep={focusStep} notice={notice} refresh={refresh} back={() => {
-      setSelected(undefined);
-      setFocusStep("");
-      setNotice(undefined);
-      refresh();
-    }} />;
-  }
-
-  return <div className="page daily-page automation-list-page">
+  return <><div hidden={!!selected} style={selected ? { display: 'none' } : undefined} className="page daily-page automation-list-page">
     <header>
       <div><h1>{title}</h1><p>{taskType === "tencent_sheet_fill" ? "先新建任务并保存文档链接，再打开浏览器登录和检查；网页控件、业务字段及定时配置保留在任务详情中。" : "管理定时推送与自动填报，查看任务配置和运行情况。"}</p></div>
       <div className="header-actions">
-        <button className="primary" disabled={!creatableTypes.length} onClick={() => { setCreateType(taskType); setCreateOpen(true); }}><Plus />新建任务</button>
+        <button className="primary" disabled={loading || !creatableTypes.length} onClick={() => { setCreateType(taskType); setCreateOpen(true); }}><Plus />新建任务</button>
       </div>
     </header>
     {notice && <div className={`notice ${notice.tone}`} role="status"><div><strong>{notice.title}</strong><span>{notice.message}</span></div></div>}
-    <section className="daily-job-list" aria-label="任务列表">
+    <section className="daily-job-list" aria-label="任务列表" aria-busy={loading}>
+      {loading && <p role="status"><LoaderCircle className="spin" />正在读取任务列表…</p>}
       {visibleTasks.map((task) => <article className={`daily-job-card${["incomplete", "pending-test", "schedule-error"].includes(task.status) ? " needs-attention" : ""}`} key={`${task.taskType}:${task.id}`}
         onClick={() => setSelected(task)} onContextMenu={(event) => {
           event.preventDefault();
@@ -131,7 +125,7 @@ export function AutomationPage({ openSettings, taskType = "" }: { openSettings?:
           onChange={() => toggle(task)} /><span /></label><button type="button" className="automation-task-more" aria-label={`${task.name || "未命名任务"}的更多操作`} aria-haspopup="menu" onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); setMenu({ task, x: Math.min(rect.left, window.innerWidth - 176), y: Math.min(rect.bottom + 4, window.innerHeight - 58) }); }}><Ellipsis /></button></div>
         <div className="automation-card-footer">最近运行：{task.lastRun}</div>
       </article>)}
-      {!visibleTasks.length && <div className="empty-state"><FileText /><h2>{taskType ? `暂无${title}任务` : "还没有自动化任务"}</h2><p>{creatableTypes.length ? "新建任务后进入对应的专用配置界面。" : "当前环境尚未开放此类任务创建。"}</p></div>}
+      {!loading && !notice && !visibleTasks.length && <div className="empty-state"><FileText /><h2>{taskType ? `暂无${title}任务` : "还没有自动化任务"}</h2><p>{creatableTypes.length ? "新建任务后进入对应的专用配置界面。" : "当前环境尚未开放此类任务创建。"}</p></div>}
     </section>
     {!!visibleTasks.length && <p className="automation-list-help">点击任务名称进入配置、运行与定时设置。</p>}
     {menu && <div className="job-context-menu" role="menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(event) => event.stopPropagation()}>
@@ -147,7 +141,12 @@ export function AutomationPage({ openSettings, taskType = "" }: { openSettings?:
         {!createType ? <div className="automation-create-types">{creatableTypes.map(definition => <button key={definition.taskType} onClick={() => setCreateType(definition.taskType)}><strong>{definition.name}</strong><span>{definition.description}</span></button>)}</div>
           : findAutomationTaskType(createType)?.renderCreate({ onCreated: result => created(createType, result), onBack: () => setCreateType(""), onCancel: () => { setCreateOpen(false); setCreateType(""); } })}
       </Dialog.Content></Dialog.Portal></Dialog.Root>
-  </div>;
+  </div>{opened.map(original => {
+    const task = tasks.find(item => item.id === original.id && item.taskType === original.taskType) ?? original;
+    const definition = findAutomationTaskType(task.taskType);
+    const active = selected?.id === task.id && selected.taskType === task.taskType;
+    return definition && <div key={`${task.taskType}:${task.id}`} hidden={!active} style={active ? undefined : { display: 'none' }}><AutomationTaskDetail openSettings={openSettings} task={task} definition={definition} focusStep={active ? focusStep : ''} notice={active ? notice : undefined} refresh={refresh} back={() => { setSelected(undefined); setFocusStep(''); setNotice(undefined); }} /></div>;
+  })}</>;
 }
 
 function AutomationTaskDetail({ openSettings, task, definition, focusStep, notice, refresh, back }: {
@@ -199,7 +198,6 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
     event.preventDefault();
     const next = (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     setTab(tabs[next].id);
-    if (tabs[next].id === "basics") refresh().catch(() => undefined);
     document.getElementById(`automation-tab-${tabs[next].id}`)?.focus();
   }
 
@@ -215,7 +213,7 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
     <div className="automation-tabs" role="tablist" aria-label="任务详情">
       {tabs.map((item, index) => <button type="button" role="tab" id={`automation-tab-${item.id}`} key={item.id}
         aria-selected={tab === item.id} aria-controls={`automation-panel-${item.id}`} tabIndex={tab === item.id ? 0 : -1}
-        onClick={() => { setTab(item.id); if (item.id === "basics") refresh().catch(() => undefined); }} onKeyDown={event => moveTab(event, index)}>{item.label}</button>)}
+        onClick={() => setTab(item.id)} onKeyDown={event => moveTab(event, index)}>{item.label}</button>)}
     </div>
     <div>
     {notice && <div className={`notice ${notice.tone}`} role="status"><div><strong>{notice.title}</strong><span>{notice.message}</span></div></div>}
@@ -228,7 +226,7 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
       {(tab === "runs") && <section className="surface automation-runs"><div className="automation-runs-heading"><div><h2>运行记录</h2><p>查看任务执行结果和错误详情。</p></div><button className="secondary" disabled={loadingRuns} onClick={loadRuns}>{loadingRuns ? <LoaderCircle className="spin" /> : <RotateCw />}刷新</button></div>
         {runsError && <div className="notice error" role="alert"><div><strong>运行记录读取失败</strong><span>{runsError}</span></div></div>}
         <div className="automation-run-list">{runs?.map(run => <details key={run.id}><summary><span>{run.time}</span><span>{run.source}</span><strong>{run.title}</strong><b className={run.error ? "error-text" : ""}>{run.status}</b></summary><div>{run.details.map(detail => <p key={detail}>{detail}</p>)}{run.error && <p className="run-error">错误：{run.error}</p>}</div></details>)}</div>
-        {loadingRuns && !runs && <SkeletonLines label="正在加载运行记录" />}
+        {loadingRuns && !runs && <p role="status"><LoaderCircle className="spin" />正在读取运行记录…</p>}
         {!loadingRuns && runs && !runs.length && <p className="automation-empty">暂无运行记录</p>}
       </section>}
     </div>

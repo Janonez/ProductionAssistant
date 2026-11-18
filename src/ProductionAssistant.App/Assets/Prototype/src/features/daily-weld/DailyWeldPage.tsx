@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Database, RefreshCw, Settings2, SlidersHorizontal, X } from 'lucide-react'
 import { invoke } from '../../bridge/index'
-import { ROUTES } from '../../routes/routeTable'
-import { RouteSkeleton } from '../../components/layout/LoadingSkeleton'
+import { useLocalData } from '../../app/LocalData'
 import DatePicker from '../../components/ui/DatePicker'
 import { ChoicePicker } from '../../components/ui/FormPickers'
 import { NumericInput } from '../../components/ui/NumericInput'
@@ -17,17 +16,18 @@ function currentMonth() {
 }
 
 export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
+  const local = useLocalData()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [month, setMonth] = useState(currentMonth)
   const [total, setTotal] = useState('')
   const [rows, setRows] = useState<WeldRow[]>([])
-  const [state, setState] = useState<WeldState>(EMPTY_STATE)
+  const [state, setState] = useState<WeldState>(() => { const cached = local.peek<WeldState>('weld.getState'); return cached?.binding && Array.isArray(cached.sources) ? cached : EMPTY_STATE })
   const [bindingOpen, setBindingOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<'rules' | 'database'>('database')
-  const [selectedBusiness, setSelectedBusiness] = useState('')
-  const [selectedSource, setSelectedSource] = useState('')
+  const [selectedBusiness, setSelectedBusiness] = useState(() => state.sources.find(source => source.id === state.selected)?.businessSection ?? '')
+  const [selectedSource, setSelectedSource] = useState(state.selected)
   const [overwriteOpen, setOverwriteOpen] = useState(false)
-  const [busy, setBusy] = useState<'state' | 'generate' | 'binding' | 'check' | 'write' | undefined>('state')
+  const [busy, setBusy] = useState<'state' | 'generate' | 'binding' | 'check' | 'write' | undefined>(() => local.peek('weld.getState') ? undefined : 'state')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [progress, setProgress] = useState<WeldProgress>()
@@ -35,7 +35,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
   const writeInFlight = useRef(false)
 
   useEffect(() => {
-    invoke<WeldState>('weld.getState').then(value => {
+    local.read<WeldState>('weld.getState').then(value => {
       const next = value?.binding && Array.isArray(value.sources) ? value : EMPTY_STATE
       setState(next)
       setSelectedBusiness(next.sources.find(source => source.id === next.selected)?.businessSection || '')
@@ -72,6 +72,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
     try {
       const next = await invoke<WeldState>('weld.saveBinding', { sourceId: selectedSource })
       setState(next); setSelectedSource(next.selected); setBindingOpen(false)
+      local.set('weld.getState', next)
     } catch (reason) { setError(reason instanceof Error ? reason.message : '绑定失败') }
     finally { setBusy(undefined) }
   }
@@ -108,10 +109,10 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
   function openBinding() { if (locked) return; setSelectedSource(state.selected); setSelectedBusiness(state.sources.find(source => source.id === state.selected)?.businessSection || ''); setError(''); setSettingsSection('database'); setBindingOpen(true) }
 
   const writePayload = { month, total, rows: rows.map(row => ({ date: row.date, qty: row.qty })) }
-  if (busy === 'state') return <RouteSkeleton route={ROUTES.dailyWeld} />
   return <div className="app-shell"><main className="main-content">
     <header className="content-header"><h1>每日焊接数据模拟</h1><button type="button" className="template-config-button" disabled={locked} aria-label="焊接设置" title="焊接设置" onClick={openBinding}><Settings2 /></button></header>
     <div className="production-message-scroll daily-weld-page">
+      {busy === 'state' && <p role="status">正在读取焊接配置…</p>}
       <ThreeStepProgress current={step} titles={['录入计划', '拆分预览', '完成']} label="焊接计划拆分进度" />
 
       {error && <div className="weld-notice error" role="alert">{error}</div>}

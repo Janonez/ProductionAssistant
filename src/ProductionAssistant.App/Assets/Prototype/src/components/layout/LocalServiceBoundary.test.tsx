@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 afterEach(() => { delete (window as any).paHost; vi.unstubAllGlobals(); vi.resetModules() })
 
-it('keeps a startup skeleton until backend Ready and exposes failure and explicit restart', async () => {
+it('uses a startup spinner until backend Ready and exposes failure and explicit restart', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   let receive!: (event: { data: unknown }) => void
   const postMessage = vi.fn()
@@ -15,6 +15,7 @@ it('keeps a startup skeleton until backend Ready and exposes failure and explici
   try {
     await act(async () => root.render(<LocalServiceBoundary><p>业务内容</p></LocalServiceBoundary>))
     expect(container.textContent).toContain('正在初始化本地服务')
+    expect(container.querySelector('[data-slot=skeleton]')).toBeNull()
     expect(container.textContent).not.toContain('业务内容')
     expect(postMessage).toHaveBeenCalledWith({ type: 'app.serviceState' })
     await act(async () => receive({ data: { type: 'service.state', data: { state: 'Initializing', phase: 'migration' } } }))

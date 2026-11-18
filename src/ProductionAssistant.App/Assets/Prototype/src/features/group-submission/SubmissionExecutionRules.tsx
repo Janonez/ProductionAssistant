@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { invoke } from '../../bridge/index'
+import { useLocalData } from '../../app/LocalData'
 import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Card } from '../../components/ui/card'
 import { Collapsible, CollapsibleContent } from '../../components/ui/collapsible'
@@ -22,6 +23,7 @@ const rowClass = 'min-h-14 rounded-none border-0'
 type ValidationErrors = { time?: string; retryUntil?: string; weekdays?: string }
 
 export function SubmissionExecutionRules({ adapter, job, dataOptions = [] }: { adapter: SubmissionSettingsAdapter; job?: SubmissionJob; dataOptions?: readonly BusinessDataOption[] }) {
+  const local = useLocalData()
   const [rules, setRules] = useState<ExecutionRules>(() => adapter.readRuleDraft())
   const [time, setTime] = useState(rules.time), [retryUntil, setRetryUntil] = useState(rules.retryUntil)
   const [missingData, setMissingData] = useState(rules.missingData)
@@ -40,7 +42,7 @@ export function SubmissionExecutionRules({ adapter, job, dataOptions = [] }: { a
     setLastRun(undefined)
     if (!job?.id) { setHistoryState('loaded'); return }
     setHistoryState('loading')
-    invoke<{ runs: SubmissionRun[] }>('tencentSheet.runs', { id: job.id }).then(result => {
+    local.read<{ runs: SubmissionRun[] }>('tencentSheet.runs', { id: job.id }).then(result => {
       if (!Array.isArray(result?.runs)) throw new Error('执行记录响应无效')
       if (active) {
         setLastRun(result.runs.filter(run => run.time && run.status && Number.isFinite(Date.parse(run.time))).sort((a, b) => Date.parse(b.time) - Date.parse(a.time))[0])

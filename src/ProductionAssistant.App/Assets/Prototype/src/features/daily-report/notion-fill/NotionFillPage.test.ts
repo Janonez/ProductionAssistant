@@ -108,7 +108,9 @@ it('invalidates old previews after a date change or failed read, while zero rema
   invoke.mockRejectedValueOnce(new Error('Notion 该日期存在多条记录'));
   await click('preview');
   expect(node('source-error').textContent).toContain('多条记录');
-  expect(button('run').disabled).toBe(true); expect(node('record').hidden).toBe(true);
+  expect(button('run').disabled).toBe(true); expect(node('record').hidden).toBe(false);
+  expect(node('record-plate').textContent).toBe('0.000 吨');
+  expect(node('target-status').textContent).toContain('更新失败，保留上次结果');
 });
 
 it('serializes operations, locks date and settings while reading, and ignores results after unmount', async () => {

@@ -47,7 +47,7 @@ it('enters group submission without an automation fallback while its list and co
   const oldContent: string[] = []
   const observer = new MutationObserver(() => {
     if (container.querySelector('[data-current-page-title]')?.textContent === '集团填报') {
-      const legacy = container.querySelector('.automation-list-page')
+      const legacy = container.querySelector('[data-page-route] .automation-list-page')
       if (legacy) oldContent.push(legacy.textContent ?? '')
     }
   })

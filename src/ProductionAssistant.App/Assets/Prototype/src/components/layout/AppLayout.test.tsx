@@ -141,9 +141,9 @@ describe('transplanted shadcn application shell', () => {
         expect(workbench).not.toBeNull()
         expect(workbench.querySelector('h1')!.textContent).toBe('集团填报')
         expect([...workbench.querySelectorAll('[role="tab"]')].map(tab => tab.textContent)).toEqual(['概览', '记录', '设置'])
-        expect(container.querySelector('[data-business-page]')).toBeNull()
+        expect(container.querySelector('[data-page-route] [data-business-page]')).toBeNull()
       } else {
-        const business = container.querySelector('[data-business-page]')!
+        const business = container.querySelector('[data-page-route] [data-business-page]')!
         expect(business).not.toBeNull()
         expect(business.getAttribute('data-business-page')).toBe(module.route)
       }
@@ -227,7 +227,8 @@ describe('transplanted shadcn application shell', () => {
     expect(legacy.getAttribute('data-page-route')).toBe('daily-report')
     expect(legacy.hasAttribute('data-shadcn-surface')).toBe(false)
     expect(legacy.querySelector('[data-business-page="daily-report"]')).not.toBeNull()
-    expect(container.querySelector('[aria-label="集团填报工作台"]')).toBeNull()
+    expect(container.querySelector('[data-page-route] [aria-label="集团填报工作台"]')).toBeNull()
+    expect(content.hasAttribute('hidden')).toBe(true)
     expect(new URLSearchParams(location.search).get('taskType')).toBeNull()
     expect(new URLSearchParams(location.search).get('loadId')).toBe('group-document')
     expect(container.querySelector('.pa-shell-theme')).toBe(shell)
@@ -272,7 +273,7 @@ describe('transplanted shadcn application shell', () => {
         expect(container.hasAttribute('aria-hidden')).toBe(false)
         expect(location.search).toBe('?loadId=document-one')
       }
-      expect(invoke.mock.calls.filter(([operation]) => operation === 'settings.open')).toHaveLength(2)
+      expect(invoke.mock.calls.filter(([operation]) => operation === 'settings.open')).toHaveLength(1)
       expect(updated).toHaveBeenCalledTimes(2)
     } finally { window.removeEventListener('production-settings-updated', updated) }
   })
