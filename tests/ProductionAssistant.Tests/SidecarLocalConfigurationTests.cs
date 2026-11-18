@@ -19,6 +19,7 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         "tencentSheet.get", "tencentSheet.runs", "tencentSheet.sources", "tencentSheet.schema", "tencentSheet.views",
         // T1-A migrates local document configuration; document writes remain blocked below.
         "tencentSheet.create", "tencentSheet.save",
+        "groupSubmission.getConfiguration", "groupSubmission.saveConfiguration",
         "notionFill.runs", "settings.open", "automation.list", "daily.list", "daily.get", "daily.runs", "report.getState",
         "settings.saveNotification", "settings.saveNotificationRules", "daily.create", "daily.saveTemplate",
         "tencentSheet.sessionStatus", "tencentSheet.sessionOpen", "tencentSheet.sessionVerify", "tencentSheet.sessionClose",
@@ -173,6 +174,59 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_folder, "tencent-sheet-profile")));
         var write = await restarted.SendAsync("tencentSheet.write", new { id });
         Assert.False(write.GetProperty("ok").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Group_submission_configuration_round_trips_across_processes_without_changing_document_revision()
+    {
+        TeableQuerySettingsStore.Save(new(true, [new("fixture-table", "设备", "测试", "tblFixture",
+            [new("fixture-field", "运行时长", "number", "fldFixture", "number")])]));
+        var id = Guid.NewGuid().ToString("N");
+        var request = new { documentId = id };
+        await using (var first = await SidecarSession.StartAsync(_folder))
+        {
+            AssertSuccess(await first.SendAsync("tencentSheet.create", new { requestId = id, documentUrl = "https://docs.qq.com/sheet/group-config-fixture" }));
+            await using var second = await SidecarSession.StartAsync(_folder);
+            var initial = await first.SendAsync("groupSubmission.getConfiguration", request);
+            AssertSuccess(initial);
+            var data = initial.GetProperty("data");
+            var option = Assert.Single(data.GetProperty("dataOptions").EnumerateArray());
+            Assert.Equal("09:00", data.GetProperty("rules").GetProperty("time").GetString());
+            Assert.Equal(0, (await second.SendAsync("groupSubmission.getConfiguration", request)).GetProperty("data").GetProperty("revision").GetInt32());
+
+            var business = new
+            {
+                id = "business-fixture", name = "运行时长", dataSource = option,
+                position = new { status = "configured", first = new { date = "2026-11-16", cell = "F9" }, second = new { date = "2026-11-17", cell = "G9" }, direction = "right", step = 1 }
+            };
+            var businessSave = await first.SendAsync("groupSubmission.saveConfiguration", new { documentId = id, documentRevision = 0, revision = 0, business });
+            AssertSuccess(businessSave);
+            Assert.True(businessSave.GetProperty("data").GetProperty("configuration").GetProperty("hasBusiness").GetBoolean());
+            var rules = new { automatic = true, time = "07:15", weekdays = new[] { 1, 3 }, missingData = "wait", retryMinutes = 12, retryUntil = "20:30" };
+            var rejected = await second.SendAsync("groupSubmission.saveConfiguration", new { documentId = id, revision = 0, rules });
+            Assert.True(rejected.GetProperty("data").GetProperty("conflict").GetBoolean());
+            var saved = await first.SendAsync("groupSubmission.saveConfiguration", new { documentId = id, revision = 1, rules });
+            AssertSuccess(saved);
+            Assert.NotEqual(JsonValueKind.Null, saved.GetProperty("data").GetProperty("configuration").GetProperty("nextRunAt").ValueKind);
+
+            var oldJob = await first.SendAsync("tencentSheet.save", new { id, configRevision = 0, jobRevision = 0,
+                config = new { executionSchedule = new { weekdays = new[] { 1 }, times = new[] { "10:00" } } } });
+            AssertSuccess(oldJob);
+            Assert.Equal(0, oldJob.GetProperty("data").GetProperty("configRevision").GetInt32());
+            Assert.Equal(1, oldJob.GetProperty("data").GetProperty("jobRevision").GetInt32());
+            var staleOldJob = await first.SendAsync("tencentSheet.save", new { id, configRevision = 0, jobRevision = 0,
+                config = new { executionSchedule = new { weekdays = new[] { 2 }, times = new[] { "11:00" } } } });
+            Assert.False(staleOldJob.GetProperty("ok").GetBoolean());
+        }
+        await using var restarted = await SidecarSession.StartAsync(_folder);
+        var restored = (await restarted.SendAsync("groupSubmission.getConfiguration", request)).GetProperty("data");
+        Assert.Equal(2, restored.GetProperty("revision").GetInt32());
+        Assert.Equal("07:15", restored.GetProperty("rules").GetProperty("time").GetString());
+        Assert.Equal(12, restored.GetProperty("rules").GetProperty("retryMinutes").GetInt32());
+        Assert.Equal("运行时长", Assert.Single(restored.GetProperty("businesses").EnumerateArray()).GetProperty("name").GetString());
+        var original = (await restarted.SendAsync("tencentSheet.get", new { id })).GetProperty("data");
+        Assert.Equal(0, original.GetProperty("configRevision").GetInt32());
+        Assert.False(Directory.Exists(Path.Combine(RuntimeEnvironment.DataDirectory, "tencent-sheet-profile")));
     }
 
     [Fact]

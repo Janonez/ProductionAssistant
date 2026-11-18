@@ -32,11 +32,31 @@ async function main(){
     await page.addInitScript(()=>{
       let receive;
       const config={documentUrl:'https://docs.qq.com/sheet/fixture',fields:[],rules:{}};
+      let groupConfiguration = { revision: 0, businesses: [], hasBusiness: false, nextRunAt: null,
+        rules: { automatic: false, time: '08:45', weekdays: [1, 2, 3, 4, 5, 6, 0], missingData: 'wait', retryMinutes: 10, retryUntil: '18:00' },
+        dataOptions: [{ value: 'table/runtime', label: '设备 · 运行时长', sourceId: 'table', fieldId: 'runtime' },
+          { value: 'table/stock', label: '设备 · 入库量', sourceId: 'table', fieldId: 'stock' }] };
       window.chrome={webview:{addEventListener:(_,fn)=>receive=fn,postMessage:request=>{
         if(!request.id)return;
         window.operations=(window.operations||[]).concat(request.operation);
         let data=request.operation==='automation.list'?{availableTaskTypes:['daily_report','notion_fill','tencent_sheet_fill'],tasks:[{id:'fixture',taskType:'tencent_sheet_fill',taskTypeName:'腾讯文档填报',name:'生产月报填报（本地测试数据）',schedule:'手动测试',isEnabled:false,schedulingAvailable:false,status:'pending-test',connectionStatus:'腾讯文档',lastRun:'暂无运行记录'}]}:request.operation==='tencentSheet.get'?{id:'fixture',config,businessDate:'2026-08-31'}:{};
         if(request.operation==='tencentSheet.create'){config.documentUrl=request.payload.documentUrl;data={id:'fixture'};}
+        if(request.operation==='groupSubmission.getConfiguration')data=structuredClone(groupConfiguration);
+        if(request.operation==='groupSubmission.saveConfiguration'){
+          const {revision, business, deleteBusinessId, rules} = request.payload;
+          if(revision !== groupConfiguration.revision || window.rejectGroupSave) {
+            window.rejectGroupSave = false;
+            data = { error: '配置已在其他窗口更新。请刷新后核对你的修改。', conflict: true };
+          } else {
+            if(business) groupConfiguration.businesses = [...groupConfiguration.businesses.filter(item => item.id !== business.id), business];
+            if(deleteBusinessId) groupConfiguration.businesses = groupConfiguration.businesses.filter(item => item.id !== deleteBusinessId);
+            if(rules) groupConfiguration.rules = rules;
+            groupConfiguration.hasBusiness = groupConfiguration.businesses.length > 0;
+            groupConfiguration.nextRunAt = groupConfiguration.hasBusiness && groupConfiguration.rules.automatic ? '2026-11-25T'+groupConfiguration.rules.time+':00' : null;
+            groupConfiguration.revision++;
+            data = { configuration: structuredClone(groupConfiguration) };
+          }
+        }
         if(request.operation==='tencentSheet.runs')data={runs:[{id:'old-run',businessDate:'2026-08-30',time:'2026-08-31 08:30:00',source:'automatic',status:'失败或待确认',phase:'write',error:'刷新回读未确认',data:[{Id:'cut',Name:'下料量',Value:0,Unit:'吨',Source:'本地历史来源',Period:'2026-08-30',RecordCount:1}]}]};
         if(request.operation==='tencentSheet.runs'&&Number.isInteger(window.historyCount))data.runs=Array.from({length:window.historyCount},(_,index)=>({...data.runs[0],id:`run-${index}`}));
         if(request.operation.startsWith('tencentSheet.session')){

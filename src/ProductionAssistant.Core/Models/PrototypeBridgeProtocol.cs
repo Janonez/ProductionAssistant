@@ -30,6 +30,7 @@ public static class PrototypeBridgeProtocol
         "automation.setEnabled",
         "automation.delete",
         "tencentSheet.create", "tencentSheet.get", "tencentSheet.save",
+        "groupSubmission.getConfiguration", "groupSubmission.saveConfiguration",
         "tencentSheet.sessionStatus", "tencentSheet.sessionOpen", "tencentSheet.sessionVerify", "tencentSheet.sessionClose",
         "tencentSheet.sessionClear", "tencentSheet.sessionLoginBegin", "tencentSheet.sessionLoginStatus", "tencentSheet.sessionLoginRefresh", "tencentSheet.sessionLoginCancel",
         "tencentSheet.sessionLoginConsent", "tencentSheet.sessionLoginAgreement",

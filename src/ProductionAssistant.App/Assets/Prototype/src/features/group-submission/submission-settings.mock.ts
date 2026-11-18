@@ -1,24 +1,12 @@
 import { formatDate } from '../../lib/calendar'
-import { defaultExecutionRules, defaultPositionDates, type PickEvent, type PositionSample, type SubmissionSettingsAdapter } from './business-configuration.types'
-import { businessConfigurationMock } from './business-configuration.mock'
+import { defaultPositionDates, type PickEvent, type PositionSample, type SubmissionPositionAdapter } from './business-configuration.types'
 
-// Only this adapter synthesizes cells and rules. Replace it with real source/pick services later.
-export function createSubmissionSettingsMock({ pickDelay = 900, outcomes = [] as PickEvent[] } = {}): SubmissionSettingsAdapter {
+// Cell picking remains a preview until the document recording flow is connected.
+export function createPositionPreview({ pickDelay = 900, outcomes = [] as PickEvent[] } = {}): SubmissionPositionAdapter {
   const queued = [...outcomes]
   const anchor = dateNumber(defaultPositionDates().firstDate)
-  let businessDrafts = structuredClone([...businessConfigurationMock])
-  let ruleDraft = structuredClone(defaultExecutionRules)
-  const businessListeners = new Set<() => void>()
   return {
     isMock: true,
-    readBusinessDrafts() { return structuredClone(businessDrafts) },
-    writeBusinessDrafts(items) { businessDrafts = structuredClone([...items]); businessListeners.forEach(listener => listener()) },
-    subscribeBusinessDrafts(listener) { businessListeners.add(listener); return () => { businessListeners.delete(listener) } },
-    readRuleDraft() { return structuredClone(ruleDraft) },
-    async listDataSources() {
-      return [{ value: 'preview-runtime', label: '设备运行时长（示例）' }, { value: 'preview-stock', label: '成品入库量（示例）' }]
-    },
-    async saveRules(rules) { ruleDraft = structuredClone(rules); return structuredClone(ruleDraft) },
     startPick(_businessId, date) {
       let listener: ((event: PickEvent) => void) | undefined
       let finished = false

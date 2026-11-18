@@ -57,7 +57,8 @@ Renderer 经 Electron IPC 和 .NET Sidecar 请求文档级操作。`TencentSessi
 | 登录 Cookie 和站点资料 | 对应运行环境数据目录下的 `tencent-sheet-profile`，由 Playwright 持久化 Edge Context 管理 |
 | 认证、文档与位置的实时证据 | Node Worker 内存。认证快照、文档缓存、模型及区域响应分别受账号、页面和会话变化约束 |
 | 文档行连接摘要 | Electron Renderer 的 `localStorage`，按任务 ID 和配置版本检查。摘要含文档名和核验时间 |
-| 文档链接和已接入的任务规则 | 对应运行环境数据目录下的 `tencent-sheet-jobs.json`。新版业务及执行规则草稿仍在 Renderer 内存 |
+| 文档链接和旧任务规则 | 对应运行环境数据目录下的 `tencent-sheet-jobs.json`。`configRevision` 随文档链接变化，旧任务整体配置的并发检查使用 `jobRevision` |
+| 集团填报业务及执行规则 | 同一数据目录下独立的 `group-submission-configuration.json`，由 Sidecar 原子保存并维护自己的 `revision`。业务位置关联文档 ID 与文档版本 |
 
 后续可由 Sidecar 原子持久化连接摘要和明确的授权状态变化，按环境、Profile 代次、文档身份及目标配置版本关联。界面启动先读取摘要。Worker 在换号、清除登录、收到明确撤权或确定文档变化时更新状态；超时和未知结果作为运行诊断。实时权限仍由 Worker 管理，执行时按实际账号、页面及本次目标决定是否可复用。凭据继续由 Edge Profile 管理。
 

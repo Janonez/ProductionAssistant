@@ -85,6 +85,8 @@ public sealed partial class OperationDispatcher
             var expectedRevision = payload.TryGetProperty("configRevision", out var revision) ? revision.GetInt32() : 0;
             if (expectedRevision != ((int?)job["configRevision"] ?? 0))
                 throw new InvalidOperationException("任务配置已变化，请重新打开后再修改。");
+            if (payload.TryGetProperty("jobRevision", out var jobRevision) && jobRevision.GetInt32() != TencentSheetTaskHandler.JobRevision(job))
+                throw new InvalidOperationException("任务配置已变化，请重新打开后再修改。");
             var config = job["config"]!.DeepClone().AsObject();
             // Recording and field flows own controls, positions and data bindings.
             foreach (var key in new[] { "documentUrl", "sheetReferenceName", "businessDateRule", "executionSchedule" })
@@ -142,8 +144,21 @@ public sealed partial class OperationDispatcher
     private static JsonObject TencentSheetPresentation(JsonObject job)
     {
         var result = job.DeepClone().AsObject();
+        result["jobRevision"] = TencentSheetTaskHandler.JobRevision(job);
         result["config"] = job["config"]!.DeepClone().AsObject();
         result["businessDate"] = TencentSheetService.ResolveBusinessDate(DateTimeOffset.Now, job["config"]!.AsObject()).ToString("yyyy-MM-dd");
         return result;
+    }
+
+    private object GroupSubmissionConfiguration(JsonElement payload, bool save)
+    {
+        var id = ReadString(payload, "documentId");
+        var job = string.IsNullOrEmpty(id) ? null : TencentSheetTaskHandler.Load().OfType<JsonObject>()
+            .FirstOrDefault(item => (string?)item["id"] == id);
+        var document = job is null ? null : new GroupSubmissionDocument(id, (int?)job["configRevision"] ?? 0);
+        var sources = TeableQuerySettingsStore.Load().Sources.SelectMany(source => source.Fields.Select(field =>
+            new GroupSubmissionSource($"{source.Id}/{field.Id}", $"{source.Name} · {field.Name}", source.Id, field.Id))).ToArray();
+        var store = new GroupSubmissionConfigurationStore(Path.Combine(RuntimeEnvironment.DataDirectory, GroupSubmissionConfigurationStore.FileName), _host.Mark);
+        return save ? store.Save(payload, document, sources) : store.Read(document, sources);
     }
 }

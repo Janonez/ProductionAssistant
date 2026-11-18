@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { GroupSubmissionPage } from './GroupSubmissionPage'
+import { configurationFixture } from './submission-configuration.test-fixture'
 import { settleModuleImports } from '../../test-utils/settle-module-imports'
 import type { SubmissionJob, SubmissionRun } from './types'
 
@@ -40,6 +41,7 @@ beforeEach(() => {
   invoke.mockReset().mockImplementation(async (operation: string, payload: any) => {
     if (operation === 'automation.list') return { tasks }
     if (operation === 'tencentSheet.get') return structuredClone({ ...job, id: payload.id })
+    if (operation === 'groupSubmission.getConfiguration') return configurationFixture()
     if (operation === 'tencentSheet.create') {
       job = { ...job, id: 'created', config: { ...job.config, documentUrl: payload.documentUrl } }
       return { id: 'created' }

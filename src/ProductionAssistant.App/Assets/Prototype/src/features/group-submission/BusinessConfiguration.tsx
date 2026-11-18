@@ -1,36 +1,38 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { MoreHorizontal, Plus } from 'lucide-react'
+import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../../components/ui/alert-dialog'
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../../components/ui/alert-dialog'
 import { BusinessConfigDialog } from './BusinessConfigDialog'
-import { createSubmissionSettingsMock } from './submission-settings.mock'
-import type { BusinessDataOption, BusinessListItem, SubmissionSettingsAdapter } from './business-configuration.types'
+import type { BusinessDataOption, BusinessListItem, ConfigurationSaveResult, SaveConfiguration, SubmissionConfiguration, SubmissionPositionAdapter } from './business-configuration.types'
 
-export function BusinessConfiguration({ initialItems, dataOptions = [], adapter: suppliedAdapter, canPick = false, connected = canPick, documentUrl }: {
-  initialItems?: readonly BusinessListItem[]
-  dataOptions?: readonly BusinessDataOption[]
-  adapter?: SubmissionSettingsAdapter
+export function BusinessConfiguration({ items, dataOptions, adapter, save, refresh, canPick = false, connected = canPick }: {
+  items: readonly BusinessListItem[]
+  dataOptions: readonly BusinessDataOption[]
+  adapter: SubmissionPositionAdapter
+  save: SaveConfiguration
+  refresh: () => Promise<SubmissionConfiguration | undefined>
   canPick?: boolean
   connected?: boolean
-  documentUrl?: string
 }) {
-  const [adapter] = useState(() => suppliedAdapter ?? createSubmissionSettingsMock())
-  const [items, setItems] = useState<readonly BusinessListItem[]>(() => structuredClone(initialItems ?? adapter.readBusinessDrafts()))
-  useEffect(() => { adapter.writeBusinessDrafts(items) }, [adapter, items])
   const [editor, setEditor] = useState<{ business?: BusinessListItem } | null>(null)
   const [removal, setRemoval] = useState<BusinessListItem | null>(null)
+  const [removalError, setRemovalError] = useState<ConfigurationSaveResult>()
+  const [removing, setRemoving] = useState(false)
   const newButton = useRef<HTMLButtonElement>(null), returnFocus = useRef<HTMLElement | null>(null), openingDialog = useRef(false)
-  const previousDocument = useRef(documentUrl)
-  useEffect(() => {
-    if (!documentUrl) return
-    if (previousDocument.current && previousDocument.current !== documentUrl) {
-      setItems(current => current.map(item => item.position.status === 'configured' ? { ...item, position: { ...item.position, status: 'invalid' } } : item))
-    }
-    previousDocument.current = documentUrl
-  }, [documentUrl])
+
+  async function remove() {
+    if (!removal || removing) return
+    setRemoving(true)
+    setRemovalError(undefined)
+    const result = await save({ deleteBusinessId: removal.id })
+    if (result.configuration) setRemoval(null)
+    else setRemovalError(result)
+    setRemoving(false)
+  }
   function restoreFocus(event: Event) {
     event.preventDefault(); openingDialog.current = false
     if (returnFocus.current?.isConnected) returnFocus.current.focus()
@@ -55,7 +57,7 @@ export function BusinessConfiguration({ initialItems, dataOptions = [], adapter:
             onFocus={event => { returnFocus.current = event.currentTarget }} onPointerDown={event => { returnFocus.current = event.currentTarget }}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" onCloseAutoFocus={event => { if (openingDialog.current) event.preventDefault() }}>
               <DropdownMenuItem onSelect={() => { openingDialog.current = true; setEditor({ business: item }) }}>编辑</DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onSelect={() => { openingDialog.current = true; setRemoval(item) }}>删除</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onSelect={() => { openingDialog.current = true; setRemovalError(undefined); setRemoval(item) }}>删除</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </TableCell>
@@ -66,18 +68,15 @@ export function BusinessConfiguration({ initialItems, dataOptions = [], adapter:
         <span className="block text-muted-foreground">业务由数据来源与文档中的填报位置构成，例如：设备运行时长，位于 AA9。</span>
       </button>
       : <p className="rounded-md border border-dashed bg-muted/40 px-4 py-3 text-sm text-muted-foreground">连接文档后方可新建业务</p>}
-    {editor && <BusinessConfigDialog business={editor.business} dataOptions={dataOptions} adapter={adapter} canPick={canPick}
-      onSaveMetadata={value => {
-        const existing = items.find(item => item.id === value.id)
-        const item: BusinessListItem = { ...value, id: value.id ?? crypto.randomUUID(), position: existing?.position ?? { status: 'unconfigured' } }
-        setItems(current => existing ? current.map(entry => entry.id === item.id ? item : entry) : [...current, item])
-        return item
-      }}
-      onSavePosition={(id, position) => setItems(current => current.map(item => item.id === id ? { ...item, position } : item))}
+    {editor && <BusinessConfigDialog business={editor.business} dataOptions={dataOptions} adapter={adapter} canPick={canPick} refresh={refresh}
+      otherNames={items.filter(item => item.id !== editor.business?.id).map(item => item.name)} onSave={business => save({ business })}
       onCancel={() => setEditor(null)} onCloseAutoFocus={restoreFocus} />}
-    <AlertDialog open={!!removal} onOpenChange={open => { if (!open) setRemoval(null) }}>
+    <AlertDialog open={!!removal} onOpenChange={open => { if (!open && !removing) setRemoval(null) }}>
       <AlertDialogContent onCloseAutoFocus={restoreFocus}><AlertDialogHeader><AlertDialogTitle>删除业务</AlertDialogTitle><AlertDialogDescription>确定删除“{removal?.name}”吗？删除后无法恢复。</AlertDialogDescription></AlertDialogHeader>
-        <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { setItems(current => current.filter(item => item.id !== removal?.id)); setRemoval(null) }}>删除业务</AlertDialogAction></AlertDialogFooter>
+        {removalError && <Alert variant="destructive"><AlertDescription>{removalError.fieldErrors?.deleteBusinessId ?? removalError.error ?? '删除失败。'}
+          {removalError.conflict && <Button variant="outline" size="sm" onClick={async () => { if (await refresh()) setRemovalError(undefined) }}>刷新配置</Button>}
+        </AlertDescription></Alert>}
+        <AlertDialogFooter><AlertDialogCancel disabled={removing}>取消</AlertDialogCancel><Button variant="destructive" disabled={removing || removalError?.conflict} onClick={() => void remove()}>{removing ? '删除中…' : '删除业务'}</Button></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   </section>
