@@ -25,7 +25,7 @@ dotnet test tests\ProductionAssistant.Tests\ProductionAssistant.Tests.csproj -c 
 .\scripts\verify.ps1
 ```
 
-脚本依次验证前端 bundle、Release build 和 xUnit 测试，默认只生成 Windows x64 自包含测试版 `deployments\development`。只有明确需要同步正式版时才传入 `-SyncRelease`，生成或覆盖 `deployments\production`。桌面人工验收先运行 `deployments\development\ProductionAssistant.exe`。
+脚本依次验证前端 bundle、Release build 和 xUnit 测试，默认只生成 Windows x64 自包含测试版 `deployments\development`。只有明确需要同步正式版时才传入 `-SyncRelease`，生成或覆盖 `deployments\production`。Electron 桌面人工验收从项目根目录运行 `npm.cmd --prefix src\ProductionAssistant.Desktop start -- --environment Development`。
 
 ## Electron 开发运行时
 

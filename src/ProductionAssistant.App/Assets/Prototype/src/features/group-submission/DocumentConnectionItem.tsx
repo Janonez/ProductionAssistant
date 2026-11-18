@@ -15,7 +15,7 @@ export type DocumentSessionEvidence = Omit<TencentSessionStatus, 'editPermission
   authenticationSource?: 'server' | null
 }
 
-export type ConnectionStatus = 'unconfigured' | 'idle' | 'checking' | 'connected' | 'notLoggedIn' | 'invalidLink' | 'readOnly' | 'permissionUnknown' | 'unavailable'
+export type ConnectionStatus = 'unconfigured' | 'idle' | 'checking' | 'connected' | 'lastConnected' | 'notLoggedIn' | 'invalidLink' | 'readOnly' | 'permissionUnknown' | 'unavailable'
 export type DocumentConnectionState = { state: ConnectionStatus; documentName?: string; checkedAt?: string; expiresAt?: string; reason?: string; loginExpired?: boolean; loginAvailable?: boolean }
 export type ConnectionAction = 'connect' | 'check' | 'open' | 'login' | 'replace'
 const states: Record<ConnectionStatus, { label?: string; action?: ConnectionAction; button?: string; className?: string }> = {
@@ -23,6 +23,7 @@ const states: Record<ConnectionStatus, { label?: string; action?: ConnectionActi
   idle: { label: '未检测', action: 'check', button: '检测' },
   checking: { label: '检测中' },
   connected: { label: '已连接', action: 'open', button: '打开文档', className: 'border-emerald-600/30 text-emerald-700 dark:border-emerald-400/30 dark:text-emerald-400' },
+  lastConnected: { label: '上次已连接', action: 'check', button: '重新核验' },
   notLoggedIn: { label: '需要登录', action: 'login', button: '扫码登录', className: 'border-destructive/40 text-destructive' },
   invalidLink: { label: '不是表格链接', action: 'replace', button: '更换文档', className: 'border-destructive/40 text-destructive' },
   readOnly: { label: '只有查看权限', action: 'open', button: '打开文档', className: 'border-destructive/40 text-destructive' },
@@ -63,8 +64,8 @@ export function connectionFromSession(result: DocumentSessionEvidence, expectedT
   return { state: 'idle', ...evidence }
 }
 
-export function DocumentConnectionItem({ connection, url, draft, editing, busy, locked, onDraft, onAction, onCancel, onCopy, onClear }: {
-  connection: DocumentConnectionState; url: string; draft: string; editing: boolean; busy: boolean; locked?: boolean
+export function DocumentConnectionItem({ connection, url, draft, editing, busy, checking, locked, onDraft, onAction, onCancel, onCopy, onClear }: {
+  connection: DocumentConnectionState; url: string; draft: string; editing: boolean; busy: boolean; checking?: boolean; locked?: boolean
   onDraft: (value: string) => void; onAction: (action: ConnectionAction) => void; onCancel: () => void; onCopy: () => void; onClear: () => void
 }) {
   const view = connection.state === 'unavailable' && connection.loginAvailable ? { ...states.unavailable, action: 'login' as const, button: '登录' } : states[connection.state]
@@ -74,7 +75,7 @@ export function DocumentConnectionItem({ connection, url, draft, editing, busy, 
     <ItemContent className="min-w-0 flex-row items-center gap-2">
       {editing ? <Input id="submission-document-url" aria-label="文档链接" type="text" inputMode="url" autoComplete="off" autoFocus={!!url} value={draft} placeholder="粘贴腾讯文档链接" disabled={busy || locked} onChange={event => onDraft(event.target.value)} className="h-9 min-w-0 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent" />
         : <><Tooltip><TooltipTrigger asChild><ItemTitle tabIndex={0} aria-label="文档名称" className="block min-w-0 truncate">{name}</ItemTitle></TooltipTrigger><TooltipContent className="max-w-sm break-all">{url}</TooltipContent></Tooltip>
-          {view.label && <Badge variant="outline" className={'shrink-0 gap-1 ' + (view.className ?? '')} role="status" aria-live="polite">{connection.state === 'checking' && <Spinner aria-label="正在检测文档连接" />}{connection.state === 'notLoggedIn' && connection.loginExpired ? '登录已失效' : view.label}</Badge>}
+          {view.label && <Badge variant="outline" className={'shrink-0 gap-1 ' + (view.className ?? '')} role="status" aria-live="polite">{(checking || connection.state === 'checking') && <Spinner aria-label="正在检测文档连接" />}{connection.state === 'notLoggedIn' && connection.loginExpired ? '登录已失效' : view.label}</Badge>}
           {connection.reason && !['checking', 'idle'].includes(connection.state) && <span className="min-w-0 truncate text-xs text-muted-foreground" title={connection.reason}>{connection.reason}</span>}</>}
     </ItemContent>
     <ItemActions className="shrink-0 gap-1">

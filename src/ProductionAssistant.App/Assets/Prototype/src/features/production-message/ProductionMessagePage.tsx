@@ -46,7 +46,7 @@ function updateLocalField(field: ImportField, parsedValue: string): ImportField 
 function fieldStatus(status: string) {
   return ({ new: "新增", same: "一致", confirm: "待确认", exception: "异常", unchecked: "待检查" } as Record<string, string>)[status] || "异常";
 }
-export default function ProductionMessagePage() {
+export default function ProductionMessagePage({ serviceReady = true }: { serviceReady?: boolean } = {}) {
   const local = useLocalData();
   const [rawMessage, setRawMessage] = useState("");
   const [parsedMessage, setParsedMessage] = useState("");
@@ -66,15 +66,20 @@ export default function ProductionMessagePage() {
 
   const parsed = drafts.length > 0;
   const needsReparse = parsed && rawMessage !== parsedMessage;
-  const locked = Boolean(busy);
+  const locked = Boolean(busy) || !serviceReady;
   useEffect(() => {
+    if (!serviceReady) return;
+    let active = true;
     local.read<BindingState>("production.getBindings").then((value) => {
+      if (!active) return;
       setBindings(value);
       setBindingSelections({ cutting: value.selected.cutting || "", towerDaily: value.selected.towerDaily || "" });
-    }).catch((cause) => setBindingError(errorText(cause)));
-  }, []);
+    }).catch((cause) => { if (active) setBindingError(errorText(cause)); });
+    return () => { active = false; };
+  }, [local, serviceReady]);
 
   async function saveBindings() {
+    if (!serviceReady) return;
     setBindingError("");
     try {
       await invoke("production.saveBindings", bindingSelections, 120000);
@@ -186,7 +191,7 @@ export default function ProductionMessagePage() {
     <div className="workspace-panel">
       <section className="message-pane">
         <div className="pane-title"><h2>原始消息</h2><p>输入生产消息，系统将自动解析并检查已有数据。</p></div>
-        <textarea className="message-textarea" value={rawMessage} disabled={locked} onChange={(event) => setRawMessage(event.target.value)} placeholder="请输入生产消息" />
+        <textarea className="message-textarea" value={rawMessage} disabled={Boolean(busy)} onChange={(event) => setRawMessage(event.target.value)} placeholder="请输入生产消息" />
         <div className="parse-action"><button className="primary-button" disabled={!rawMessage.trim() || locked} onClick={handleParse}>{parsed && <RefreshCw className="button-icon refresh-icon" />}<span>{busy === "parse" ? "正在解析…" : parsed ? "重新解析" : "解析消息"}</span></button></div>
       </section>
 

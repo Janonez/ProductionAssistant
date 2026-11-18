@@ -21,7 +21,7 @@ const edit = async (selector: string, value: string, blur = true) => {
   })
   if (blur) await act(async () => get(selector).dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
 }
-const mount = async () => act(async () => root.render(<SubmissionExecutionRules adapter={adapter} dataOptions={sources} job={{ id: 'job', config: { documentUrl: 'https://docs.qq.com/sheet/fixture' } }} />))
+const mount = async (loginRequired = false) => act(async () => root.render(<SubmissionExecutionRules adapter={adapter} dataOptions={sources} loginRequired={loginRequired} job={{ id: 'job', config: { documentUrl: 'https://docs.qq.com/sheet/fixture' } }} />))
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   vi.spyOn(toast, 'success').mockReturnValue('saved')
@@ -138,8 +138,8 @@ it('restores the acknowledged rules after failure and never shows a success toas
 })
 
 it('uses explicit login evidence and updates the business Alert from valid source and position changes', async () => {
-  invoke.mockImplementation(async operation => operation === 'tencentSheet.runs' ? { runs: [] } : { browserOpen: true, authentication: 'required' })
-  await mount(); await click('#submission-auto')
+  await mount(true); await click('#submission-auto')
+  expect(invoke.mock.calls.some(([operation]) => operation.startsWith('tencentSheet.session'))).toBe(false)
   expect(container.textContent).toContain('未登录，下次自动填报会失败')
   expect(container.textContent).toContain('没有可填报的业务')
   await act(async () => adapter.writeBusinessDrafts([{ ...business, dataSource: { value: 'removed', label: '失效来源' } }]))

@@ -55,10 +55,13 @@ beforeEach(async () => {
 })
 afterEach(async () => { await act(async () => root.unmount()); await settle(); container.remove(); HTMLElement.prototype.scrollIntoView = originalScroll; vi.restoreAllMocks(); vi.useRealTimers(); vi.unstubAllGlobals() })
 
-it('uses one Empty action without empty-state title or description', () => {
-  expect(container.querySelector('[data-slot=empty]')).not.toBeNull()
-  expect(container.querySelector('[data-slot=empty-title], [data-slot=empty-description]')).toBeNull()
-  expect(container.querySelectorAll('button')).toHaveLength(1)
+it('shows the primary header button and a compact clickable empty state', async () => {
+  expect(button('新建业务', container).classList.contains('bg-primary')).toBe(true)
+  const empty = container.querySelector<HTMLButtonElement>('button.border-dashed')!
+  expect(empty.textContent).toBe('尚无业务业务由数据来源与文档中的填报位置构成，例如：设备运行时长，位于 AA9。')
+  expect(empty.querySelector('button, svg')).toBeNull()
+  await click(empty)
+  expect(dialog().querySelector('[data-slot=dialog-title]')?.textContent).toBe('新建业务')
 })
 it('requires a source and autofills its name until the user edits it', async () => {
   await click(button('新建业务', container)); expect(button('下一步', dialog()).disabled).toBe(true)
@@ -87,10 +90,11 @@ it('offers a real empty source Select without fabricated options', async () => {
   expect(document.querySelectorAll('[role=option]')).toHaveLength(0)
   expect(document.querySelector('[data-slot=select-content]')?.textContent).toContain('暂无可填报数据')
 })
-it('allows creation before login but blocks picking with the prerequisite Alert', async () => {
-  await mount([], false); await create()
-  expect(dialog().textContent).toContain('请先完成网页配置并登录')
-  expect([...dialog().querySelectorAll<HTMLButtonElement>('button')].filter(value => value.textContent === '选择单元格').map(value => value.disabled)).toEqual([true, true])
+it('disables the header and the empty-state action before connection', async () => {
+  await mount([], false)
+  expect(button('新建业务', container).disabled).toBe(true)
+  expect(container.querySelector('p.border-dashed')?.textContent).toBe('连接文档后方可新建业务')
+  expect(container.querySelector('button.border-dashed')).toBeNull()
   expect(adapter.startPick).not.toHaveBeenCalled()
 })
 it('disables every control except Cancel while waiting and ignores late confirmations after cancellation', async () => {
@@ -117,9 +121,9 @@ it('recognizes two supplied cells, previews three days and saves without inventi
   expect(dialog().textContent).toContain('已识别：每天向右移 1 列')
   expect(dialog().querySelectorAll('tbody tr')).toHaveLength(3)
   await click(button('保存', dialog())); await settle()
-  expect(rows()[0].querySelector('[aria-label="位置已配置"] svg')).not.toBeNull()
+  expect(rows()[0].querySelector('[data-slot=badge]')).toBeNull()
   expect(rows()[0].textContent).not.toMatch(/起|每天|步长|日期轴/)
-  expect(rows()[0].textContent).toContain('—')
+  expect(rows()[0].textContent).not.toMatch(/F9|G9/)
   expect(rows()[0].querySelector('[role=switch]')).toBeNull()
   expect(dialog()).toBeNull()
 })
@@ -140,32 +144,30 @@ it('edits through the same wizard, keeps the saved position when reselecting is 
   expect(button('保存', dialog()).disabled).toBe(false)
   await click(dialog().querySelector<HTMLElement>('[aria-label=关闭]')!); await settle()
   expect(rows()[0].textContent).toContain('修改后名称')
-  expect(rows()[0].textContent).toContain('B12:AF12')
+  expect(rows()[0].textContent).not.toContain('B12:AF12')
 })
-it('uses a single bordered table, no enable column and the supplied range outside the success Badge', async () => {
-  await mount([configured, { id: 'new', name: '未配置业务', position: { status: 'unconfigured' } }])
+it('uses two columns and badges only for missing or invalid positions', async () => {
+  await mount([configured, { id: 'new', name: '未配置业务', position: { status: 'unconfigured' } },
+    { ...configured, id: 'invalid', name: '失效业务', position: { ...(configured.position as ConfiguredPosition), status: 'invalid' } }])
   const table = container.querySelector('table')!
   expect(table.parentElement?.parentElement?.className).toContain('rounded-md border')
-  expect([...table.querySelectorAll('th')].map(value => value.textContent)).toEqual(['业务', '数据来源', '填报位置', '操作'])
+  expect([...table.querySelectorAll('th')].map(value => value.textContent)).toEqual(['业务名称', '操作'])
+  expect(button('新建业务', container).classList.contains('bg-primary')).toBe(false)
   expect(container.querySelector('[role=switch]')).toBeNull()
-  const badge = rows()[0].querySelector('[aria-label="位置已配置"]')!
-  expect(badge.getAttribute('data-variant')).toBe('outline')
-  expect(badge.querySelector('svg')).not.toBeNull()
-  expect(badge.textContent).toBe('')
-  expect(badge.nextElementSibling?.textContent).toBe('B12:AF12')
-  expect(rows()[0].textContent).not.toMatch(/F9|起|每天|✓/)
+  expect(rows()[0].querySelector('[data-slot=badge]')).toBeNull()
+  expect(rows()[0].textContent).not.toMatch(/F9|B12:AF12|起|每天/)
   expect(rows()[1].querySelector('[data-slot=badge]')?.textContent).toBe('未设置位置')
+  expect(rows()[2].querySelector('[data-slot=badge]')?.textContent).toBe('需要重新设置位置')
 })
-it('starts reselecting from the row menu and requires confirmation before deletion', async () => {
-  await mount([configured]); await menu(0, '重新选取位置')
-  expect(dialog().querySelector('[data-slot=dialog-title]')?.textContent).toBe('设置填报位置')
-  expect(button('保存', dialog()).disabled).toBe(true)
+it('edits from the row menu and requires confirmation before deletion', async () => {
+  await mount([configured]); await menu(0, '编辑')
+  expect(dialog().querySelector('[data-slot=dialog-title]')?.textContent).toBe('编辑业务')
   await click(dialog().querySelector<HTMLElement>('[aria-label=关闭]')!); await settle()
   await menu(0, '删除'); const confirm = document.querySelector<HTMLElement>('[role=alertdialog]')!
   expect(confirm.textContent).toContain('已有业务'); expect(rows()).toHaveLength(1)
   await click(button('取消', confirm)); await settle(); expect(rows()).toHaveLength(1)
   await menu(0, '删除'); await click(button('删除业务', document.querySelector('[role=alertdialog]')!)); await settle()
-  expect(rows()).toHaveLength(0); expect(container.querySelector('[data-slot=empty]')).not.toBeNull()
+  expect(rows()).toHaveLength(0); expect(container.querySelector('button.border-dashed')).not.toBeNull()
   expect(document.activeElement).toBe(button('新建业务', container))
 })
 it('does not save a cancelled first step and keeps row keyboard editing accessible', async () => {

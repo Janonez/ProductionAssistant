@@ -4,12 +4,15 @@ const {chromium,_electron}=require('playwright');
 const fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os'),http=require('node:http'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'../..'),dist=path.join(root,'src/ProductionAssistant.App/Assets/Prototype/dist');
 const output=path.join(root,'artifacts/document-connection-ui');
-const states={unconfigured:['','连接'],idle:['未检测','检测'],checking:['检测中',null],connected:['已连接','打开文档'],notLoggedIn:['需要登录','扫码登录'],invalidLink:['不是表格链接','更换文档'],readOnly:['只有查看权限','打开文档'],unavailable:['无法打开','重新检测']};
+const states={unconfigured:['','连接'],idle:['未检测','检测'],checking:['检测中',null],connected:['已连接','打开文档'],lastConnected:['上次已连接','重新核验'],notLoggedIn:['需要登录','扫码登录'],invalidLink:['不是表格链接','更换文档'],readOnly:['只有查看权限','打开文档'],unavailable:['无法打开','重新检测']};
 function installFixture() {
   const state=new URL(location.href).searchParams.get('fixture')||'idle';
   let receive;
   const config={documentUrl:state==='invalidLink'?'https://docs.qq.com/doc/fixture':'https://docs.qq.com/sheet/ui-fixture',fields:[],rules:{}};
   const evidence={state:'authenticated',browserOpen:true,authentication:'authenticated',authenticationSource:'server',authenticationObservedAt:'2026-11-16T01:30:00Z',documentAccess:'allowed',editPermission:'editable',verifiedAt:'2026-11-16T01:30:00Z',documentCheckedAt:'2026-11-16T01:30:00Z',documentType:'spreadsheet',documentIdentity:'https://docs.qq.com/sheet/ui-fixture',targetDocumentUrl:config.documentUrl,documentName:'集团生产日报（隔离模拟名称）'.repeat(24),message:''};
+  const storageKey='pa.submission.last-connection.ui-fixture';
+  localStorage.removeItem(storageKey);
+  if(state==='lastConnected')localStorage.setItem(storageKey,JSON.stringify({revision:1,checkedAt:evidence.documentCheckedAt,documentName:evidence.documentName}));
   const status=state==='connected'?evidence:state==='readOnly'?{...evidence,editPermission:'read-only'}:state==='notLoggedIn'?{...evidence,state:'login-required',authentication:'required',documentAccess:'unknown',editPermission:'unknown'}:state==='unavailable'?{...evidence,state:'unavailable',authentication:'unknown',documentAccess:'unknown',editPermission:'unknown'}:{...evidence,state:'closed',browserOpen:false,authentication:'unknown',documentAccess:'unknown',editPermission:'unknown',documentName:null,verifiedAt:null};
   window.uiCalls=[];
   window.chrome={webview:{addEventListener:(_,listener)=>{receive=listener;},postMessage:request=>{
@@ -81,6 +84,7 @@ async function main(){
       else assert.equal(await item.locator('[data-slot=badge]').count(),0);
       if(state==='connected')assert.equal(measure.titleTruncated,true);
       if(state==='checking'){assert.equal(await item.getByLabel('正在检测文档连接').count(),1);assert.equal(await item.getByRole('button',{name:'文档更多操作'}).isDisabled(),true);}
+      if(state==='lastConnected')assert.equal(await page.evaluate(()=>window.uiCalls.some(call=>call.operation.startsWith('tencentSheet.session'))),false);
       if(state==='unconfigured'){
         const input=item.getByLabel('文档链接');
         assert.equal(await input.getAttribute('placeholder'),'粘贴腾讯文档链接');
@@ -116,7 +120,7 @@ async function main(){
     }
     assert.deepEqual(errors,[]);
     await fs.writeFile(path.join(output,kind+'-measurements.json'),JSON.stringify(measures,null,2));
-    console.log('PASS '+kind+': 32 isolated UI states (8 states × 2 themes × 2 widths), 56px Item, 20px icon, truncation, keyboard menu and cancellation. No live document, login clearing or business writes.');
+    console.log('PASS '+kind+': '+measures.length+' isolated UI states, 56px Item, 20px icon, truncation, keyboard menu and cancellation. No live document, login clearing or business writes.');
   } finally {
     await app?.close();await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));
     if(temp){assert.ok(path.resolve(temp).startsWith(path.resolve(os.tmpdir())+path.sep));assert.ok(path.basename(temp).startsWith('metis-document-ui-'));await fs.rm(temp,{recursive:true,force:true});}

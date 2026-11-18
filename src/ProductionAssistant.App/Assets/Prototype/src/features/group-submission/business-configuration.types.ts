@@ -12,7 +12,7 @@ export type ConfiguredPosition = {
   preview: PositionSample[]
   range?: string
 }
-export type BusinessPosition = { status: 'unconfigured' } | ConfiguredPosition
+export type BusinessPosition = { status: 'unconfigured' } | ConfiguredPosition | (Omit<ConfiguredPosition, 'status'> & { status: 'invalid' })
 export type BusinessConfigValue = { name: string; dataSource?: BusinessDataOption; position: BusinessPosition }
 export type BusinessListItem = BusinessConfigValue & { id: string }
 export type ExecutionRules = {

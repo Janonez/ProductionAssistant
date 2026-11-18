@@ -155,6 +155,8 @@ async function main() {
       await page.getByLabel('集团填报设置', { exact: true }).waitFor();
       await painted(page);
       const settingsAgainMs = Math.round(performance.now() - repeatSettings);
+      // Workbench tabs retain their selection across module navigation.
+      await page.getByRole('tab', { name: '概览', exact: true }).click();
       await page.getByRole('button', { name: '生产消息', exact: true }).click();
       const groupAgainMs = await enter();
       if (index === 0) await page.screenshot({ path: output.replace(/\.json$/, '-group.png') });

@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useState, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Spinner } from '../components/ui/spinner'
 import { LocalDataBootstrap, LocalDataProvider } from './LocalData'
 import { navigateInDocument } from '../routes/navigation'
@@ -10,7 +10,17 @@ import { LocalServiceBoundary } from '../components/layout/LocalServiceBoundary'
 import { ThemeProvider } from '../components/layout/ThemeProvider'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import ProductionMessagePage from '../features/production-message/ProductionMessagePage'
-import { GroupSubmissionPage } from '../features/group-submission/GroupSubmissionPage'
+let preparedGroupPage: typeof import('../features/group-submission/GroupSubmissionPage')['GroupSubmissionPage'] | undefined
+const loadGroupPage = () => import('../features/group-submission/GroupSubmissionPage').then(({ GroupSubmissionPage }) => {
+  preparedGroupPage = GroupSubmissionPage
+  return { default: GroupSubmissionPage }
+})
+const LazyGroupPage = lazy(loadGroupPage)
+
+function GroupSubmissionRoute() {
+  const [Page] = useState(() => preparedGroupPage ?? LazyGroupPage)
+  return <Page />
+}
 const AutomationPage = lazy(() => import('../features/daily-report/AutomationPage').then(module => ({ default: module.AutomationPage })))
 const DailyWeldPage = lazy(() => import('../features/daily-weld/DailyWeldPage').then(module => ({ default: module.DailyWeldPage })))
 const PlanPdfPage = lazy(() => import('../features/plan-pdf/PlanPdfPage').then(module => ({ default: module.PlanPdfPage })))
@@ -33,6 +43,11 @@ class LoadBoundary extends Component<{ children: ReactNode; onClose?: () => void
 
 export function App() {
   const { route, loadId, taskType } = useHostRoute()
+  useEffect(() => {
+    // Warm the workbench without mounting it or issuing any business requests.
+    const frame = window.requestAnimationFrame(() => { void loadGroupPage().catch(() => {}) })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const pageKey = `${route}:${taskType}`
   const [visited, setVisited] = useState([{ route, taskType, key: pageKey }])
@@ -63,9 +78,11 @@ export function App() {
         <LoadBoundary>
           <Suspense fallback={<p role="status" aria-label="正在加载页面" className="flex items-center gap-2"><Spinner />正在加载页面…</p>}>
             {active && <RouteReady route={page.route} loadId={loadId} />}
-            <LocalServiceBoundary>
-            {page.taskType === null ? <p role="alert">任务分类无效，请从左侧重新选择业务分类。</p> : page.route === ROUTES.productionMessage ? <ProductionMessagePage /> : page.route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{page.route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : page.route === ROUTES.planPdf ? <PlanPdfPage /> : page.route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : group ? <GroupSubmissionPage /> : page.route === ROUTES.dailyReport ? <AutomationPage taskType={page.taskType} openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
-            </LocalServiceBoundary>
+            {page.route === ROUTES.productionMessage && page.taskType !== null
+              ? <LocalServiceBoundary>{ready => <ProductionMessagePage serviceReady={ready} />}</LocalServiceBoundary>
+              : <LocalServiceBoundary>
+                {page.taskType === null ? <p role="alert">任务分类无效，请从左侧重新选择业务分类。</p> : page.route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{page.route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : page.route === ROUTES.planPdf ? <PlanPdfPage /> : page.route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : group ? <GroupSubmissionRoute /> : page.route === ROUTES.dailyReport ? <AutomationPage taskType={page.taskType} openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}
+              </LocalServiceBoundary>}
           </Suspense>
         </LoadBoundary>
       </div>})}

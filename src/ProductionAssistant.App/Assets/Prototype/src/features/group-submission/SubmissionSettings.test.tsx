@@ -27,9 +27,9 @@ beforeEach(async () => {
 })
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-it('uses three consecutive sections with two page separators and one execution-rules Card', () => {
+it('uses three consecutive sections without section dividers', () => {
   expect([...container.querySelectorAll('h2')].map(element => element.textContent)).toEqual(['网页配置', '业务配置', '执行规则'])
-  expect(container.querySelectorAll('[data-slot=separator]')).toHaveLength(2)
+  expect(container.querySelectorAll('[data-slot=separator]')).toHaveLength(0)
   expect(container.querySelector('nav')).toBeNull()
   expect(container.querySelectorAll('[data-slot=card]')).toHaveLength(1)
   expect(container.querySelector('[aria-labelledby=execution-rules-title] [data-slot=card]')).not.toBeNull()

@@ -1,15 +1,13 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocalData } from '../../app/LocalData'
 import { Button } from '../../components/ui/button'
 import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs'
 import { SubmissionWorkbench } from './SubmissionWorkbench'
-import { SubmissionSettingsLoading } from './SubmissionSettingsLoading'
+import { SubmissionSettings } from './SubmissionSettings'
 import { SubmissionHistory } from './SubmissionHistory'
 import { createSubmissionSettingsMock } from './submission-settings.mock'
 import type { SubmissionJob } from './types'
-
-const SubmissionSettings = lazy(() => import('./SubmissionSettings').then(module => ({ default: module.SubmissionSettings })))
 
 export function GroupSubmissionPage() {
   const local = useLocalData()
@@ -24,7 +22,6 @@ export function GroupSubmissionPage() {
   const [job, setJob] = useState<SubmissionJob | undefined>(() => selectedId ? local.peek<SubmissionJob>('tencentSheet.get', { id: selectedId }) : undefined), [loadingJob, setLoadingJob] = useState(false)
   const [listError, setListError] = useState(''), [jobError, setJobError] = useState('')
   const [listReload, setListReload] = useState(0), [jobReload, setJobReload] = useState(0)
-  const [busy, setBusy] = useState(false)
   useEffect(() => {
     let active = true
     setListError('')
@@ -38,7 +35,7 @@ export function GroupSubmissionPage() {
   }, [listReload])
   useEffect(() => {
     let active = true
-    setJob(current => current?.id === selectedId ? current : undefined); setJobError(''); setBusy(false)
+    setJob(current => current?.id === selectedId ? current : undefined); setJobError('')
     if (!selectedId) { setLoadingJob(false); return }
     setLoadingJob(!local.peek('tencentSheet.get', { id: selectedId }))
     local.read<SubmissionJob>('tencentSheet.get', { id: selectedId }, jobReload > 0).then(value => {
@@ -58,12 +55,12 @@ export function GroupSubmissionPage() {
   return <section aria-label="集团填报工作台" className="mx-auto w-full max-w-5xl space-y-6">
     <header><h1 className="text-2xl font-semibold tracking-tight">集团填报</h1></header>
     <Tabs value={tab} onValueChange={value => { if (value === 'settings') setSettingsOpened(true); if (value === 'history') setHistoryOpened(true); setTab(value) }} className="gap-5">
-      <TabsList aria-label="集团填报"><TabsTrigger value="submission" disabled={busy}>概览</TabsTrigger><TabsTrigger value="history" disabled={busy}>记录</TabsTrigger><TabsTrigger value="settings" disabled={busy}>设置</TabsTrigger></TabsList>
+      <TabsList aria-label="集团填报"><TabsTrigger value="submission">概览</TabsTrigger><TabsTrigger value="history">记录</TabsTrigger><TabsTrigger value="settings">设置</TabsTrigger></TabsList>
       <TabsContent value="submission" forceMount hidden={tab !== 'submission'}><SubmissionWorkbench key={job?.id ?? 'new'} businessDate={job?.businessDate} connected={ready && !!job} loading={!ready && !configurationError} error={configurationError} configure={() => { setSettingsOpened(true); setTab('settings') }} /></TabsContent>
       <TabsContent value="history" forceMount hidden={tab !== 'history'}>{listError ? configurationError : listReady && historyOpened && <SubmissionHistory key={selectedId || 'new'} id={selectedId || undefined} />}</TabsContent>
-      <TabsContent value="settings" forceMount hidden={tab !== 'settings'}>{settingsOpened && <Suspense fallback={<SubmissionSettingsLoading stage="module" />}>
-        <SubmissionSettings key={selectedId} configurationLoading={!ready && !job} configurationError={configurationError} adapter={settingsAdapter} job={job} onSaved={value => { local.set('tencentSheet.get', value, { id: value.id }); setJob(value) }} onCreated={setSelectedId} onActive={setBusy} onDirty={() => {}} />
-      </Suspense>}</TabsContent>
+      <TabsContent value="settings" forceMount hidden={tab !== 'settings'}>{settingsOpened &&
+        <SubmissionSettings configurationLoading={!ready && !job} configurationError={configurationError} adapter={settingsAdapter} job={job} onSaved={value => { local.set('tencentSheet.get', value, { id: value.id }); setJob(value) }} onCreated={setSelectedId} />
+      }</TabsContent>
     </Tabs>
   </section>
 }

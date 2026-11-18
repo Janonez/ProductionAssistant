@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { invoke } from '../../bridge/index'
 import { useLocalData } from '../../app/LocalData'
 import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Card } from '../../components/ui/card'
@@ -12,8 +11,6 @@ import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Switch } from '../../components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '../../components/ui/toggle-group'
-import { documentLink } from './DocumentConnectionItem'
-import type { TencentSessionStatus } from '../daily-report/tencent-sheet/TencentSessionPanel'
 import type { BusinessDataOption, ExecutionRules, SubmissionSettingsAdapter } from './business-configuration.types'
 import type { SubmissionJob, SubmissionRun } from './types'
 
@@ -22,7 +19,9 @@ const validTime = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
 const rowClass = 'min-h-14 rounded-none border-0'
 type ValidationErrors = { time?: string; retryUntil?: string; weekdays?: string }
 
-export function SubmissionExecutionRules({ adapter, job, dataOptions = [] }: { adapter: SubmissionSettingsAdapter; job?: SubmissionJob; dataOptions?: readonly BusinessDataOption[] }) {
+export function SubmissionExecutionRules({ adapter, job, dataOptions = [], loginRequired = false }: {
+  adapter: SubmissionSettingsAdapter; job?: SubmissionJob; dataOptions?: readonly BusinessDataOption[]; loginRequired?: boolean
+}) {
   const local = useLocalData()
   const [rules, setRules] = useState<ExecutionRules>(() => adapter.readRuleDraft())
   const [time, setTime] = useState(rules.time), [retryUntil, setRetryUntil] = useState(rules.retryUntil)
@@ -30,7 +29,6 @@ export function SubmissionExecutionRules({ adapter, job, dataOptions = [] }: { a
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [validation, setValidation] = useState<ValidationErrors>({})
   const [businesses, setBusinesses] = useState(() => adapter.readBusinessDrafts())
-  const [loginRequired, setLoginRequired] = useState(false)
   const [lastRun, setLastRun] = useState<SubmissionRun>(), [historyState, setHistoryState] = useState('loading')
   const contentId = useId()
   const inFlight = useRef(false)
@@ -51,19 +49,6 @@ export function SubmissionExecutionRules({ adapter, job, dataOptions = [] }: { a
     }).catch(() => { if (active) setHistoryState('error') })
     return () => { active = false }
   }, [job?.id])
-  useEffect(() => {
-    let active = true
-    setLoginRequired(false)
-    const target = documentLink(job?.config.documentUrl ?? '')
-    if (!rules.automatic || !target) return
-    const refresh = () => {
-      void invoke<TencentSessionStatus>('tencentSheet.sessionStatus', { documentUrl: target }, 60000).then(status => {
-        if (active) setLoginRequired(status?.browserOpen === true && status.authentication === 'required')
-      }).catch(() => { if (active) setLoginRequired(false) })
-    }
-    refresh(); window.addEventListener('focus', refresh)
-    return () => { active = false; window.removeEventListener('focus', refresh) }
-  }, [job?.config.documentUrl, rules.automatic])
   const hasBusiness = businesses.some(business => dataOptions.some(option => option.value === business.dataSource?.value) && business.position.status === 'configured' && business.position.first.cell && business.position.second.cell)
   function validate(value: ExecutionRules) {
     const errors: ValidationErrors = {}

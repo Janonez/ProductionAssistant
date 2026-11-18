@@ -33,6 +33,7 @@ function Harness({ initial = firstUrl }: { initial?: string }) {
 }
 const mount = async (initial = firstUrl) => act(async () => root.render(<Harness initial={initial} />))
 beforeEach(() => {
+  localStorage.clear()
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   invoke.mockReset().mockResolvedValue(closed)
   vi.spyOn(toast, 'success').mockReturnValue('success')
@@ -83,6 +84,25 @@ it('reads the existing saved-document status and uses the returned real name', a
   expect(ready).toHaveBeenLastCalledWith(true)
   await click(button('打开文档'))
   expect(invoke).toHaveBeenLastCalledWith('tencentSheet.sessionOpen', { documentUrl: firstUrl }, 60000)
+})
+it('restores only the last successful observation and skips repeat probes on remount and focus', async () => {
+  invoke.mockResolvedValue(connected)
+  await mount()
+  await act(async () => root.unmount())
+  root = createRoot(container)
+  invoke.mockClear()
+  await mount()
+  expect(container.querySelector('[data-connection-state=lastConnected]')?.textContent).toContain('上次已连接')
+  expect(ready).toHaveBeenLastCalledWith(false)
+  await act(async () => window.dispatchEvent(new Event('focus')))
+  expect(invoke).not.toHaveBeenCalled()
+  await click(button('重新核验'))
+  expect(invoke).toHaveBeenCalledOnce()
+  expect(ready).toHaveBeenLastCalledWith(true)
+  invoke.mockResolvedValue({ ...closed, state: 'login-required', authentication: 'required' })
+  await menu('重新检测')
+  expect(container.querySelector('[data-connection-state=notLoggedIn]')).not.toBeNull()
+  expect(localStorage.length).toBe(0)
 })
 it.each([undefined, '', '   '])('uses 腾讯文档 if title retrieval returns %j', async documentName => {
   invoke.mockResolvedValue({ ...connected, documentName }); await mount()

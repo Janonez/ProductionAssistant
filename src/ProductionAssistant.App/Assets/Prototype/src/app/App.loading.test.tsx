@@ -2,7 +2,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { expect, it, vi } from 'vitest'
 import { App } from './App'
-import '../features/group-submission/SubmissionSettings'
+import '../features/group-submission/GroupSubmissionPage'
 import { settleModuleImports } from '../test-utils/settle-module-imports'
 
 const { invoke, notifyReady, service } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn(), service: { state: 'Ready' } }))
@@ -12,11 +12,14 @@ it('keeps settings and history mounted across tabs and routes, without local ske
   service.state = 'Ready'
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const job = { id: 'loading-fixture', businessDate: '2026-11-18', configRevision: 1, config: { documentUrl: 'https://docs.qq.com/sheet/loading-fixture', fields: [] } }
+  const closed = { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown' }
+  let finishProbe!: (value: typeof closed) => void
   invoke.mockImplementation(async (operation: string) => {
     if (operation === 'automation.list') return { tasks: [{ id: job.id, name: '文档', taskType: 'tencent_sheet_fill' }] }
     if (operation === 'tencentSheet.get') return job
     if (operation === 'tencentSheet.runs') return { runs: [{ id: 'run', time: '2026-11-18 09:00', businessDate: '2026-11-17', status: '待确认' }] }
-    if (operation.startsWith('tencentSheet.session')) return { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown' }
+    if (operation === 'tencentSheet.sessionStatus') return closed
+    if (operation === 'tencentSheet.sessionVerify') return new Promise(resolve => { finishProbe = resolve })
     if (operation === 'production.getBindings') return { selected: {}, sources: [], cutting: {}, towerDaily: {}, towerMonthly: {}, towerYearly: {} }
     if (operation === 'settings.open') return { notion: { configured: false, sources: [] }, notification: { rules: [] }, version: 'test' }
     return {}
@@ -34,18 +37,22 @@ it('keeps settings and history mounted across tabs and routes, without local ske
     const settings = container.querySelector('[aria-label="集团填报设置"]')!
     expect(settings).not.toBeNull()
     const connection = settings.querySelector('[aria-label="文档连接"]')!
+    expect(connection.getAttribute('data-connection-state')).toBe('checking')
     await clickTab('记录')
     const table = container.querySelector('[aria-label="集团填报历史"]')!
     expect(table.textContent).toContain('待确认')
     await clickTab('设置'); await clickTab('记录'); await clickTab('设置')
     expect(container.querySelector('[aria-label="集团填报历史"]')).toBe(table)
     expect(container.querySelector('[aria-label="文档连接"]')).toBe(connection)
-    await navigate('?route=production-message'); await navigate(search)
+    await navigate('?route=production-message')
+    expect(container.querySelector('[data-page-route="production-message"] .message-textarea')).not.toBeNull()
+    await navigate(search)
     expect(container.querySelector('[aria-label="集团填报设置"]')).toBe(settings)
     expect(container.querySelector('[aria-label="文档连接"]')).toBe(connection)
     expect(container.querySelectorAll('.skeleton-block, [data-slot=skeleton]')).toHaveLength(0)
+    expect(calls('tencentSheet.sessionVerify')).toBe(1)
     for (const operation of ['automation.list', 'tencentSheet.get', 'tencentSheet.runs', 'settings.open']) expect(calls(operation), operation).toBe(1)
-  } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals() }
+  } finally { await act(async () => { finishProbe?.(closed); root.unmount() }); container.remove(); vi.unstubAllGlobals() }
 })
 
 it('reports renderer readiness while local service initialization still gates business reads', async () => {
@@ -58,7 +65,10 @@ it('reports renderer readiness while local service initialization still gates bu
     await act(async () => root.render(<App />))
     expect(notifyReady).toHaveBeenCalledWith('production-message', 'service-pending')
     expect(invoke).not.toHaveBeenCalled()
-    expect(container.textContent).toContain('正在初始化本地服务')
+    expect(container.querySelector('h1')?.textContent).toBe('生产消息入库')
+    expect(container.querySelector<HTMLTextAreaElement>('.message-textarea')?.disabled).toBe(false)
+    expect(container.querySelector<HTMLButtonElement>('.parse-action button')?.disabled).toBe(true)
+    expect(container.textContent).not.toContain('正在初始化本地服务')
     expect(container.querySelector('.skeleton-block, [data-slot=skeleton]')).toBeNull()
   } finally { await act(async () => root.unmount()); container.remove(); service.state = 'Ready'; vi.unstubAllGlobals() }
 })
