@@ -20,7 +20,8 @@ module.exports = async function checkBusinessConfiguration(page) {
   await page.evaluate(() => { window.verifyGroupConnection = true; });
   const writesBefore = await page.evaluate(() => [...window.operations]);
   await settings.getByRole('button', { name: '检测', exact: true }).click();
-  await settings.locator('[data-connection-state=lastConnected]').waitFor();
+  await settings.locator('[data-connection-state=connected]').waitFor();
+  assert.equal(await settings.getByText('检查填写位置权限', { exact: true }).count(), 0);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   const operationsAfterCheck = await page.evaluate(() => [...window.operations]);
   assert.deepEqual(operationsAfterCheck, writesBefore.concat('tencentSheet.sessionVerify'), 'window focus does not repeat link detection');
@@ -38,8 +39,7 @@ module.exports = async function checkBusinessConfiguration(page) {
   await stepOne.getByRole('button', { name: '下一步', exact: true }).click(); await stepTwo.waitFor();
   assert.equal(await rows.count(), 1);
   assert.equal(await rows.first().getAttribute('aria-label'), '编辑业务：自定义业务');
-  await stepTwo.getByRole('alert').filter({ hasText: '请先完成网页配置并登录' }).waitFor();
-  for (const action of await stepTwo.getByRole('button', { name: '选择单元格', exact: true }).all()) assert.equal(await action.isDisabled(), true);
+  assert.equal(await stepTwo.getByRole('button', { name: '选择单元格', exact: true }).first().isEnabled(), true);
   await stepTwo.getByRole('button', { name: '关闭', exact: true }).click();
   await stepTwo.waitFor({ state: 'hidden' });
   await business.getByRole('row', { name: '编辑业务：自定义业务', exact: true }).waitFor({ state: 'visible' });
@@ -61,7 +61,7 @@ module.exports = async function checkBusinessConfiguration(page) {
   assert.equal(await stepOne.getByRole('button', { name: '删除业务', exact: true }).count(), 0);
   await stepOne.getByRole('textbox', { name: '业务名称', exact: true }).fill('修改后业务');
   await stepOne.getByRole('button', { name: '下一步', exact: true }).click(); await stepTwo.waitFor();
-  for (const action of await stepTwo.getByRole('button', { name: '选择单元格', exact: true }).all()) assert.equal(await action.isDisabled(), true);
+  assert.equal(await stepTwo.getByRole('button', { name: '选择单元格', exact: true }).first().isEnabled(), true);
   await stepTwo.getByRole('button', { name: '关闭', exact: true }).click();
   await stepTwo.waitFor({ state: 'hidden' });
   assert.ok((await rows.first().textContent()).includes('修改后业务'));

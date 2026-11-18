@@ -148,7 +148,7 @@ class TencentSession {
       documentType:result.documentAccess==='allowed'?'spreadsheet':'unknown'};
     return {...value,state:result.documentAccess==='denied'?'access-denied':result.documentAccess==='allowed'?'authenticated':'unverified',
       code:result.documentAccess==='denied'?'AccessDenied':result.code,
-      message:result.documentAccess==='denied'?'当前账号没有目标文档的访问权限。':result.editPermission==='editable'?'文档编辑权限已确认；填写位置须单独核验。':result.editPermission==='read-only'?'当前文档只有查看权限。':result.code==='PermissionConflict'?'文档权限信息不一致，请重新核验。':'权限尚未完成初始化或证据不足，请重新核验。'};
+      message:result.documentAccess==='denied'?'当前账号没有目标文档的访问权限。':result.editPermission==='editable'?'文档编辑权限已确认。':result.editPermission==='read-only'?'当前文档只有查看权限。':result.code==='PermissionConflict'?'文档权限信息不一致，请重新核验。':'权限尚未完成初始化或证据不足，请重新核验。'};
   }
   validLogin(config) {const job=this.login;return job&&job.id===config.loginOperationId&&job.generation===this.browser.generation&&job.revision===(config.configRevision??null)&&sameTarget(job.target,config.documentUrl)?job:null;}
   async beginLogin(config,refresh=false) {

@@ -18,7 +18,7 @@ export function SubmissionSettings({ adapter: suppliedAdapter, configurationLoad
   const [adapter] = useState(() => suppliedAdapter ?? createSubmissionSettingsMock())
   const [canPick, setCanPick] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unconfigured')
-  const connected = connectionStatus === 'connected' || connectionStatus === 'lastConnected'
+  const connected = connectionStatus === 'connected'
   const [sources, setSources] = useState<readonly BusinessDataOption[]>([]), [loading, setLoading] = useState(true)
   const [error, setError] = useState(''), [reload, setReload] = useState(0)
   useEffect(() => {

@@ -15,19 +15,18 @@ export type DocumentSessionEvidence = Omit<TencentSessionStatus, 'editPermission
   authenticationSource?: 'server' | null
 }
 
-export type ConnectionStatus = 'unconfigured' | 'idle' | 'checking' | 'connected' | 'lastConnected' | 'notLoggedIn' | 'invalidLink' | 'readOnly' | 'permissionUnknown' | 'unavailable'
-export type DocumentConnectionState = { state: ConnectionStatus; documentName?: string; checkedAt?: string; expiresAt?: string; reason?: string; loginExpired?: boolean; loginAvailable?: boolean }
+export type ConnectionStatus = 'unconfigured' | 'idle' | 'checking' | 'connected' | 'notLoggedIn' | 'invalidLink' | 'readOnly' | 'accessDenied' | 'unavailable'
+export type DocumentConnectionState = { state: ConnectionStatus; documentName?: string; checkedAt?: string; reason?: string; loginExpired?: boolean; loginAvailable?: boolean }
 export type ConnectionAction = 'connect' | 'check' | 'open' | 'login' | 'replace'
 const states: Record<ConnectionStatus, { label?: string; action?: ConnectionAction; button?: string; className?: string }> = {
   unconfigured: { action: 'connect', button: '连接' },
   idle: { label: '未检测', action: 'check', button: '检测' },
   checking: { label: '检测中' },
   connected: { label: '已连接', action: 'open', button: '打开文档', className: 'border-emerald-600/30 text-emerald-700 dark:border-emerald-400/30 dark:text-emerald-400' },
-  lastConnected: { label: '上次已连接', action: 'check', button: '重新核验' },
   notLoggedIn: { label: '需要登录', action: 'login', button: '扫码登录', className: 'border-destructive/40 text-destructive' },
   invalidLink: { label: '不是表格链接', action: 'replace', button: '更换文档', className: 'border-destructive/40 text-destructive' },
   readOnly: { label: '只有查看权限', action: 'open', button: '打开文档', className: 'border-destructive/40 text-destructive' },
-  permissionUnknown: { label: '权限未知', action: 'check', button: '重新核验' },
+  accessDenied: { label: '无权访问', action: 'check', button: '重新检测', className: 'border-destructive/40 text-destructive' },
   unavailable: { label: '无法打开', action: 'check', button: '重新检测', className: 'border-destructive/40 text-destructive' },
 }
 
@@ -44,23 +43,23 @@ export function connectionFromSession(result: DocumentSessionEvidence, expectedT
   if (!result || typeof result.browserOpen !== 'boolean') throw new Error('文档检测响应无效')
   if ((expectedTarget && result.targetDocumentUrl && result.targetDocumentUrl !== expectedTarget)
     || (expectedRevision !== undefined && result.configRevision !== undefined && result.configRevision !== null && result.configRevision !== expectedRevision)) return { state: 'unavailable', reason: '文档配置已变化，请重新检测。' }
-  const evidence = { documentName: result.documentName?.trim() || undefined, checkedAt: result.documentCheckedAt ?? result.authenticationObservedAt ?? undefined, expiresAt: result.permissionCheck?.expiresAt, reason: result.message || undefined,
+  const evidence = { documentName: result.documentName?.trim() || undefined, checkedAt: result.documentCheckedAt ?? result.authenticationObservedAt ?? undefined, reason: result.message || undefined,
     loginAvailable: result.authentication === 'unknown' && ['AuthenticationUnknown', 'SessionTimeout'].includes(result.code ?? '') }
   let identity: string | undefined
   try { const target = new URL(result.targetDocumentUrl ?? ''); identity = target.origin + target.pathname.replace(/\/$/, '') } catch { /* Unknown target cannot establish a connection. */ }
   if (result.code === 'InvalidDocumentUrl' || result.code === 'NotSpreadsheet') return { state: 'invalidLink', ...evidence }
   if (result.authentication === 'required') return { state: 'notLoggedIn', ...evidence, loginExpired: !!result.authenticationPreviouslyConfirmed }
   if (result.state === 'login-required' && result.code === 'LoginCredentialsMissing') return { state: 'notLoggedIn', ...evidence, loginExpired: false }
-  if (result.state === 'unavailable' || result.state === 'access-denied' || result.state === 'profile-busy') return { state: 'unavailable', ...evidence }
+  if (result.state === 'access-denied' || result.documentAccess === 'denied' || result.code === 'AccessDenied') return { state: 'accessDenied', ...evidence }
   if (result.browserOpen && result.documentAccess === 'allowed' && result.editPermission === 'read-only') return { state: 'readOnly', ...evidence }
-  if (result.browserOpen && result.authentication === 'authenticated' && result.documentAccess === 'allowed' && result.editPermission === 'unknown') return { state: 'permissionUnknown', ...evidence }
-  if (result.browserOpen && result.authentication === 'authenticated' && result.authenticationSource === 'server' && !result.authenticationStale
-    && result.documentType === 'spreadsheet' && result.documentIdentity === identity && identity && result.targetDocumentUrl
-    && result.documentAccess === 'allowed' && result.editPermission === 'editable'
-    && result.verifiedAt && Number.isFinite(Date.parse(result.verifiedAt))
-    && result.authenticationObservedAt && Number.isFinite(Date.parse(result.authenticationObservedAt))
-    && result.documentCheckedAt && Number.isFinite(Date.parse(result.documentCheckedAt))) return { state: 'connected', ...evidence, reason: undefined }
-  if (result.code) return { state: 'unavailable', ...evidence }
+  const authenticated = result.browserOpen && result.authentication === 'authenticated' && result.authenticationSource === 'server'
+    && !result.authenticationStale && !!result.authenticationObservedAt && Number.isFinite(Date.parse(result.authenticationObservedAt))
+  const verifiedDocument = result.documentType === 'spreadsheet' && !!identity && result.documentIdentity === identity
+    && result.documentAccess === 'allowed' && !!result.verifiedAt && Number.isFinite(Date.parse(result.verifiedAt))
+    && !!result.documentCheckedAt && Number.isFinite(Date.parse(result.documentCheckedAt))
+  if (authenticated && (verifiedDocument || (result.loginState === 'authenticated' && !!expectedTarget && result.targetDocumentUrl === expectedTarget)))
+    return { state: 'connected', ...evidence, reason: undefined }
+  if (result.code || result.state === 'unavailable' || result.state === 'profile-busy') return { state: 'unavailable', ...evidence }
   return { state: 'idle', ...evidence }
 }
 

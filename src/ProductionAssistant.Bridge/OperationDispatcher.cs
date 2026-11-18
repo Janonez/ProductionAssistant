@@ -461,13 +461,17 @@ public sealed partial class OperationDispatcher
         });
 
     private static NotionTargetSettings? FindTarget(NotionSettings settings, string key) => settings.Targets.FirstOrDefault(target => target.ModuleKey == key);
-    private static Task<ProductionAssistant.Models.TencentSessionStatus> ExecuteTencentSessionAsync(string action, JsonElement payload, CancellationToken cancellationToken) =>
-        AppServices.TencentSessions.ExecuteAsync(action, ReadString(payload, "documentUrl"), cancellationToken,
+    private static async Task<ProductionAssistant.Models.TencentSessionStatus> ExecuteTencentSessionAsync(string action, JsonElement payload, CancellationToken cancellationToken)
+    {
+        if (payload.ValueKind == JsonValueKind.Object &&
+            (payload.TryGetProperty("permissionTargets", out _) || payload.TryGetProperty("refreshPermissions", out _)))
+            throw new InvalidOperationException("填写位置权限由填报服务在执行时检查。");
+
+        var status = await AppServices.TencentSessions.ExecuteAsync(action, ReadString(payload, "documentUrl"), cancellationToken,
             ReadString(payload, "id"), payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("configRevision", out var revision) && revision.ValueKind == JsonValueKind.Number && revision.TryGetInt32(out var value) ? value : null,
-            ReadString(payload, "loginOperationId"), payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("confirmClear", out var confirmation) && confirmation.ValueKind == JsonValueKind.True,
-            payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("permissionTargets", out var targets)
-                ? targets.Deserialize<List<ProductionAssistant.Models.TencentPermissionTarget>>(JsonOptions) : null,
-            payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("refreshPermissions", out var refresh) && refresh.ValueKind == JsonValueKind.True);
+            ReadString(payload, "loginOperationId"), payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("confirmClear", out var confirmation) && confirmation.ValueKind == JsonValueKind.True);
+        return status with { PermissionCheck = null };
+    }
 
     private static string ReadString(JsonElement element, string name) => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) ? value.GetString() ?? string.Empty : string.Empty;
     private static DateTime ReadDate(JsonElement element, string name) => DateTime.TryParse(ReadString(element, name), out var date) ? date.Date : DateTime.Today;

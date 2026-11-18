@@ -100,6 +100,10 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         }
         var blocked = await sidecar.SendAsync("tencentSheet.write");
         Assert.False(blocked.GetProperty("ok").GetBoolean());
+        var targetCheck = await sidecar.SendAsync("tencentSheet.sessionVerify",
+            new { documentUrl = "https://docs.qq.com/sheet/fixture", permissionTargets = new[] { new { sheetName = "fixture", address = "A1" } }, refreshPermissions = true });
+        Assert.False(targetCheck.GetProperty("ok").GetBoolean());
+        Assert.Contains("执行时检查", targetCheck.GetProperty("error").GetString());
         Assert.False(Directory.Exists(Path.Combine(_folder, "tencent-sheet-profile")));
     }
 
