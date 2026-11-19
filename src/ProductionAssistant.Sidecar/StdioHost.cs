@@ -20,6 +20,8 @@ internal sealed class StdioHost : IBridgeHost
         "tencentSheet.save",
         "groupSubmission.getConfiguration",
         "groupSubmission.saveConfiguration",
+        "tencentSheet.getConnectionSummary",
+        "tencentSheet.importConnectionSummaries",
         "tencentSheet.runs",
         "tencentSheet.sources",
         "tencentSheet.schema",

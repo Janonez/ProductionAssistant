@@ -19,13 +19,15 @@ module.exports = async function checkBusinessConfiguration(page) {
   assert.equal(await create.isDisabled(), true);
   await business.getByText('连接文档后方可新建业务', { exact: true }).waitFor();
   await page.evaluate(() => { window.verifyGroupConnection = true; });
-  const writesBefore = await page.evaluate(() => [...window.operations]);
-  await settings.getByRole('button', { name: '检测', exact: true }).click();
+  const operationsOutsideConfiguration = () => page.evaluate(() => window.operations.filter(operation =>
+    !operation.startsWith('groupSubmission.') && operation !== 'tencentSheet.getConnectionSummary'));
+  const operationsBeforeCheck = await operationsOutsideConfiguration();
+  await settings.getByRole('button', { name: '连接', exact: true }).click();
   await settings.locator('[data-connection-state=connected]').waitFor();
   assert.equal(await settings.getByText('检查填写位置权限', { exact: true }).count(), 0);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  const operationsAfterCheck = await page.evaluate(() => [...window.operations]);
-  assert.deepEqual(operationsAfterCheck, writesBefore.concat('tencentSheet.sessionVerify'), 'window focus does not repeat link detection');
+  const operationsAfterCheck = await operationsOutsideConfiguration();
+  assert.deepEqual(operationsAfterCheck, operationsBeforeCheck.concat('tencentSheet.sessionVerify'), 'window focus does not repeat link detection');
   assert.equal(await create.isEnabled(), true);
   const empty = business.getByRole('button', { name: /尚无业务/ });
   assert.equal(await empty.getByRole('button').count(), 0);
@@ -104,8 +106,8 @@ module.exports = async function checkBusinessConfiguration(page) {
   await execution.getByText(/下次执行：—/).waitFor();
   await execution.getByText(/没有可填报的业务/).waitFor();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  assert.deepEqual(await page.evaluate(() => window.operations.filter(operation => !operation.startsWith('groupSubmission.'))),
-    operationsAfterCheck.filter(operation => !operation.startsWith('groupSubmission.')), 'configuration saves do not recheck the connection or call business write operations');
+  assert.deepEqual(await operationsOutsideConfiguration(), operationsAfterCheck,
+    'configuration saves do not recheck the connection or call business write operations');
   for (const width of [1600, 960, 720, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const layout = await settings.evaluate(element => ({ width: element.getBoundingClientRect().width, overflow: element.scrollWidth > element.clientWidth }));

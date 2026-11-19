@@ -20,6 +20,7 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         // T1-A migrates local document configuration; document writes remain blocked below.
         "tencentSheet.create", "tencentSheet.save",
         "groupSubmission.getConfiguration", "groupSubmission.saveConfiguration",
+        "tencentSheet.getConnectionSummary", "tencentSheet.importConnectionSummaries",
         "notionFill.runs", "settings.open", "automation.list", "daily.list", "daily.get", "daily.runs", "report.getState",
         "settings.saveNotification", "settings.saveNotificationRules", "daily.create", "daily.saveTemplate",
         "tencentSheet.sessionStatus", "tencentSheet.sessionOpen", "tencentSheet.sessionVerify", "tencentSheet.sessionClose",
@@ -186,7 +187,17 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         await using (var first = await SidecarSession.StartAsync(_folder))
         {
             AssertSuccess(await first.SendAsync("tencentSheet.create", new { requestId = id, documentUrl = "https://docs.qq.com/sheet/group-config-fixture" }));
+            var unconnected = await first.SendAsync("tencentSheet.getConnectionSummary", new { id });
+            AssertSuccess(unconnected);
+            Assert.Equal("NotConnected", unconnected.GetProperty("data").GetProperty("state").GetString());
+            var migrated = await first.SendAsync("tencentSheet.importConnectionSummaries",
+                new { entries = new[] { new { taskId = id, configRevision = 0, checkedAt = "2026-11-16T08:00:00Z", documentName = "隔离迁移夹具" } } });
+            AssertSuccess(migrated);
+            Assert.True(migrated.GetProperty("data").GetProperty("acknowledged").GetBoolean());
             await using var second = await SidecarSession.StartAsync(_folder);
+            var fromSecondProcess = await second.SendAsync("tencentSheet.getConnectionSummary", new { id });
+            AssertSuccess(fromSecondProcess);
+            Assert.Equal("Connected", fromSecondProcess.GetProperty("data").GetProperty("state").GetString());
             var initial = await first.SendAsync("groupSubmission.getConfiguration", request);
             AssertSuccess(initial);
             var data = initial.GetProperty("data");
@@ -226,6 +237,20 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         Assert.Equal("运行时长", Assert.Single(restored.GetProperty("businesses").EnumerateArray()).GetProperty("name").GetString());
         var original = (await restarted.SendAsync("tencentSheet.get", new { id })).GetProperty("data");
         Assert.Equal(0, original.GetProperty("configRevision").GetInt32());
+        var summary = await restarted.SendAsync("tencentSheet.getConnectionSummary", new { id });
+        AssertSuccess(summary);
+        var connection = summary.GetProperty("data");
+        Assert.Equal("Connected", connection.GetProperty("state").GetString());
+        Assert.Equal(DateTimeOffset.Parse("2026-11-16T08:00:00Z"), connection.GetProperty("confirmedAt").GetDateTimeOffset());
+        Assert.Equal("隔离迁移夹具", connection.GetProperty("documentName").GetString());
+        Assert.False(connection.TryGetProperty("permissionCheck", out _));
+        var changed = await restarted.SendAsync("tencentSheet.save", new { id, configRevision = 0,
+            config = new { documentUrl = "https://docs.qq.com/sheet/group-config-replaced" } });
+        AssertSuccess(changed);
+        var replaced = await restarted.SendAsync("tencentSheet.getConnectionSummary", new { id });
+        AssertSuccess(replaced);
+        Assert.Equal("DocumentChanged", replaced.GetProperty("data").GetProperty("reason").GetString());
+        Assert.Equal("NotConnected", replaced.GetProperty("data").GetProperty("state").GetString());
         Assert.False(Directory.Exists(Path.Combine(RuntimeEnvironment.DataDirectory, "tencent-sheet-profile")));
     }
 

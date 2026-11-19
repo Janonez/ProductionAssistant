@@ -168,7 +168,7 @@ public sealed class TencentSheetTaskHandler(TencentSheetNotionService? notion = 
             record["phase"] = "write";
             record["status"] = "执行中，结果待确认";
             SaveRun(context.TaskId, record, job["config"]!.AsObject(), background);
-            var request = new JsonObject { ["operation"] = background ? "background" : "write", ["jobId"] = context.TaskId, ["config"] = resolved, ["date"] = date.ToString("yyyy-MM-dd"), ["values"] = job["values"]?.DeepClone(), ["token"] = (string?)job["confirmationToken"] };
+            var request = new JsonObject { ["operation"] = background ? "background" : "write", ["jobId"] = context.TaskId, ["configRevision"] = (int?)job["configRevision"] ?? 0, ["config"] = resolved, ["date"] = date.ToString("yyyy-MM-dd"), ["values"] = job["values"]?.DeepClone(), ["token"] = (string?)job["confirmationToken"] };
             var result = await Service.CallAsync(request, cancellationToken);
             record["status"] = "成功";
             record["message"] = result.GetProperty("message").GetString();

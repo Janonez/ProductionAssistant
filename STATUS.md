@@ -1,5 +1,13 @@
 # ProductionAssistant 交接状态
 
+## 腾讯文档连接摘要（2026-11-19，Development 验证通过，待人工验收）
+
+- 需求分支 `codex/tencent-connection-summary` 基于 `bfbeaa2`。Sidecar 以原子 JSON 保存文档连接摘要，使用 `configRevision` 和规范化文档标识。共享 Profile 的登录失效和换号一次更新相关摘要，临时诊断保留已确认状态。接口与文件结构见 [腾讯文档权限检查](docs/tencent-permission-check.md#摘要存储与状态变化)。
+- 启动读取使用「读取连接状态…」占位。读回无摘要显示「未连接」，读回连接恢复原确认时间，两种情况都无需启动腾讯探测。旧 Electron 摘要仅在 Sidecar 确认导入后清理。
+- 完整 `pwsh -NoProfile -File .\scripts\verify.ps1` 退出 0。React 468 通过、1 跳过，TypeScript/Vite、浏览器 36 个连接场景、Electron 122/122、Release 编译、.NET 408/408 和 Development 发布通过。两处中途问题分别为浏览器调用基线和跨程序集方法可见性，均已修正。日志在 `artifacts/tencent-connection-summary/verify.log`。
+- Development Renderer Build 为 `a0e9e527-c442-4703-8b45-633a4c457ceb`。源及发布的 124 个前端资源路径和 SHA-256 一致，两个不可变目录各另有一份清单。Debug 发布出现 PRI249 警告，发布完成。Sidecar 重启、换号和失效均使用隔离夹具验证。
+- 下次入口为用户在 Development 上人工验收真实腾讯账号、到期时间与真实文档填报。用户负责提交和合并，稳定版发布另行授权。
+
 ## 集团填报配置持久化（2026-11-18，完整本地验证通过，待人工验收）
 
 - 主目录需求分支 `codex/group-submission-config`，基线 `c0d8dbc`。本次交付包含源码、测试和匹配的 Renderer 产物，按用户指示仅做本地提交。

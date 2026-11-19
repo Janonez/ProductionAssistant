@@ -3,14 +3,18 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { SubmissionConnection } from './SubmissionConnection'
-import { DocumentConnectionItem, connectionFromSession, documentLink, type ConnectionStatus, type DocumentSessionEvidence } from './DocumentConnectionItem'
+import { DocumentConnectionItem, documentLink, type ConnectionStatus, type DocumentSessionEvidence } from './DocumentConnectionItem'
 import type { SubmissionJob } from './types'
+import { migrateLegacyConnections } from './connection-summary'
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke }))
 const firstUrl = 'https://docs.qq.com/sheet/one', secondUrl = 'https://docs.qq.com/sheet/two'
 const closed: DocumentSessionEvidence = { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown', verifiedAt: null, message: '' }
 const connected: DocumentSessionEvidence = { state: 'authenticated', browserOpen: true, authentication: 'authenticated', authenticationSource: 'server', authenticationObservedAt: '2026-11-16T01:30:00Z', documentAccess: 'allowed', editPermission: 'editable', verifiedAt: '2026-11-16T01:30:00Z', documentCheckedAt: '2026-11-16T01:30:00Z', documentType: 'spreadsheet', documentIdentity: firstUrl, targetDocumentUrl: firstUrl, documentName: '集团日报', message: '' }
+const initialSummary = { state: 'NotConnected', configRevision: 8, confirmedAt: undefined as string | undefined, documentName: undefined as string | undefined }
+const connectedSummary = { ...initialSummary, state: 'Connected', confirmedAt: connected.documentCheckedAt!, documentName: '集团日报' }
+let summary: typeof initialSummary
 let root: Root, container: HTMLDivElement
 const ready = vi.fn(), active = vi.fn(), dirty = vi.fn()
 const button = (name: string, parent: ParentNode = document) => [...parent.querySelectorAll<HTMLButtonElement>('button')].find(element => element.textContent?.trim() === name)!
@@ -35,7 +39,8 @@ const mount = async (initial = firstUrl) => act(async () => root.render(<Harness
 beforeEach(() => {
   localStorage.clear()
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
-  invoke.mockReset().mockResolvedValue(closed)
+  summary = { ...initialSummary }
+  invoke.mockReset().mockImplementation(async operation => operation === 'tencentSheet.getConnectionSummary' ? summary : closed)
   vi.spyOn(toast, 'success').mockReturnValue('success')
   vi.spyOn(toast, 'error').mockReturnValue('error')
   ready.mockClear(); active.mockClear(); dirty.mockClear()
@@ -44,9 +49,9 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 it.each([
-  ['unconfigured', '', '连接'], ['idle', '未检测', '检测'], ['checking', '检测中', undefined],
-  ['connected', '已连接', '打开文档'], ['notLoggedIn', '需要登录', '扫码登录'],
-  ['invalidLink', '不是表格链接', '更换文档'], ['readOnly', '只有查看权限', '打开文档'], ['accessDenied', '无权访问', '重新检测'], ['unavailable', '无法打开', '重新检测'],
+  ['unconfigured', '', '连接'], ['loadingSummary', '读取连接状态…', undefined], ['notConnected', '未连接', '连接'], ['checking', '检测中…', undefined],
+  ['connected', '已连接', '打开文档'], ['notLoggedIn', '需要重新登录', '扫码登录'],
+  ['invalidLink', '不是表格链接', '更换文档'], ['readOnly', '只读', '打开文档'], ['accessDenied', '无编辑权限', '重新检测'],
 ] as [ConnectionStatus, string, string | undefined][])('renders %s in the same outline Item with exactly its primary action', async (state, badge, primary) => {
   const action = vi.fn()
   await act(async () => root.render(<DocumentConnectionItem connection={{ state, documentName: '很长的集团日报名称'.repeat(30) }} url={state === 'unconfigured' ? '' : firstUrl} draft="" editing={state === 'unconfigured'} busy={state === 'checking'} onDraft={vi.fn()} onAction={action} onCancel={vi.fn()} onCopy={vi.fn()} onClear={vi.fn()} />))
@@ -73,57 +78,77 @@ it('disables empty and whitespace URLs, permits a valid URL and submits once via
   await act(async () => { submit(); submit() })
   expect(invoke).toHaveBeenCalledTimes(1); expect(invoke).toHaveBeenCalledWith('tencentSheet.create', { documentUrl: secondUrl, requestId: expect.stringMatching(/^[a-f0-9]{32}$/) })
   await act(async () => resolve({ id: 'new' }))
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: secondUrl, id: 'new', configRevision: 0 }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionVerify', { documentUrl: secondUrl, id: 'new', configRevision: 0 }, 60000)
   expect(container.querySelector('[data-connection-state=connected]')).toBeNull()
 })
 
-it('reads the existing saved-document status and uses the returned real name', async () => {
-  invoke.mockResolvedValue(connected); await mount()
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: firstUrl, id: 'one', configRevision: 8 }, 60000)
+it('reads the Sidecar summary and uses the returned name and confirmation age', async () => {
+  summary = connectedSummary
+  await mount()
+  expect(invoke.mock.calls).toEqual([['tencentSheet.getConnectionSummary', { id: 'one' }]])
   expect(container.querySelector('[aria-label="文档名称"]')?.textContent).toBe('集团日报')
+  expect(container.querySelector('[data-slot=badge]')?.textContent).toMatch(/已连接 · .*确认/)
   expect(ready).toHaveBeenLastCalledWith(true)
   await click(button('打开文档'))
-  expect(invoke).toHaveBeenLastCalledWith('tencentSheet.sessionOpen', { documentUrl: firstUrl }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionOpen', { id: 'one', documentUrl: firstUrl, configRevision: 8 }, 60000)
 })
-it('restores the connected display and skips repeat probes on remount and focus', async () => {
-  invoke.mockResolvedValue(connected)
+it('refreshes from Sidecar on remount and focus without probing Tencent', async () => {
+  summary = connectedSummary
   await mount()
   await act(async () => root.unmount())
   root = createRoot(container)
   invoke.mockClear()
   await mount()
-  expect(container.querySelector('[data-connection-state=connected]')?.textContent).toContain('已连接')
   expect(ready).toHaveBeenLastCalledWith(true)
+  summary = { ...initialSummary, state: 'NeedsLogin' }
   await act(async () => window.dispatchEvent(new Event('focus')))
-  expect(invoke).not.toHaveBeenCalled()
-  await menu('重新检测')
-  expect(invoke).toHaveBeenCalledOnce()
-  expect(ready).toHaveBeenLastCalledWith(true)
-  invoke.mockResolvedValue({ ...closed, state: 'login-required', authentication: 'required' })
-  await menu('重新检测')
-  expect(container.querySelector('[data-connection-state=notLoggedIn]')).not.toBeNull()
-  expect(localStorage.length).toBe(0)
+  expect(container.querySelector('[data-connection-state=notLoggedIn]')?.textContent).toContain('需要重新登录')
+  expect(invoke.mock.calls.map(([operation]) => operation)).toEqual(['tencentSheet.getConnectionSummary', 'tencentSheet.getConnectionSummary'])
 })
-it('keeps editing available after temporary errors and reports confirmed access denial', async () => {
-  invoke.mockResolvedValue(connected)
+it('keeps editing available after temporary errors and shows explicit denial from Sidecar', async () => {
+  summary = connectedSummary
   await mount()
   invoke.mockRejectedValueOnce(new Error('temporary'))
   await menu('重新检测')
   expect(container.querySelector('[data-connection-state=connected]')).not.toBeNull()
   expect(ready).toHaveBeenLastCalledWith(true)
-  expect(localStorage.length).toBe(1)
-  invoke.mockResolvedValue({ ...connected, state: 'access-denied', documentAccess: 'denied' })
+  summary = { ...initialSummary, state: 'AccessDenied' }
   await menu('重新检测')
-  expect(container.querySelector('[data-connection-state=accessDenied]')?.textContent).toContain('无权访问')
-  expect(localStorage.length).toBe(0)
-})
-it('shows connected after the server acknowledges login independently of edit-permission evidence', () => {
-  expect(connectionFromSession({ ...connected, loginState: 'authenticated', documentIdentity: null, documentAccess: 'unknown', editPermission: 'unknown' }, firstUrl, 8).state).toBe('connected')
+  expect(container.querySelector('[data-connection-state=accessDenied]')?.textContent).toContain('无编辑权限')
 })
 it.each([undefined, '', '   '])('uses 腾讯文档 if title retrieval returns %j', async documentName => {
-  invoke.mockResolvedValue({ ...connected, documentName }); await mount()
+  summary = { ...connectedSummary, documentName }
+  await mount()
   expect(container.querySelector('[aria-label="文档名称"]')?.textContent).toBe('腾讯文档')
   expect(container.querySelector('[data-connection-state=connected]')).not.toBeNull()
+})
+it('imports the original timestamp and deletes the legacy keys only after acknowledgement', async () => {
+  const key = 'pa.submission.last-connection.one'
+  const legacy = JSON.stringify({ revision: 8, checkedAt: connected.documentCheckedAt, documentName: '日报' })
+  localStorage.setItem(key, legacy)
+  localStorage.setItem('another.preference', 'keep')
+  invoke.mockRejectedValueOnce(new Error('Sidecar unavailable'))
+  await expect(migrateLegacyConnections(localStorage)).rejects.toThrow('Sidecar unavailable')
+  expect(localStorage.getItem(key)).not.toBeNull()
+
+  invoke.mockResolvedValueOnce({ acknowledged: false })
+  await expect(migrateLegacyConnections(localStorage)).rejects.toThrow('旧连接摘要尚未确认迁移')
+  expect(localStorage.getItem(key)).toBe(legacy)
+
+  let acknowledge!: (result: { acknowledged: boolean }) => void
+  invoke.mockImplementationOnce(() => new Promise(resolve => { acknowledge = resolve }))
+  const migrating = migrateLegacyConnections(localStorage)
+  expect(invoke).toHaveBeenLastCalledWith('tencentSheet.importConnectionSummaries', { entries: [{
+    taskId: 'one', configRevision: 8, checkedAt: connected.documentCheckedAt, documentName: '日报',
+  }] })
+  expect(localStorage.getItem(key)).toBe(legacy)
+  acknowledge({ acknowledged: true })
+  await migrating
+  expect(localStorage.getItem(key)).toBeNull()
+  expect(localStorage.getItem('another.preference')).toBe('keep')
+  invoke.mockClear()
+  await migrateLegacyConnections(localStorage)
+  expect(invoke).not.toHaveBeenCalled()
 })
 it('keeps the complete URL in the keyboard-accessible Tooltip', async () => {
   await mount()
@@ -135,7 +160,7 @@ it('keeps the complete URL in the keyboard-accessible Tooltip', async () => {
 it('offers the four ordered actions and copies the complete URL without changing connection state', async () => {
   const writeText = vi.fn().mockResolvedValue(undefined)
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-  invoke.mockResolvedValue(connected); await mount(); await menu()
+  summary = connectedSummary; await mount(); await menu()
   expect([...document.querySelectorAll('[role=menuitem]')].map(element => element.textContent)).toEqual(['重新检测', '更换文档', '复制链接', '清除登录状态'])
   await click([...document.querySelectorAll<HTMLElement>('[role=menuitem]')].find(element => element.textContent === '复制链接')!)
   expect(writeText).toHaveBeenCalledWith(firstUrl)
@@ -149,11 +174,11 @@ it('can edit and cancel without changing the persisted URL, then saves with the 
   expect(container.querySelector('#submission-document-url')).toBeNull()
   expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.save')).toBe(false)
   await menu('更换文档'); await change(secondUrl)
-  invoke.mockImplementation(async (operation, payload) => operation === 'tencentSheet.save' ? { id: 'one', configRevision: 9, config: { documentUrl: payload.config.documentUrl } } : connected)
+  invoke.mockImplementation(async (operation, payload) => operation === 'tencentSheet.save' ? { id: 'one', configRevision: 9, config: { documentUrl: payload.config.documentUrl } } : operation === 'tencentSheet.getConnectionSummary' ? { ...initialSummary, configRevision: 9 } : connected)
   await act(async () => { submit(); submit() })
   expect(invoke.mock.calls.filter(([operation]) => operation === 'tencentSheet.save')).toHaveLength(1)
   expect(invoke).toHaveBeenCalledWith('tencentSheet.save', { id: 'one', config: { documentUrl: secondUrl }, configRevision: 8 })
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: secondUrl, id: 'one', configRevision: 9 }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionVerify', { documentUrl: secondUrl, id: 'one', configRevision: 9 }, 60000)
 })
 it('retains the draft and original configuration when saving fails', async () => {
   await mount(); await menu('更换文档'); await change(secondUrl)
@@ -169,37 +194,28 @@ it('suppresses duplicate checks while showing a Spinner and no primary action', 
   let resolve!: (value: DocumentSessionEvidence) => void
   invoke.mockImplementationOnce(() => new Promise(done => { resolve = done }))
   const before = invoke.mock.calls.length
-  await act(async () => { button('检测').click(); button('检测')?.click(); window.dispatchEvent(new Event('focus')) })
+  await act(async () => { button('连接').click(); button('连接')?.click(); window.dispatchEvent(new Event('focus')) })
   expect(invoke.mock.calls.length).toBe(before + 1)
-  expect(button('检测')).toBeUndefined(); expect(button('打开文档')).toBeUndefined()
+  expect(button('连接')).toBeUndefined(); expect(button('打开文档')).toBeUndefined()
   expect(container.querySelector('[aria-label="正在检测文档连接"]')).not.toBeNull()
+  summary = connectedSummary
   await act(async () => resolve(connected)); expect(ready).toHaveBeenLastCalledWith(true)
 })
 it('opens a Metis QR dialog without opening Edge for login', async () => {
-  invoke.mockResolvedValue({ ...closed, browserOpen: true, state: 'login-required', authentication: 'required' })
+  summary = { ...initialSummary, state: 'NeedsLogin' }
   await mount(); await click(button('扫码登录'))
   expect(document.querySelector('[role=dialog]')?.textContent).toContain('扫码登录腾讯文档')
   expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionLoginBegin', { documentUrl: firstUrl, id: 'one', configRevision: 8 }, 35000)
   expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.sessionOpen')).toBe(false)
   expect(ready).toHaveBeenLastCalledWith(false)
 })
-it('offers login for unknown authentication while preserving the unknown badge and manual recheck', async () => {
-  invoke.mockResolvedValue({ ...closed, state: 'unavailable', browserOpen: true, code: 'AuthenticationUnknown', message: '尚未确认登录状态。' })
+it('keeps the unconnected display and connect entry after an incomplete detection', async () => {
   await mount()
-  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('无法打开')
+  invoke.mockResolvedValueOnce({ ...closed, state: 'unavailable', code: 'SessionTimeout', message: '检测超时' })
+  await click(button('连接'))
+  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('未连接')
   expect(ready).toHaveBeenLastCalledWith(false)
-  await menu()
-  expect([...document.querySelectorAll('[role=menuitem]')].map(el => el.textContent)).toContain('重新检测')
-  await act(async () => document.querySelector('[role=menu]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))); await settle()
-  await click(button('登录'))
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionLoginBegin', { documentUrl: firstUrl, id: 'one', configRevision: 8 }, 35000)
-  expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.sessionOpen')).toBe(false)
-})
-it('prompts for login when the backend confirms missing local cookie credentials, without labelling it expired', async () => {
-  invoke.mockResolvedValue({ ...closed, browserOpen: true, state: 'login-required', code: 'LoginCredentialsMissing', message: '当前专属会话没有保存的 Cookie 登录资料。' })
-  await mount()
-  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('需要登录')
-  expect(button('扫码登录')).toBeDefined();expect(ready).toHaveBeenLastCalledWith(false)
+  expect(button('连接')).toBeDefined()
 })
 it('requires confirmation of shared scope before clearing and preserves the saved document', async () => {
   await mount(); await menu('清除登录状态')
@@ -212,38 +228,38 @@ it('requires confirmation of shared scope before clearing and preserves the save
   await menu('更换文档'); expect(container.querySelector<HTMLInputElement>('input')?.value).toBe(firstUrl)
 })
 it('shows clear success only for backend acknowledgement and keeps the document configuration', async () => {
-  invoke.mockImplementation(async operation => operation === 'tencentSheet.sessionClear' ? { ...closed, code: 'LoginCleared' } : connected)
+  const normal = invoke.getMockImplementation()!
+  summary = connectedSummary
+  invoke.mockImplementation(async operation => {
+    if (operation !== 'tencentSheet.sessionClear') return normal(operation)
+    summary = { ...initialSummary, state: 'NeedsLogin' }
+    return { ...closed, code: 'LoginCleared' }
+  })
   await mount(); await menu('清除登录状态')
   await click(button('清除登录状态', document.querySelector('[role=alertdialog]')!))
   expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionClear', { documentUrl: firstUrl, id: 'one', configRevision: 8, confirmClear: true }, 60000)
-  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('需要登录')
+  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('需要重新登录')
   expect(toast.success).toHaveBeenCalledWith('登录资料及专属浏览器缓存已清空')
   await menu('更换文档'); expect(container.querySelector<HTMLInputElement>('input')?.value).toBe(firstUrl)
 })
-it('never keeps a connected badge or claims success after incomplete clearing', async () => {
-  invoke.mockImplementation(async operation => operation === 'tencentSheet.sessionClear' ? { ...closed, state: 'unavailable', code: 'ClearIncomplete', message: '清除结果尚未确认。' } : connected)
+it('keeps the persisted confirmation after an unacknowledged clear', async () => {
+  summary = connectedSummary
+  const normal = invoke.getMockImplementation()!
+  invoke.mockImplementation(async operation => operation === 'tencentSheet.sessionClear'
+    ? { ...closed, state: 'unavailable', code: 'ClearIncomplete', message: '清除结果尚未确认。' } : normal(operation))
   await mount(); await menu('清除登录状态')
   await click(button('清除登录状态', document.querySelector('[role=alertdialog]')!))
-  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe('无法打开')
-  expect(ready).toHaveBeenLastCalledWith(false);expect(toast.success).not.toHaveBeenCalled()
-})
-it.each([
-  { ...connected, editPermission: 'read-only' },
-  { ...connected, authenticationSource: null }, { ...connected, authentication: 'unknown' }, { ...connected, verifiedAt: null },
-  { ...connected, documentIdentity: secondUrl }, { ...connected, authenticationStale: true }, { ...connected, authenticationObservedAt: null },
-  { ...connected, browserOpen: false }, { ...connected, documentAccess: 'denied', state: 'access-denied' },
-] as DocumentSessionEvidence[])('never enables picking for incomplete or read-only evidence %j', async result => {
-  invoke.mockResolvedValue(result); await mount()
-  expect(ready).toHaveBeenLastCalledWith(false)
-  expect(connectionFromSession(result).state).not.toBe('connected')
+  expect(container.querySelector('[data-connection-state=connected]')).not.toBeNull()
+  expect(ready).toHaveBeenLastCalledWith(true)
+  expect(toast.success).not.toHaveBeenCalled()
 })
 it('ignores a late connection result after the target changes or unmounts', async () => {
-  let resolve!: (value: DocumentSessionEvidence) => void
+  let resolve!: (value: typeof connectedSummary) => void
   invoke.mockImplementationOnce(() => new Promise(done => { resolve = done }))
   const render = (url: string) => <SubmissionConnection job={{ id: 'one', config: { documentUrl: url } }} onSaved={vi.fn()} onCreated={vi.fn()} onActive={active} onDirty={dirty} onReady={ready} />
   await act(async () => root.render(render(firstUrl)))
   await act(async () => root.render(render(secondUrl)))
-  await act(async () => resolve(connected))
+  await act(async () => resolve({ ...connectedSummary, configRevision: 0 }))
   expect(container.querySelector('[data-connection-state=connected]')).toBeNull(); expect(ready).toHaveBeenLastCalledWith(false)
 })
 it.each(['', 'https://docs.qq.com/', 'https://docs.qq.com/doc/one', 'http://docs.qq.com/sheet/one', 'https://docs.qq.com.evil.invalid/sheet/one', 'https://user:secret@docs.qq.com/sheet/one', 'https://docs.qq.com:8080/sheet/one'])('rejects invalid or unsafe sheet URLs: %s', value => expect(documentLink(value)).toBeUndefined())

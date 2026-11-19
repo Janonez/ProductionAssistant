@@ -4,9 +4,9 @@ const {chromium,_electron}=require('playwright');
 const fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os'),http=require('node:http'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'../..'),dist=path.join(root,'src/ProductionAssistant.App/Assets/Prototype/dist');
 const output=path.join(root,'artifacts/document-connection-ui');
-const states={unconfigured:['','连接'],idle:['未检测','检测'],checking:['检测中',null],connected:['已连接','打开文档'],restored:['已连接','打开文档'],notLoggedIn:['需要登录','扫码登录'],invalidLink:['不是表格链接','更换文档'],readOnly:['只有查看权限','打开文档'],unavailable:['无法打开','重新检测']};
+const states={unconfigured:['','连接'],notConnected:['未连接','连接'],checking:['检测中…',null],connected:['已连接','打开文档'],restored:['已连接','打开文档'],notLoggedIn:['需要重新登录','扫码登录'],invalidLink:['不是表格链接','更换文档'],readOnly:['只读','打开文档'],accessDenied:['无编辑权限','重新检测']};
 function installFixture() {
-  const state=new URL(location.href).searchParams.get('fixture')||'idle';
+  const state=new URL(location.href).searchParams.get('fixture')||'notConnected';
   let receive;
   const config={documentUrl:state==='invalidLink'?'https://docs.qq.com/doc/fixture':'https://docs.qq.com/sheet/ui-fixture',fields:[],rules:{}};
   const evidence={state:'authenticated',browserOpen:true,authentication:'authenticated',authenticationSource:'server',authenticationObservedAt:'2026-11-16T01:30:00Z',documentAccess:'allowed',editPermission:'editable',verifiedAt:'2026-11-16T01:30:00Z',documentCheckedAt:'2026-11-16T01:30:00Z',documentType:'spreadsheet',documentIdentity:'https://docs.qq.com/sheet/ui-fixture',targetDocumentUrl:config.documentUrl,documentName:'集团生产日报（隔离模拟名称）'.repeat(24),message:''};
@@ -14,6 +14,8 @@ function installFixture() {
   localStorage.removeItem(storageKey);
   if(state==='restored')localStorage.setItem(storageKey,JSON.stringify({revision:1,checkedAt:evidence.documentCheckedAt,documentName:evidence.documentName}));
   const status=state==='connected'?evidence:state==='readOnly'?{...evidence,editPermission:'read-only'}:state==='notLoggedIn'?{...evidence,state:'login-required',authentication:'required',documentAccess:'unknown',editPermission:'unknown'}:state==='unavailable'?{...evidence,state:'unavailable',authentication:'unknown',documentAccess:'unknown',editPermission:'unknown'}:{...evidence,state:'closed',browserOpen:false,authentication:'unknown',documentAccess:'unknown',editPermission:'unknown',documentName:null,verifiedAt:null};
+  let summary={configRevision:1,state:({connected:'Connected',readOnly:'ReadOnly',notLoggedIn:'NeedsLogin',accessDenied:'AccessDenied'})[state]||'NotConnected'};
+  if(summary.state==='Connected')summary={...summary,confirmedAt:evidence.documentCheckedAt,documentName:evidence.documentName};
   window.uiCalls=[];
   window.chrome={webview:{addEventListener:(_,listener)=>{receive=listener;},postMessage:request=>{
     if(!request.id)return;
@@ -22,6 +24,15 @@ function installFixture() {
     if(request.operation==='automation.list')data={tasks:state==='unconfigured'?[]:[{id:'ui-fixture',name:'隔离 UI 夹具',taskType:'tencent_sheet_fill'}]};
     if(request.operation==='tencentSheet.get')data={id:'ui-fixture',config,configRevision:1};
     if(request.operation==='tencentSheet.runs')data={runs:[]};
+    if(request.operation==='tencentSheet.getConnectionSummary')data=summary;
+    if(request.operation==='tencentSheet.importConnectionSummaries'){
+      window.acknowledgeLegacyConnection=()=>{
+        const [entry]=request.payload.entries;
+        if(entry)summary={...summary,state:'Connected',confirmedAt:entry.checkedAt,documentName:entry.documentName};
+        receive({data:{id:request.id,ok:true,data:{acknowledged:true}}});
+      };
+      return;
+    }
     if(request.operation==='groupSubmission.getConfiguration')data={revision:0,businesses:[],rules:{automatic:false,time:'09:00',weekdays:[1,2,3,4,5,6,0],missingData:'wait',retryMinutes:10,retryUntil:'18:00'},hasBusiness:false,nextRunAt:null,dataOptions:[]};
     if(request.operation==='tencentSheet.save'){config.documentUrl=request.payload.config.documentUrl;data={id:'ui-fixture',config,configRevision:2};}
     if(request.operation==='tencentSheet.create'){config.documentUrl=request.payload.documentUrl;data={id:'ui-fixture'};}
@@ -70,6 +81,16 @@ async function main(){
       await page.goto(baseUrl+'?route=daily-report&taskType=tencent_sheet_fill&fixture='+state);
       await page.getByRole('tab',{name:'设置',exact:true}).click();
       const item=page.locator('#submission-settings-web [data-slot=item]');
+      if(state==='checking')await item.getByRole('button',{name:'连接',exact:true}).click();
+      if(state==='restored'){
+        await item.getByText('读取连接状态…',{exact:true}).waitFor();
+        assert.equal(await item.getAttribute('data-connection-state'),'loadingSummary');
+        assert.doesNotMatch(await item.innerText(),/未连接|检测中/);
+        await page.waitForFunction(()=>typeof window.acknowledgeLegacyConnection==='function');
+        const legacy=await page.evaluate(()=>JSON.parse(localStorage.getItem('pa.submission.last-connection.ui-fixture')));
+        assert.equal(legacy.checkedAt,'2026-11-16T01:30:00Z');
+        await page.evaluate(()=>window.acknowledgeLegacyConnection());
+      }
       await page.locator('#submission-settings-web [data-slot=item][data-connection-state="'+(state==='restored'?'connected':state)+'"]').waitFor();
       await page.evaluate(()=>document.fonts.ready);
       assert.equal(await item.evaluate(element=>!!element.closest('.dark')),theme==='dark');
@@ -81,11 +102,16 @@ async function main(){
       const actions=item.locator('[data-slot=item-actions] > button:not([aria-label="文档更多操作"])');
       assert.equal(await actions.count(),primary?1:0);
       if(primary)assert.equal((await actions.textContent()).trim(),primary);
-      if(badge)assert.equal(await item.locator('[data-slot=badge]').textContent(),badge);
+      if(['connected','restored'].includes(state))assert.match(await item.locator('[data-slot=badge]').textContent(),/^已连接 · .+确认$/);
+      else if(badge)assert.equal(await item.locator('[data-slot=badge]').textContent(),badge);
       else assert.equal(await item.locator('[data-slot=badge]').count(),0);
       if(state==='connected')assert.equal(measure.titleTruncated,true);
       if(state==='checking'){assert.equal(await item.getByLabel('正在检测文档连接').count(),1);assert.equal(await item.getByRole('button',{name:'文档更多操作'}).isDisabled(),true);}
-      if(state==='restored')assert.equal(await page.evaluate(()=>window.uiCalls.some(call=>call.operation.startsWith('tencentSheet.session'))),false);
+      if(state==='restored'){
+        assert.equal(await page.evaluate(()=>window.uiCalls.some(call=>call.operation.startsWith('tencentSheet.session'))),false);
+        assert.equal(await page.evaluate(()=>localStorage.getItem('pa.submission.last-connection.ui-fixture')),null);
+        assert.equal(await page.evaluate(()=>window.uiCalls.filter(call=>call.operation==='tencentSheet.importConnectionSummaries').length),1);
+      }
       if(state==='unconfigured'){
         const input=item.getByLabel('文档链接');
         assert.equal(await input.getAttribute('placeholder'),'粘贴腾讯文档链接');
@@ -98,10 +124,10 @@ async function main(){
       if(state==='unconfigured'&&width===960&&theme==='light'){
         await item.getByLabel('文档链接').fill('https://docs.qq.com/sheet/enter-fixture');
         await item.getByLabel('文档链接').press('Enter');
-        await page.locator('#submission-settings-web [data-connection-state=idle]').waitFor();
+        await page.locator('#submission-settings-web [data-connection-state=notConnected]').waitFor();
         assert.equal(await page.evaluate(()=>window.uiCalls.filter(call=>call.operation==='tencentSheet.create').length),1);
       }
-      if(state==='idle'&&width===960&&theme==='light'){
+      if(state==='notConnected'&&width===960&&theme==='light'){
         const trigger=item.getByRole('button',{name:'文档更多操作'});
         await trigger.focus();await page.keyboard.press('ArrowDown');
         assert.deepEqual(await page.getByRole('menuitem').allTextContents(),['重新检测','更换文档','复制链接','清除登录状态']);

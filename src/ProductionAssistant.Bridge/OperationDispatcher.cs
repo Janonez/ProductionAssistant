@@ -111,6 +111,8 @@ public sealed partial class OperationDispatcher
             "tencentSheet.save" => await TencentSheetAsync("save", payload, cancellationToken),
             "groupSubmission.getConfiguration" => GroupSubmissionConfiguration(payload, save: false),
             "groupSubmission.saveConfiguration" => GroupSubmissionConfiguration(payload, save: true),
+            "tencentSheet.getConnectionSummary" => GetTencentConnectionSummary(payload),
+            "tencentSheet.importConnectionSummaries" => ImportTencentConnectionSummaries(payload),
             "tencentSheet.sessionStatus" => await ExecuteTencentSessionAsync("Status", payload, cancellationToken),
             "tencentSheet.sessionOpen" => await AppServices.TencentSessions.ExecuteAsync("Open", ReadString(payload, "documentUrl"), cancellationToken),
             "tencentSheet.sessionVerify" => await ExecuteTencentSessionAsync("Verify", payload, cancellationToken),

@@ -269,7 +269,7 @@ class TencentSheetClient {
       await this.page?.keyboard.press('Escape').catch(()=>{});
       if(completed.length===plan.rows.length && !attempted) {
         const reason=error.message;
-        error=Object.assign(Error(`已输入并本地回读 ${completed.length} 项，云端保存尚未确认。${error.code==='LoginRequired'?'请完成登录后检查网页。':'请检查网页中的数值及保存状态。'}不会重复写入。`),{code:'SaveConfirmationPending',details:reason});
+        error=Object.assign(Error(`已输入并本地回读 ${completed.length} 项，云端保存尚未确认。${error.code==='LoginRequired'?'请完成登录后检查网页。':'请检查网页中的数值及保存状态。'}不会重复写入。`),{code:'SaveConfirmationPending',details:reason,connectionInvalidation:error.code==='LoginRequired'?'LoginExpired':null});
       }
       error.completed = completed;
       error.uncertainAddress = attempted;

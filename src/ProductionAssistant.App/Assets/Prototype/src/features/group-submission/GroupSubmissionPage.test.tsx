@@ -50,6 +50,7 @@ beforeEach(() => {
       job = { ...job, configRevision: payload.configRevision + 1, config: { ...job.config, ...payload.config } }
       return structuredClone(job)
     }
+    if (operation === 'tencentSheet.getConnectionSummary') return { state: 'NotConnected', configRevision: job.configRevision }
     if (operation === 'tencentSheet.runs') return { runs }
     if (operation.startsWith('tencentSheet.session')) return closed
     throw new Error(`Unexpected operation: ${operation}`)
@@ -113,16 +114,15 @@ it('shows all settings sections without secondary navigation and retains the ove
 
 it('saves the real document link with its revision and checks the newly saved target', async () => {
   await mount(); await tab('设置'); await changeUrl('https://docs.qq.com/sheet/new')
-  expect(container.querySelector('[data-connection-state=idle]')).not.toBeNull()
+  expect(container.querySelector('[data-connection-state=notConnected]')).not.toBeNull()
   await act(async () => { submit() })
   expect(invoke).toHaveBeenCalledWith('tencentSheet.save', { id: 'group', config: { documentUrl: 'https://docs.qq.com/sheet/new' }, configRevision: 8 })
   expect(job.config.fields?.[0].name).toBe('自定义指标')
   expect(job.config.rules).toEqual({ custom: { rowStep: 3 } })
-  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionStatus', { documentUrl: 'https://docs.qq.com/sheet/new', id: 'group', configRevision: 9 }, 60000)
+  expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionVerify', { documentUrl: 'https://docs.qq.com/sheet/new', id: 'group', configRevision: 9 }, 60000)
   expect(container.querySelector('[data-connection-state=connected]')).toBeNull()
-  const calls = invoke.mock.calls.length
   await act(async () => window.dispatchEvent(new Event('focus')))
-  expect(invoke).toHaveBeenCalledTimes(calls)
+  expect(invoke.mock.calls.filter(([operation]) => operation.startsWith('tencentSheet.session'))).toHaveLength(1)
 })
 it('returns to the configured row after save and preserves a replacement draft across tabs until cancelled', async () => {
   await mount(); await tab('设置'); await changeUrl('https://docs.qq.com/sheet/saved')
@@ -142,7 +142,7 @@ it('keeps a draft across tabs without persisting or checking the unsaved target'
   await mount(); await tab('设置'); await changeUrl('https://docs.qq.com/sheet/draft')
   await tab('概览'); await tab('设置')
   expect(container.querySelector<HTMLInputElement>('#submission-document-url')!.value).toContain('/draft')
-  expect(container.querySelector('[data-connection-state=idle]')).not.toBeNull()
+  expect(container.querySelector('[data-connection-state=notConnected]')).not.toBeNull()
   expect(job.config.documentUrl).toContain('/original')
   expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.save')).toBe(false)
   expect(invoke.mock.calls.some(([operation, payload]) => operation.startsWith('tencentSheet.session') && payload.documentUrl.endsWith('/draft'))).toBe(false)
@@ -159,7 +159,7 @@ it('does not overwrite the saved target on a rejected save and blocks duplicate 
   await act(async () => reject(new Error('任务配置已变化，请重新打开后再修改。')))
   expect(toast.error).toHaveBeenCalledWith('任务配置已变化，请重新打开后再修改。')
   expect(job.config.documentUrl).toContain('/original')
-  expect(container.querySelector('[data-connection-state=idle]')).not.toBeNull()
+  expect(container.querySelector('[data-connection-state=notConnected]')).not.toBeNull()
 })
 
 it('creates one persisted connection without a generic task wizard and restores it on remount', async () => {
@@ -182,6 +182,7 @@ it('allows all tabs while a document probe runs and reuses that request when ret
   invoke.mockImplementation((operation, payload) => operation === 'tencentSheet.sessionVerify'
     ? new Promise(resolve => { finish = resolve }) : normal(operation, payload))
   await mount(); await tab('设置')
+  await act(async () => button('连接').click())
   expect(container.querySelector('[data-connection-state=checking]')).not.toBeNull()
   expect(button('新建业务').disabled).toBe(true)
   await tab('记录')

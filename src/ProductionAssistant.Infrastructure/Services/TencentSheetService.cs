@@ -24,12 +24,15 @@ public sealed class TencentSheetService : IAsyncDisposable
     private readonly string _runnerPath;
     private readonly string? _nodeModules;
 
+    public TencentConnectionSummaryStore Connections { get; }
+
     public TencentSheetService() : this(RuntimeEnvironment.DataDirectory,
         Path.Combine(AppContext.BaseDirectory, "Assets", "TencentSheet", "runner.cjs"), null) { }
 
     internal TencentSheetService(string dataDirectory, string runnerPath, string? nodeModules)
     {
         _dataDirectory = dataDirectory;
+        Connections = new(dataDirectory);
         _profile = Path.Combine(dataDirectory, "tencent-sheet-profile");
         _runnerPath = runnerPath;
         _nodeModules = nodeModules;
@@ -38,6 +41,7 @@ public sealed class TencentSheetService : IAsyncDisposable
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
+        var document = ConnectionDocument(request);
         if (!await _gate.WaitAsync(0, timeout.Token))
             throw new TencentOperationBusyException();
         try
@@ -59,14 +63,24 @@ public sealed class TencentSheetService : IAsyncDisposable
                     ?? throw new InvalidOperationException("填报会话已关闭，请重新打开文档；此前写入结果请先检查。");
                 result = JsonDocument.Parse(line);
             }
-            catch
+            catch (Exception error)
             {
+                if (document is not null)
+                {
+                    var reason = error is OperationCanceledException
+                        ? cancellationToken.IsCancellationRequested || _shutdown.IsCancellationRequested
+                            ? TencentConnectionDiagnostic.Cancelled : TencentConnectionDiagnostic.Timeout
+                        : TencentConnectionDiagnostic.Unavailable;
+                    Connections.TryApply(new(DateTimeOffset.UtcNow, document, Diagnostic: reason));
+                }
                 // No replay: a transport failure may follow an actual write.
                 await StopWorkerAsync();
                 throw;
             }
             using (result)
             {
+                if (result.RootElement.TryGetProperty("connection", out var connection))
+                    UpdateConnection(connection, document);
                 if (result.RootElement.TryGetProperty("browserOpen", out var open) && !open.GetBoolean())
                     await StopWorkerAsync();
                 return ReadResponse(result.RootElement);
@@ -76,6 +90,25 @@ public sealed class TencentSheetService : IAsyncDisposable
         {
             lock (_cancellationGate) _activeOperation = null;
             _gate.Release();
+        }
+    }
+
+    private static TencentConnectionDocument? ConnectionDocument(JsonObject request) =>
+        (string?)request["jobId"] is { Length: > 0 } id &&
+        TencentConnectionDocument.Normalize((string?)request["config"]?["documentUrl"]) is { } identity
+            ? new(id, (int?)request["configRevision"] ?? (int?)request["config"]?["configRevision"] ?? 0, identity) : null;
+
+    private void UpdateConnection(JsonElement connection, TencentConnectionDocument? document)
+    {
+        try
+        {
+            var generation = Connections.ProfileGeneration(create: true);
+            if (TencentConnectionSummaryStore.FromWorker(connection, document, generation, DateTimeOffset.UtcNow) is { } observation)
+                Connections.TryApply(observation);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"浏览器资料代次无法读取（{error.GetType().Name}）。");
         }
     }
 
