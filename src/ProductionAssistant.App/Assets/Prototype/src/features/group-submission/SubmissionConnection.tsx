@@ -79,7 +79,12 @@ export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirt
   useEffect(() => { onDirty?.(dirty) }, [dirty, onDirty])
   useEffect(() => { onReady(!!savedUrl && connection.state === 'connected' && !editing) }, [savedUrl, connection.state, editing, onReady])
   useEffect(() => { onStatusChange?.(connection.state) }, [connection.state, onStatusChange])
-  const verified = useCallback(() => { void refresh().catch(() => {}) }, [refresh])
+  const verified = useCallback(() => {
+    const current = generation.current
+    void refresh().catch(() => {}).then(() => {
+      if (mounted.current && current === generation.current) void check()
+    })
+  }, [refresh, check])
   const changeLogin = useCallback((open: boolean) => setLoginOpen(open), [])
 
   async function save(event: FormEvent) {

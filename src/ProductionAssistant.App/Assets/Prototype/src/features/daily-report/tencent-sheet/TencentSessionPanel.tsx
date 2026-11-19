@@ -18,7 +18,7 @@ export type TencentSessionStatus = {
   authenticationSource?: 'server' | null; authenticationObservedAt?: string | null; authenticationReason?: string | null;
   authenticationStale?: boolean; authenticationPreviouslyConfirmed?: boolean;
   documentIdentity?: string | null; documentType?: string; documentName?: string | null; documentCheckedAt?: string | null;
-  interaction?: 'none' | 'qr' | 'manual'; loginState?: 'loading' | 'consent' | 'waiting' | 'scanned' | 'expired' | 'authenticated' | 'failed' | 'timeout' | 'cancelled';
+  interaction?: 'none' | 'qr' | 'manual'; loginState?: 'starting-browser' | 'getting-qr' | 'consent' | 'waiting' | 'scanned' | 'confirming' | 'expired' | 'rejected' | 'authenticated' | 'failed' | 'timeout' | 'cancelled';
   loginOperationId?: string | null; loginWaitUntil?: string | null; qrImage?: string | null;
   pageGeneration?: number;
 };

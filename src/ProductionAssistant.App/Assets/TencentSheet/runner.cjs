@@ -7,6 +7,7 @@ const core=require('./core.js');
 const site=require('./site-adapter.cjs');
 const browser=new TencentDocsBrowser(process.argv[2]);
 const {TencentSession,documentUrl}=require('./session.cjs');
+const {qrTiming}=require('./login.cjs');
 const session=new TencentSession(browser);
 const client=new TencentSheetClient(browser);
 let confirmation=null;
@@ -120,6 +121,7 @@ async function dispatch(request,observe=()=>{}) {
     if(config.documentUrl)config.documentUrl=documentUrl(config.documentUrl);
     const result=await session.run(operation,config);
     observe(await session.connectionObservation(result,operation));
+    if(result.qrImage)qrTiming('worker-return');
     return result;
   }
   if(operation.startsWith('site')) {

@@ -55,22 +55,28 @@ export function DocumentConnectionItem({ connection, url, draft, editing, busy, 
 }) {
   const view = states[connection.state]
   const age = connection.state === 'connected' ? confirmationAge(connection.checkedAt) : undefined
+  const statusBadge = view.label && (
+    <Badge variant="outline" className={'shrink-0 gap-1 ' + (age?.stale ? 'text-muted-foreground' : view.className ?? '')} role="status" aria-live="polite" tabIndex={age ? 0 : undefined}>
+      {(checking || connection.state === 'checking') && <Spinner aria-label="正在检测文档连接" />}
+      {view.label}{age && <span> · {age.label}</span>}
+    </Badge>
+  )
   const name = connection.documentName?.trim() || '腾讯文档'
   return <Item variant="outline" size="sm" className="h-14 min-w-0 flex-nowrap gap-3 py-0 has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-[3px] has-[input:focus-visible]:ring-ring/50" data-connection-state={connection.state} aria-label="文档连接" aria-busy={busy || connection.state === 'loadingSummary'}>
     <ItemMedia><FileText className="size-5 text-muted-foreground" aria-hidden="true" /></ItemMedia>
     <ItemContent className="min-w-0 flex-row items-center gap-2">
       {editing ? <Input id="submission-document-url" aria-label="文档链接" type="text" inputMode="url" autoComplete="off" autoFocus={!!url} value={draft} placeholder="粘贴腾讯文档链接" disabled={busy || locked} onChange={event => onDraft(event.target.value)} className="h-9 min-w-0 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent" />
         : <><Tooltip><TooltipTrigger asChild><ItemTitle tabIndex={0} aria-label="文档名称" className="block min-w-0 truncate">{name}</ItemTitle></TooltipTrigger><TooltipContent className="max-w-sm break-all">{url}</TooltipContent></Tooltip>
-          {view.label && <Badge variant="outline" className={'shrink-0 gap-1 ' + (age?.stale ? 'text-muted-foreground' : view.className ?? '')} role="status" aria-live="polite" title={age?.absolute}>
-            {(checking || connection.state === 'checking') && <Spinner aria-label="正在检测文档连接" />}
-            {view.label}{age && <span> · {age.label}</span>}
-          </Badge>}
+          {age ? <Tooltip>
+            <TooltipTrigger asChild data-slot="badge">{statusBadge}</TooltipTrigger>
+            <TooltipContent>{age.absolute}</TooltipContent>
+          </Tooltip> : statusBadge}
           {checking && connection.state !== 'checking' && <span className="sr-only" aria-live="polite">检测中…</span>}</>}
     </ItemContent>
     <ItemActions className="shrink-0 gap-1">
       {editing ? <><Button type="submit" size="sm" disabled={busy || locked || !draft.trim()}>连接</Button>{url && <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={onCancel}>取消</Button>}</>
         : <>{view.action && <Button type="button" size="sm" variant="outline" disabled={busy || (locked && view.action === 'replace')} onClick={() => onAction(view.action!)}>{view.button}{view.action === 'open' && <ExternalLink aria-hidden="true" />}</Button>}
-          <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-8" aria-label="文档更多操作" disabled={busy}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
+          <DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-8" aria-label="文档更多操作" disabled={busy}><MoreHorizontal aria-hidden="true" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => onAction('check')}>重新检测</DropdownMenuItem><DropdownMenuItem disabled={locked} onSelect={() => onAction('replace')}>更换文档</DropdownMenuItem><DropdownMenuItem onSelect={onCopy}>复制链接</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onSelect={onClear}>清除登录状态</DropdownMenuItem></DropdownMenuContent>
           </DropdownMenu></>}
     </ItemActions>

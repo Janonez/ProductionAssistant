@@ -117,3 +117,8 @@
 Tailwind CSS / Vite 插件锁定 `4.2.2`；插件声明支持 Vite `^5.2.0 || ^6 || ^7 || ^8`。保留现有 React 19、Vite 6、TypeScript 5 和 Vitest 2；仅增加实际组件使用的 Radix、CVA、clsx、tailwind-merge、tw-animate-css 及 PostCSS。完整锁定结果以 `package-lock.json` 为准。
 
 没有复制 Clerk、TanStack Router/Query、Zustand、Axios、演示 Dashboard 或业务数据。没有修改 Electron、preload、Bridge、Sidecar 白名单或 .NET 代码。验证结果、下一步及人工验收状态见根目录 `STATUS.md`。
+
+## 腾讯文档扫码协议 Checkbox
+
+- 新增 `components/ui/checkbox.tsx`，保留 shadcn/ui 固定提交 `8ab27715521cbd4f87ae6886cd989cbb678f6de7` 的结构、样式和键盘交互。沿用既有 Label，并将 Checkbox 的聚合 Radix 导入换成独立包，适配本地 `cn` 路径。 [官方 Checkbox 源码](https://github.com/shadcn-ui/ui/blob/8ab27715521cbd4f87ae6886cd989cbb678f6de7/apps/v4/registry/new-york-v4/ui/checkbox.tsx) · [MIT 许可](shadcn-ui-LICENSE.txt)
+- 新增固定依赖 `@radix-ui/react-checkbox@1.3.3`，支持项目现有 React 19。继续使用已有 Lucide、Button、Dialog、Label 和 Skeleton。 [Checkbox 文档](https://ui.shadcn.com/docs/components/radix/checkbox) · [Label 文档](https://ui.shadcn.com/docs/components/radix/label)
