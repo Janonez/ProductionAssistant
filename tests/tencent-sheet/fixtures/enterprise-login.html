@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>腾讯文档登录选择器夹具</title>
+<body>
+  <button id="login-skeleton">登录</button>
+  <button id="header-login-btn">登录</button>
+  <div class="login-modal" hidden><input type="checkbox"><div>企业微信</div></div>
+  <div class="dui-snackbar-container login-modal" hidden>
+    <div class="dui-checkbox dui-checkbox-normal dui-checkbox-tick">
+      <input type="checkbox" aria-label="我已阅读并接受腾讯文档的服务协议和隐私政策">
+    </div>
+    <div>
+      我已阅读并接受腾讯文档的
+      <span class="service-agreement--p-DS scene-tab-pane-actions-compliance">服务协议</span>
+      和
+      <span class="privacy-policy-2MaiE scene-tab-pane-actions-compliance">隐私政策</span>
+    </div>
+    <div class="login-item-gIZco"><div class="label-text-ErIpy">企业微信</div></div>
+  </div>
+  <script>
+    const modal = document.querySelector('.dui-snackbar-container.login-modal')
+    const consent = modal.querySelector('input')
+    document.querySelector('#header-login-btn').onclick = () => { modal.hidden = false }
+    document.querySelector('#login-skeleton').onclick = () => { document.body.dataset.decoy = 'clicked' }
+    consent.addEventListener('change', () => { document.body.dataset.consent = 'explicit' })
+    modal.querySelector('.login-item-gIZco').onclick = () => {
+      document.body.dataset.provider = consent.checked ? 'enterprise' : 'rejected'
+    }
+  </script>
+</body>
+</html>

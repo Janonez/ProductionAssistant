@@ -1,5 +1,15 @@
 # ProductionAssistant 交接状态
 
+## 企业微信扫码登录（2026-11-19，Development 已验证，待真人扫码）
+
+- 需求分支 `codex/tencent-qr-login` 基于 `d72f61e`。按用户导出画布组合 shadcn Dialog、Checkbox、Label、Button 和 Skeleton。亮暗主题多状态测得弹窗 360×403、二维码框 212×212、图像 180×180、四边留白 16px。开窗即可勾选，预热时仅记录当前弹窗的同意意图，Worker 请求协议后发送一次；标题区和按钮同为 44px，标题水平垂直居中，标题与码框留白 12px。未出码和取码中用虚线边框，提示同为 13px 浅色字。180×180 Skeleton 以 1.1 秒一周期脉动，与实码同尺寸、同位置。用隔离 Profile 核对了腾讯协议链接和真实页面选择器，另加 Playwright 夹具覆盖首次同意和 Profile 已同意路径。
+- `sessionLoginBegin` 和 `sessionLoginStatus` 预热到协议页，`sessionLoginConsent` 接收明确同意，`getLoginQr` 返回可复用的图像与有效期。过期或失败后手动重试沿用当前弹窗内的明确同意。关闭释放预热页与登录弹出页。扫码后显示对勾和手机确认提示；回跳后的服务端认证期间保留对勾和「已扫码」，认证通过直接显示「登录成功」，文档权限随后独立检查。
+- 提交前完整验证通过 `pwsh -NoProfile -File .\scripts\verify.ps1 -SkipRestore`。React 476 通过、1 跳过，Electron 122/122，.NET 408/408。源码与 Development 前端 Build ID 均为 `efb60aae-368b-8d47-9715-de9ba4d60b1b`。日志见 `artifacts/tencent-qr-login/verify-before-pr.log`。
+- 「已连接 · …前确认」使用现有 shadcn/ui Tooltip，悬停或键盘聚焦显示完整本地时间。前端构建、38 项连接专项和 36 个隔离浏览器场景通过。Development 前端已更新至 `efb60aae-368b-8d47-9715-de9ba4d60b1b`，校验 125 份资源。
+- 隔离实测含协议状态回程并扣除人工等待后，冷／热出码由 12.39／3.89 秒变为 10.06／4.78 秒。勾选到收到二维码由 1.355／1.157 秒变为 1.396／1.186 秒，本组样本未测出该阶段提速。冷样本主要等待腾讯登录入口及表格加载。本地详情见 `artifacts/tencent-qr-login/measurement.md`。原「账号认证仍需核验」来自旧版 Worker `login.cjs` 的已扫码状态消息。
+- 清除后点不动是菜单与确认框交接时残留页面鼠标拦截。将文档更多菜单设为非模态，浏览器回归覆盖取消和确认清除后都能重新打开菜单。
+- 下次入口为在 Development 的集团填报设置中手动勾选并使用真人账号扫码，核对确认顺序和后续权限反馈。隔离实测关闭预热页成功。Worker 并发复用已测，原始 Sidecar 并发启动实测分别返回 `getting-qr` 和 `OperationBusy`，宿主 C# 另行处理。
+
 ## 腾讯文档连接摘要（2026-11-19，Development 验证通过，待人工验收）
 
 - 需求分支 `codex/tencent-connection-summary` 基于 `bfbeaa2`。Sidecar 以原子 JSON 保存文档连接摘要，使用 `configRevision` 和规范化文档标识。共享 Profile 的登录失效和换号一次更新相关摘要，临时诊断保留已确认状态。接口与文件结构见 [腾讯文档权限检查](docs/tencent-permission-check.md#摘要存储与状态变化)。

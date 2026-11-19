@@ -36,7 +36,10 @@ function installFixture() {
     if(request.operation==='groupSubmission.getConfiguration')data={revision:0,businesses:[],rules:{automatic:false,time:'09:00',weekdays:[1,2,3,4,5,6,0],missingData:'wait',retryMinutes:10,retryUntil:'18:00'},hasBusiness:false,nextRunAt:null,dataOptions:[]};
     if(request.operation==='tencentSheet.save'){config.documentUrl=request.payload.config.documentUrl;data={id:'ui-fixture',config,configRevision:2};}
     if(request.operation==='tencentSheet.create'){config.documentUrl=request.payload.documentUrl;data={id:'ui-fixture'};}
-    if(request.operation.startsWith('tencentSheet.session')){
+    if(request.operation==='tencentSheet.sessionClear'){
+      summary={...summary,state:'NeedsLogin'};
+      data={code:'LoginCleared'};
+    } else if(request.operation.startsWith('tencentSheet.session')){
       if(state==='checking')return;
       data={...status,targetDocumentUrl:config.documentUrl};
     }
@@ -102,7 +105,21 @@ async function main(){
       const actions=item.locator('[data-slot=item-actions] > button:not([aria-label="文档更多操作"])');
       assert.equal(await actions.count(),primary?1:0);
       if(primary)assert.equal((await actions.textContent()).trim(),primary);
-      if(['connected','restored'].includes(state))assert.match(await item.locator('[data-slot=badge]').textContent(),/^已连接 · .+确认$/);
+      if(['connected','restored'].includes(state)){
+        const connectedBadge=item.getByRole('status');
+        assert.match(await connectedBadge.textContent(),/^已连接 · .+确认$/);
+        assert.equal(await connectedBadge.getAttribute('title'),null);
+        const confirmedAt=await page.evaluate(()=>new Date('2026-11-16T01:30:00Z').toLocaleString('zh-CN'));
+        const tooltip=page.getByRole('tooltip',{name:confirmedAt,exact:true});
+        await connectedBadge.hover();
+        await tooltip.waitFor();
+        await page.mouse.move(0,0,{steps:12});
+        await tooltip.waitFor({state:'hidden'});
+        await connectedBadge.focus();
+        await tooltip.waitFor();
+        await page.keyboard.press('Escape');
+        await tooltip.waitFor({state:'hidden'});
+      }
       else if(badge)assert.equal(await item.locator('[data-slot=badge]').textContent(),badge);
       else assert.equal(await item.locator('[data-slot=badge]').count(),0);
       if(state==='connected')assert.equal(measure.titleTruncated,true);
@@ -142,12 +159,24 @@ async function main(){
         await dialog.getByText('全部腾讯文档和旧任务',{exact:false}).waitFor();
         assert.equal(await dialog.getByRole('button',{name:'清除登录状态',exact:true}).isDisabled(),false);
         await dialog.getByRole('button',{name:'取消',exact:true}).click();
+        await dialog.waitFor({state:'detached'});
+        assert.equal(await page.evaluate(()=>document.body.style.pointerEvents),'');
+        await trigger.click();
+        await page.getByRole('menuitem',{name:'清除登录状态',exact:true}).click();
+        await dialog.getByRole('button',{name:'清除登录状态',exact:true}).click();
+        await dialog.waitFor({state:'detached'});
+        await item.getByRole('button',{name:'扫码登录',exact:true}).waitFor();
+        assert.equal(await page.evaluate(()=>document.body.style.pointerEvents),'');
+        await trigger.click();
+        await page.getByRole('menuitem',{name:'重新检测',exact:true}).waitFor();
+        await page.keyboard.press('Escape');
+        assert.equal(await page.evaluate(()=>window.uiCalls.filter(call=>call.operation==='tencentSheet.sessionClear').length),1);
       }
       if(state==='connected'&&width===1400&&theme==='light')await page.screenshot({path:path.join(output,kind+'-settings-fixture.png')});
     }
     assert.deepEqual(errors,[]);
     await fs.writeFile(path.join(output,kind+'-measurements.json'),JSON.stringify(measures,null,2));
-    console.log('PASS '+kind+': '+measures.length+' isolated UI states, 56px Item, 20px icon, truncation, keyboard menu and cancellation. No live document, login clearing or business writes.');
+    console.log('PASS '+kind+': '+measures.length+' isolated UI states, 56px Item, 20px icon, truncation, keyboard menu, cancel and acknowledged clear restoring clicks. All operations use local fixtures.');
   } finally {
     await app?.close();await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));
     if(temp){assert.ok(path.resolve(temp).startsWith(path.resolve(os.tmpdir())+path.sep));assert.ok(path.basename(temp).startsWith('metis-document-ui-'));await fs.rm(temp,{recursive:true,force:true});}

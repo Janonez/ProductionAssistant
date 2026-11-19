@@ -79,7 +79,7 @@ class TencentDocsBrowser {
     this.documentUrl=config.documentUrl;
     return {message:'已打开专用浏览器。完成登录后，请验证登录与文档访问状态。'};
   }
-  async backgroundPage(config) {
+  async backgroundPage(config,{waitUntil='domcontentloaded',reload=false}={}) {
     const context=await this.ensureContext(true),generation=this.generation;
     if(!this.headless) {
       const page=this.page;
@@ -91,9 +91,9 @@ class TencentDocsBrowser {
     let matches=false;
     try {const actual=new URL(page.url()),expected=new URL(config.documentUrl);matches=actual.origin===expected.origin&&actual.pathname===expected.pathname;}catch{}
     if(this.documentUrl!==config.documentUrl||!matches) {
-      await page.goto(config.documentUrl,{waitUntil:'domcontentloaded',timeout:Math.min(config.timeout||15,15)*1000});
+      await page.goto(config.documentUrl,{waitUntil,timeout:Math.min(config.timeout||15,15)*1000});
       this.checkGeneration(generation);this.documentUrl=config.documentUrl;
-    }
+    } else if(reload)await page.reload({waitUntil,timeout:Math.min(config.timeout||15,15)*1000});
     this.checkGeneration(generation);
     return page;
   }

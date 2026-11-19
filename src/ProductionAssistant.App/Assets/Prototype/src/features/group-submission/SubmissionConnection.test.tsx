@@ -204,10 +204,31 @@ it('suppresses duplicate checks while showing a Spinner and no primary action', 
 it('opens a Metis QR dialog without opening Edge for login', async () => {
   summary = { ...initialSummary, state: 'NeedsLogin' }
   await mount(); await click(button('扫码登录'))
-  expect(document.querySelector('[role=dialog]')?.textContent).toContain('扫码登录腾讯文档')
+  expect(document.querySelector('[role=dialog]')?.textContent).toContain('企业微信扫码登录')
   expect(invoke).toHaveBeenCalledWith('tencentSheet.sessionLoginBegin', { documentUrl: firstUrl, id: 'one', configRevision: 8 }, 35000)
   expect(invoke.mock.calls.some(([operation]) => operation === 'tencentSheet.sessionOpen')).toBe(false)
   expect(ready).toHaveBeenLastCalledWith(false)
+})
+it.each([['ReadOnly', '只读'], ['AccessDenied', '无编辑权限']])('shows login success while the separate permission check is pending, then displays %s', async (state, label) => {
+  summary = { ...initialSummary, state: 'NeedsLogin' }
+  let resolvePermissions!: (value: DocumentSessionEvidence) => void
+  invoke.mockImplementation(async operation => {
+    if (operation === 'tencentSheet.getConnectionSummary') return summary
+    if (operation === 'tencentSheet.sessionLoginBegin') return {
+      ...connected, state: 'unverified', editPermission: 'unknown', documentAccess: 'unknown', loginState: 'authenticated',
+    }
+    if (operation === 'tencentSheet.sessionVerify') return new Promise(resolve => { resolvePermissions = resolve })
+    return closed
+  })
+  await mount()
+  await click(button('扫码登录'))
+  expect(document.querySelector('[role=dialog]')?.textContent).toContain('登录成功')
+  expect(invoke.mock.calls.map(([operation]) => operation)).toEqual([
+    'tencentSheet.getConnectionSummary', 'tencentSheet.sessionLoginBegin', 'tencentSheet.getConnectionSummary', 'tencentSheet.sessionVerify',
+  ])
+  summary = { ...initialSummary, state }
+  await act(async () => resolvePermissions({ ...connected, editPermission: 'read-only' }))
+  expect(container.querySelector('[data-slot=badge]')?.textContent).toBe(label)
 })
 it('keeps the unconnected display and connect entry after an incomplete detection', async () => {
   await mount()
