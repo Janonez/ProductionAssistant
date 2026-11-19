@@ -80,6 +80,20 @@ describe('[nav-switch] webview ready transport', () => {
     else Reflect.deleteProperty(window, 'chrome')
   })
 
+  it('includes the build ID of the loaded document in app.ready', async () => {
+    const meta = document.createElement('meta')
+    meta.name = 'metis-build-id'
+    meta.content = '1c3eef71-8683-8725-8b11-8073936abc00'
+    document.head.append(meta)
+    try {
+      const { notifyReady } = await import('./webview')
+      notifyReady('daily-report', 'load-id')
+      expect(readyMessages()).toEqual([expect.objectContaining({ buildId: meta.content })])
+    } finally {
+      meta.remove()
+    }
+  })
+
   it.each(['navigation:plan-pdf', 'plan-pdf'])('sends every ready with an empty token for route %s', async route => {
     const { notifyReady } = await import('./webview')
 
