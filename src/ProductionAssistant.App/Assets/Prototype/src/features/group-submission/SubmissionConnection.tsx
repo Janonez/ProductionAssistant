@@ -2,33 +2,10 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 import { invoke } from '../../bridge/index'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../../components/ui/alert-dialog'
-import { DocumentConnectionItem, connectionFromSession, documentLink, type ConnectionAction, type ConnectionStatus, type DocumentConnectionState, type DocumentSessionEvidence } from './DocumentConnectionItem'
+import { DocumentConnectionItem, documentLink, type ConnectionAction, type ConnectionStatus, type DocumentConnectionState, type DocumentSessionEvidence } from './DocumentConnectionItem'
 import type { SubmissionJob } from './types'
 import { TencentLoginDialog } from './TencentLoginDialog'
-
-function readConnection(key: string | undefined, revision: number, hasUrl: boolean): DocumentConnectionState {
-  if (!hasUrl) return { state: 'unconfigured' }
-  if (key) {
-    try {
-      const value = JSON.parse(localStorage.getItem(key) ?? 'null')
-      if (value?.revision === revision && typeof value.checkedAt === 'string' && Number.isFinite(Date.parse(value.checkedAt))) {
-        return { state: 'connected', documentName: typeof value.documentName === 'string' ? value.documentName : undefined, checkedAt: value.checkedAt }
-      }
-    } catch { /* Storage is optional for the live connection. */ }
-  }
-  return { state: 'idle' }
-}
-
-function rememberConnection(key: string | undefined, revision: number, result?: DocumentConnectionState) {
-  if (!key) return
-  try {
-    if (result?.state === 'connected' && result.checkedAt) {
-      localStorage.setItem(key, JSON.stringify({ revision, checkedAt: result.checkedAt, documentName: result.documentName }))
-    } else {
-      localStorage.removeItem(key)
-    }
-  } catch { /* Storage is optional for the live connection. */ }
-}
+import { readConnectionSummary } from './connection-summary'
 
 export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirty, onReady, onStatusChange }: {
   job?: SubmissionJob; onSaved: (job: SubmissionJob) => void; onCreated: (id: string) => void
@@ -37,58 +14,72 @@ export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirt
 }) {
   const savedUrl = job?.config.documentUrl ?? ''
   const revision = job?.configRevision ?? 0
-  const storageKey = job?.id && 'pa.submission.last-connection.' + job.id
+  const id = job?.id
   const [draft, setDraft] = useState(savedUrl), [editing, setEditing] = useState(!savedUrl)
-  const [connection, setConnection] = useState(() => readConnection(storageKey, revision, !!savedUrl))
+  const connectionKey = JSON.stringify([id, revision, savedUrl])
+  const [summary, setSummary] = useState<{ key: string; value: DocumentConnectionState }>()
+  const connection: DocumentConnectionState = !savedUrl ? { state: 'unconfigured' }
+    : !documentLink(savedUrl) ? { state: 'invalidLink' }
+    : summary?.key === connectionKey ? summary.value : { state: 'loadingSummary' }
   const [operation, setOperation] = useState<string>(), [confirmClear, setConfirmClear] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
-  const confirmedConnection = useRef(connection)
+  const latestRead = useRef(0), checkAfterSave = useRef(false)
   const createAttempt = useRef<{ id: string; url: string; unknown: boolean } | undefined>(undefined)
   const flight = useRef<symbol | null>(null), generation = useRef(0), mounted = useRef(false)
   const busy = !!operation || loginOpen
   const dirty = editing && draft !== savedUrl
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++ } }, [])
-  const reportConnection = useCallback((result: DocumentConnectionState) => {
-    const indeterminate = result.state === 'idle' || result.state === 'unavailable'
-    const previous = confirmedConnection.current
-    if (indeterminate && previous.state !== 'idle' && previous.state !== 'unavailable' && previous.state !== 'unconfigured') {
-      toast.error(result.reason || '暂时无法核验文档连接。')
-      return
+  const refresh = useCallback(async () => {
+    if (!id || !documentLink(savedUrl)) return
+    const current = generation.current, request = ++latestRead.current
+    const isCurrent = () => mounted.current && current === generation.current && request === latestRead.current
+    try {
+      const result = await readConnectionSummary(id, revision)
+      if (isCurrent()) setSummary({ key: connectionKey, value: result })
+    } catch (error) {
+      if (isCurrent()) setSummary(previous => previous?.key === connectionKey
+        ? previous : { key: connectionKey, value: { state: 'summaryUnavailable' } })
+      throw error
     }
-    const next = { ...result, documentName: result.documentName ?? previous.documentName }
-    confirmedConnection.current = next
-    rememberConnection(storageKey, revision, next)
-    setConnection(next)
-  }, [storageKey, revision])
-  const check = useCallback(async (action: 'Status' | 'Verify' = 'Verify', autoVerify = false) => {
-    if (!savedUrl || flight.current) return
+  }, [connectionKey, id, revision, savedUrl])
+
+  const check = useCallback(async () => {
+    if (!id || !savedUrl || flight.current) return
     const token = Symbol(), current = generation.current
     flight.current = token; setOperation('check')
     try {
-      const payload = { documentUrl: savedUrl, ...(job ? { id: job.id, configRevision: job.configRevision ?? 0 } : {}) }
-      let evidence = documentLink(savedUrl) ? await invoke<DocumentSessionEvidence>(`tencentSheet.session${action}`, payload, 60000) : undefined
-      if (autoVerify && evidence && (evidence.state === 'closed' || evidence.state === 'unverified' || evidence.authenticationStale)
-        && mounted.current && current === generation.current) evidence = await invoke<DocumentSessionEvidence>('tencentSheet.sessionVerify', payload, 60000)
-      const result = evidence ? connectionFromSession(evidence, savedUrl, job?.configRevision ?? 0) : { state: 'invalidLink' as const }
-      if (mounted.current && current === generation.current) reportConnection(result)
+      const evidence = await invoke<DocumentSessionEvidence>('tencentSheet.sessionVerify', { id, documentUrl: savedUrl, configRevision: revision }, 60000)
+      if (mounted.current && current === generation.current) {
+        await refresh()
+        if (evidence?.state === 'unavailable' && evidence.message) toast.error(evidence.message)
+      }
     } catch {
-      if (mounted.current && current === generation.current) reportConnection({ state: 'unavailable', reason: '暂时无法完成检测，请确认本地服务可用后重试。' })
+      if (mounted.current && current === generation.current) toast.error('暂时无法完成检测，请确认本地服务可用后重试。')
     } finally {
       if (flight.current === token) { flight.current = null; if (mounted.current) setOperation(undefined) }
     }
-  }, [savedUrl, job?.id, job?.configRevision, reportConnection])
+  }, [id, revision, savedUrl, refresh])
+
   useEffect(() => {
-    const initial = readConnection(storageKey, revision, !!savedUrl)
-    confirmedConnection.current = initial
-    generation.current++; flight.current = null; setOperation(undefined); setLoginOpen(false); setDraft(savedUrl); setEditing(!savedUrl); setConnection(initial)
+    generation.current++; flight.current = null; setOperation(undefined); setLoginOpen(false); setDraft(savedUrl); setEditing(!savedUrl)
     const current = generation.current
-    if (initial.state === 'idle') queueMicrotask(() => { if (mounted.current && current === generation.current) void check('Status', true) })
-  }, [savedUrl, check, storageKey, revision])
+    queueMicrotask(() => {
+      if (!mounted.current || current !== generation.current) return
+      if (checkAfterSave.current) { checkAfterSave.current = false; void check() }
+      else void refresh().catch(() => {})
+    })
+    const readLatest = () => {
+      if (!document.hidden && !flight.current) void refresh().catch(() => {})
+    }
+    const timer = window.setInterval(readLatest, 30000)
+    window.addEventListener('focus', readLatest)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', readLatest) }
+  }, [id, revision, savedUrl, refresh, check])
   useEffect(() => { onActive?.(busy); return () => onActive?.(false) }, [busy, onActive])
   useEffect(() => { onDirty?.(dirty) }, [dirty, onDirty])
   useEffect(() => { onReady(!!savedUrl && connection.state === 'connected' && !editing) }, [savedUrl, connection.state, editing, onReady])
   useEffect(() => { onStatusChange?.(connection.state) }, [connection.state, onStatusChange])
-  const verified = useCallback((result: DocumentSessionEvidence) => reportConnection(connectionFromSession(result, savedUrl, revision)), [savedUrl, revision, reportConnection])
+  const verified = useCallback(() => { void refresh().catch(() => {}) }, [refresh])
   const changeLogin = useCallback((open: boolean) => setLoginOpen(open), [])
 
   async function save(event: FormEvent) {
@@ -103,8 +94,9 @@ export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirt
         const result = await invoke<SubmissionJob>('tencentSheet.save', { id: job.id, config: { documentUrl: target }, configRevision: job.configRevision ?? 0 })
         if (!result || result.id !== job.id || result.config?.documentUrl !== target) throw new Error('保存响应无效，请重新读取文档配置')
         if (mounted.current && current === generation.current) {
+          if (target !== savedUrl || result.configRevision !== job.configRevision) checkAfterSave.current = true
           flight.current = null; setOperation(undefined); setEditing(false); onSaved(result)
-          if (target === savedUrl && result.configRevision === job.configRevision) void check()
+          if (!checkAfterSave.current) void check()
         }
       } else {
         if (createAttempt.current?.unknown && createAttempt.current.url !== target) throw new Error('上次创建结果尚未确认，请先保留原链接回读配置。')
@@ -115,9 +107,11 @@ export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirt
           : await invoke<{ id: string }>('tencentSheet.create', { documentUrl: target, requestId: attempt.id })
         if (!result?.id) throw new Error('创建文档配置响应无效')
         if (attempt.unknown && (!('config' in result) || (result as SubmissionJob).config?.documentUrl !== target)) throw new Error('创建结果尚未确认')
-        if (mounted.current && current === generation.current) { flight.current = null; onCreated(result.id) }
+        if (mounted.current && current === generation.current) {
+          await invoke('tencentSheet.sessionVerify', { id: result.id, documentUrl: target, configRevision: 0 }, 60000).catch(() => {})
+          if (mounted.current && current === generation.current) { flight.current = null; onCreated(result.id) }
+        }
       }
-      // The acknowledged configuration triggers verification after the parent reads it.
     } catch (failure) {
       if (mounted.current && current === generation.current) {
         try {
@@ -129,7 +123,7 @@ export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirt
           }
           if (result?.config?.documentUrl !== target || result.id !== (job?.id ?? createAttempt.current?.id)) throw new Error('配置尚未确认')
           flight.current = null; setOperation(undefined); setEditing(false)
-          if (job) onSaved(result); else onCreated(result.id)
+          if (job) { checkAfterSave.current = true; onSaved(result) } else onCreated(result.id)
         } catch { if (mounted.current && current === generation.current) toast.error((failure instanceof Error ? failure.message : '保存失败') + '；保存结果尚未确认，请先回读配置，不会自动重复创建。') }
       }
     }
@@ -139,10 +133,11 @@ export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirt
     if (flight.current) return
     if (value === 'replace') { setDraft(savedUrl); setEditing(true); return }
     if (value === 'login') { setLoginOpen(true); return }
+    if (value === 'readSummary') { await refresh().catch(() => {}); return }
     if (value === 'check') { await check(); return }
     if (value === 'open') {
       const token = Symbol(); flight.current = token; setOperation('open')
-      try { await invoke('tencentSheet.sessionOpen', { documentUrl: savedUrl }, 60000) }
+      try { await invoke('tencentSheet.sessionOpen', { id, documentUrl: savedUrl, configRevision: revision }, 60000); await refresh() }
       catch { if (mounted.current) toast.error('打开文档失败，请重试') }
       finally { if (flight.current === token) flight.current = null; if (mounted.current) setOperation(undefined) }
     }
@@ -154,19 +149,17 @@ export function SubmissionConnection({ job, onSaved, onCreated, onActive, onDirt
   async function clearLogin() {
     if (flight.current) return
     const token = Symbol(), current = generation.current
-    rememberConnection(storageKey, revision)
-    confirmedConnection.current = { state: 'unconfigured' }
     flight.current = token; setConfirmClear(false); setOperation('clear')
     try {
       const result = await invoke<DocumentSessionEvidence>('tencentSheet.sessionClear', { documentUrl: savedUrl, ...(job ? { id: job.id, configRevision: job.configRevision ?? 0 } : {}), confirmClear: true }, 60000)
       if (!mounted.current || current !== generation.current) return
       if (result?.code !== 'LoginCleared') {
-        reportConnection({ state: 'unavailable', reason: result?.message || '清除结果尚未确认，请重新检测。' }); return
+        toast.error(result?.message || '清除结果尚未确认，请重新检测。'); return
       }
-      reportConnection({ state: 'notLoggedIn', loginExpired: false, reason: '登录资料已清空，请重新登录。' })
+      await refresh()
       toast.success('登录资料及专属浏览器缓存已清空')
     } catch {
-      if (mounted.current && current === generation.current) reportConnection({ state: 'unavailable', reason: '清除结果尚未确认，请重新检测。' })
+      if (mounted.current && current === generation.current) toast.error('清除结果尚未确认，请重新检测。')
     } finally { if (flight.current === token) flight.current = null; if (mounted.current && current === generation.current) setOperation(undefined) }
   }
   return <section id="submission-settings-web" aria-labelledby="web-configuration-title" className="space-y-3">

@@ -52,8 +52,9 @@ host()?.addEventListener('message', event => receive(event.data as BridgeRespons
 
 // 传输层只负责发送 app.ready；同一文档加载代次的幂等（按 loadId 令牌去重）由 bridge/index.ts 适配层保证。
 export function notifyReady(route: string, loadId: string) {
+  const buildId = document.querySelector<HTMLMetaElement>('meta[name="metis-build-id"]')?.content
   host()?.postMessage({ type: 'app.ready', route, loadId,
-    ...(import.meta.env.VITE_METIS_BUILD_ID ? { buildId: import.meta.env.VITE_METIS_BUILD_ID } : {}),
+    ...(buildId ? { buildId } : {}),
     moduleEntryMs: Math.round(performance.getEntriesByName('module-entry')[0]?.startTime || 0),
     readyMs: Math.round(performance.now()) })
 }

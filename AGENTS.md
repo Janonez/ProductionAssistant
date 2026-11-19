@@ -35,9 +35,9 @@
 - 前端源码有改动时，随应用提交的前端产物（Assets/Prototype/dist）按现有做法一并更新。
 - 通过 GitHub PR 合并，合并方式只用 squash。PR 标题写成一句中文的用户可见变化；纯重构、清理、文档分别以"重构："、"清理："、"文档："开头。PR 正文写明：改了什么、验证结果、是否涉及版本号或发布。
 - 合并前确认 CI 通过（`gh pr checks`），并经我确认。
-- 合并后：在主目录 `git switch main`，`git pull --ff-only`，再运行 verify。稳定版必须从合并后的 main 打，不得从需求分支打。
+- 合并后：在主目录 `git switch main`，`git pull --ff-only`，再运行 verify，并用 `git status -sb` 确认工作区干净。合并提交和 CI 结果查 PR，本机复验日志与发布比对放在 Git 忽略的 `artifacts/`。需交接的需求状态在需求分支随变更提交。稳定版必须从合并后的 main 打，不得从需求分支打。
 - 提交前只按路径暂存本次需求要改的文件（`git add <路径>`），不要使用 `git add -A` 或 `git add .`。verify.ps1 会重新生成已跟踪的前端产物（Assets/Prototype/dist）；如果本次需求没有改前端源码，这些改动必须先查明原因，确认是纯构建差异后再还原，不得原样提交。
-- 本机运行 verify.ps1 后，`Assets/Prototype/dist` 下的已跟踪文件常被重新生成，Git 会显示为已修改。处理方式：先运行 `git diff --stat --ignore-cr-at-eol`；如果输出里没有任何"文件名 | 数字"的统计行（只有 LF/CRLF 换行警告），说明只是换行差异，用 `git restore -- <明确路径或 dist 目录>` 还原，不要提交；如果有统计行，先停下告诉我。若 `git status -sb` 里除 dist 外还有别的非本次需求的文件，也先停下告诉我。不得使用 `git restore .`、`git checkout .`、`reset --hard`、`clean`。
+- 前端产物内容相同的两次构建应得到同一 Build ID，复验应保持 `Assets/Prototype/dist` 干净。若出现意外差异，先核对 `git status -sb` 和 `git diff --stat --ignore-cr-at-eol`。确认所有差异只有换行且没有新文件时，用 `git restore -- <明确路径或 dist 目录>` 还原；存在实际内容变化、新文件或其它非本次需求的变更时，先停下告诉我。不得使用 `git restore .`、`git checkout .`、`reset --hard`、`clean`。
 
 ## 清理分支
 - 远程分支在 PR 合并后由 GitHub 自动删除。

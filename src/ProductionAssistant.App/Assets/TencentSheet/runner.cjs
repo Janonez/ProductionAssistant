@@ -15,9 +15,10 @@ let siteValidation=null;
 let sheetValidation=null;
 let siteTestCell=null;
 const signature=(config,plan,jobId)=>JSON.stringify({config,plan,jobId});
-async function verifyWrite(config,plan) {
+async function verifyWrite(config,plan,observe) {
   const permissionTargets=plan.rows.map(row=>({sheetName:plan.sheet,address:row.address}));
   const result=await session.run('sessionVerify',{...config,permissionTargets});
+  observe(await session.connectionObservation(result,'sessionVerify'));
   if(result.authentication!=='authenticated'||result.authenticationSource!=='server'||result.authenticationStale||
     result.documentAccess!=='allowed'||result.editPermission!=='editable'||!result.documentIdentity)
     throw Object.assign(Error('填写前未能确认当前认证、目标表格及编辑权限，本次未开始填写。'),{code:'WritePreflightUnconfirmed',phase:'check'});
@@ -90,13 +91,36 @@ async function teach(request,config) {
   }
   throw Error('不支持的示范步骤');
 }
-async function dispatch(request) {
+async function writeFailureObservation(error,config) {
+  if(error.code==='LoginRequired'||error.connectionInvalidation==='LoginExpired')return {invalidation:'LoginExpired'};
+  const page=browser.page;
+  try {
+    const url=new URL(page?.url());
+    if(['open.weixin.qq.com','open.work.weixin.qq.com','login.work.weixin.qq.com'].includes(url.hostname)||
+        url.hostname==='docs.qq.com'&&/^\/(?:login|passport)(?:\/|$)/i.test(url.pathname))return {invalidation:'LoginExpired'};
+    if(url.origin+url.pathname.replace(/\/$/,'')===new URL(config.documentUrl).origin+new URL(config.documentUrl).pathname.replace(/\/$/,'')) {
+      for(const frame of page.frames()) {
+        if(frame.url()!==page.url())continue;
+        if(await frame.locator('[role="alert"]:visible,.permission-tips:visible,.permission-denied:visible')
+          .filter({hasText:/无权访问|没有访问权限|申请访问|无权限查看/}).count())return {invalidation:'AccessDenied'};
+      }
+    }
+  } catch { /* A lost page is an incomplete observation. */ }
+  if(/ERR_.*TIMED_OUT|timeout|timed out|超时/i.test(error.message))return {diagnostic:'Timeout'};
+  if(/net::ERR_/.test(error.message))return {diagnostic:'NetworkError'};
+  if(['ControlUnavailable','AnchorContentPending','SessionClosed'].includes(error.code))
+    return {diagnostic:error.code==='SessionClosed'?'Cancelled':'PageIncomplete'};
+  return null;
+}
+async function dispatch(request,observe=()=>{}) {
   const {operation}=request;
   if(['sessionStatus','sessionOpen','sessionVerify','sessionClose','sessionClear','sessionLoginBegin','sessionLoginStatus','sessionLoginRefresh','sessionLoginCancel','sessionLoginConsent'].includes(operation)) {
     if(['sessionOpen','sessionClose','sessionClear','sessionLoginBegin','sessionLoginRefresh'].includes(operation)){confirmation=null;teaching=null;siteValidation=null;sheetValidation=null;siteTestCell=null;}
     const config={...request.config};
     if(config.documentUrl)config.documentUrl=documentUrl(config.documentUrl);
-    return session.run(operation,config);
+    const result=await session.run(operation,config);
+    observe(await session.connectionObservation(result,operation));
+    return result;
   }
   if(operation.startsWith('site')) {
     confirmation=null;teaching=null;
@@ -177,7 +201,7 @@ async function dispatch(request) {
             await browser.open(config,true);
             inspection=await client.inspect(config,plan);
             if(!inspection.prewriteVerified||inspection.conflict)throw Error('后台检查未通过或目标格已有内容，本次未填写。');
-            await verifyWrite(config,plan);
+            await verifyWrite(config,plan,observe);
             break;
           } catch(error) {
             const transient=error.code==='AnchorContentPending' || (error.code==='ControlUnavailable'&&!error.ambiguous) || /net::ERR_(?:CONNECTION_RESET|CONNECTION_TIMED_OUT|NETWORK_CHANGED)/.test(error.message);
@@ -188,11 +212,16 @@ async function dispatch(request) {
       } catch(error) {error.phase='check';throw error;}
       // Never include write() in the retry scope, even when its first check fails.
       return await client.write(config,plan,inspection);
+    } catch(error) {
+      observe(await writeFailureObservation(error,config));
+      throw error;
     } finally {await browser.close();}
   }
   if(operation==='inspect') {
     confirmation=null;
-    const inspection=await readRetry(()=>client.inspect(config,plan));
+    let inspection;
+    try {inspection=await readRetry(()=>client.inspect(config,plan));}
+    catch(error) {observe(await writeFailureObservation(error,config));throw error;}
     const token=inspection.prewriteVerified?crypto.randomUUID():null;
     if(token)confirmation={token,signature:signature(config,plan,request.jobId),expires:Date.now()+120000,inspection};
     return {...inspection,date:plan.date,token,message:inspection.conflict?'目标格已有内容，请检查；不会覆盖。':'位置与空值检查通过，请确认本次数据后填报。'};
@@ -200,8 +229,9 @@ async function dispatch(request) {
   if(operation==='write') {
     const saved=confirmation;confirmation=null;
     if(!saved||saved.token!==request.token||saved.expires<Date.now()||saved.signature!==signature(config,plan,request.jobId))throw Error('预览已失效，请重新检查本次数据。');
-    await verifyWrite(config,plan);
-    return client.write(config,plan,saved.inspection);
+    await verifyWrite(config,plan,observe);
+    try {return await client.write(config,plan,saved.inspection);}
+    catch(error) {observe(await writeFailureObservation(error,config));throw error;}
   }
   throw Error('不支持的填报操作。');
 }
@@ -215,8 +245,10 @@ async function main() {
   try {
     for await(const line of input) {
       if(ended)break;
-      try {respond({ok:true,data:await dispatch(JSON.parse(line)),browserOpen:!!browser.context});}
-      catch(error){respond({ok:false,...explainError(error),phase:error.phase||null,completed:error.completed||[],uncertainAddress:error.uncertainAddress||null,browserOpen:!!browser.context});}
+      let connection;
+      const observe=value=>{if(value)connection={...connection,...value};};
+      try {respond({ok:true,data:await dispatch(JSON.parse(line),observe),connection,browserOpen:!!browser.context});}
+      catch(error){respond({ok:false,...explainError(error),connection,phase:error.phase||null,completed:error.completed||[],uncertainAddress:error.uncertainAddress||null,browserOpen:!!browser.context});}
     }
   } finally {if(closing)await closing;else await browser.close();}
 }

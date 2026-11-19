@@ -8,18 +8,22 @@ import { settleModuleImports } from '../test-utils/settle-module-imports'
 const { invoke, notifyReady, service } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn(), service: { state: 'Ready' } }))
 vi.mock('../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: () => service, subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
 
-it('keeps settings and history mounted across tabs and routes, without local skeletons or duplicate reads', async () => {
+it.each([
+  { name: 'shows unconnected when Sidecar has no summary', state: 'NotConnected', label: '未连接', view: 'notConnected' },
+  { name: 'restores Sidecar confirmation and its age without checking', state: 'Connected', label: '已连接 · 3 小时前确认', view: 'connected' },
+])('$name and retains settings and history across tabs and routes', async ({ state, label, view }) => {
   service.state = 'Ready'
+  invoke.mockClear()
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   const job = { id: 'loading-fixture', businessDate: '2026-11-18', configRevision: 1, config: { documentUrl: 'https://docs.qq.com/sheet/loading-fixture', fields: [] } }
-  const closed = { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown', editPermission: 'unknown' }
-  let finishProbe!: (value: typeof closed) => void
+  const confirmedAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+  const summary = { state, configRevision: job.configRevision, confirmedAt: state === 'Connected' ? confirmedAt : null }
+  let finishSummary!: (value: typeof summary) => void
   invoke.mockImplementation(async (operation: string) => {
     if (operation === 'automation.list') return { tasks: [{ id: job.id, name: '文档', taskType: 'tencent_sheet_fill' }] }
     if (operation === 'tencentSheet.get') return job
     if (operation === 'tencentSheet.runs') return { runs: [{ id: 'run', time: '2026-11-18 09:00', businessDate: '2026-11-17', status: '待确认' }] }
-    if (operation === 'tencentSheet.sessionStatus') return closed
-    if (operation === 'tencentSheet.sessionVerify') return new Promise(resolve => { finishProbe = resolve })
+    if (operation === 'tencentSheet.getConnectionSummary') return new Promise(resolve => { finishSummary = resolve })
     if (operation === 'production.getBindings') return { selected: {}, sources: [], cutting: {}, towerDaily: {}, towerMonthly: {}, towerYearly: {} }
     if (operation === 'settings.open') return { notion: { configured: false, sources: [] }, notification: { rules: [] }, version: 'test' }
     return {}
@@ -37,7 +41,17 @@ it('keeps settings and history mounted across tabs and routes, without local ske
     const settings = container.querySelector('[aria-label="集团填报设置"]')!
     expect(settings).not.toBeNull()
     const connection = settings.querySelector('[aria-label="文档连接"]')!
-    expect(connection.getAttribute('data-connection-state')).toBe('checking')
+    expect(connection.getAttribute('aria-busy')).toBe('true')
+    expect(connection.getAttribute('data-connection-state')).toBe('loadingSummary')
+    expect(connection.querySelector('[data-slot=badge]')?.textContent?.trim()).toBe('读取连接状态…')
+    expect(connection.textContent).not.toMatch(/未连接|已连接|检测中/)
+    expect(calls('tencentSheet.getConnectionSummary')).toBe(1)
+
+    await act(async () => finishSummary(summary))
+    expect(connection.getAttribute('data-connection-state')).toBe(view)
+    expect(connection.querySelector('[data-slot=badge]')?.textContent?.trim()).toBe(label)
+    expect(connection.textContent).not.toContain('检测中')
+    if (state === 'NotConnected') expect([...connection.querySelectorAll('button')].some(button => button.textContent === '连接')).toBe(true)
     await clickTab('记录')
     const table = container.querySelector('[aria-label="集团填报历史"]')!
     expect(table.textContent).toContain('待确认')
@@ -50,9 +64,10 @@ it('keeps settings and history mounted across tabs and routes, without local ske
     expect(container.querySelector('[aria-label="集团填报设置"]')).toBe(settings)
     expect(container.querySelector('[aria-label="文档连接"]')).toBe(connection)
     expect(container.querySelectorAll('.skeleton-block, [data-slot=skeleton]')).toHaveLength(0)
-    expect(calls('tencentSheet.sessionVerify')).toBe(1)
-    for (const operation of ['automation.list', 'tencentSheet.get', 'tencentSheet.runs', 'settings.open']) expect(calls(operation), operation).toBe(1)
-  } finally { await act(async () => { finishProbe?.(closed); root.unmount() }); container.remove(); vi.unstubAllGlobals() }
+    expect(invoke.mock.calls.some(([operation]) => operation.startsWith('tencentSheet.session'))).toBe(false)
+    for (const operation of ['automation.list', 'tencentSheet.get', 'tencentSheet.runs', 'tencentSheet.getConnectionSummary', 'settings.open'])
+      expect(calls(operation), operation).toBe(1)
+  } finally { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals() }
 })
 
 it('reports renderer readiness while local service initialization still gates business reads', async () => {

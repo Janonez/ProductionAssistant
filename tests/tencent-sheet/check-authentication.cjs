@@ -59,7 +59,10 @@ async function authenticationChecks() {
   assert.equal((await pending).authenticationReason,'session-closed');
   assert.equal(context.listenerCount('request'),0);assert.equal(context.listenerCount('response'),0);
   assert.equal(disposals,2);auth.dispose();
-  const principalContext=new EventEmitter(),principalAuth=new TencentAuthentication(principalContext);
+  const principalContext=new EventEmitter(),principalAuth=new TencentAuthentication(principalContext,{now:()=>clock});
+  const expirySeconds=clock/1000+3600;
+  principalAuth.token='synthetic-cookie';
+  principalContext.cookies=async()=>[{value:'synthetic-cookie',expires:expirySeconds},{value:'unrelated-cookie',expires:clock/1000+300}];
   const principalBody=uid=>({login:true,ret:0,uid,domain_id:'synthetic-domain',uid_source:1});
   const principalResponse=uid=>({status:()=>200,json:async()=>principalBody(uid)});
   principalAuth.publish(await principalAuth.read(principalResponse('private-user-one')));
@@ -69,6 +72,12 @@ async function authenticationChecks() {
   principalAuth.publish(await principalAuth.read(principalResponse('private-user-two')));
   assert.ok(principalAuth.scopeVersion>firstPrincipal,'different confirmed user invalidates scoped permission evidence');
   assert.ok(!JSON.stringify(principalAuth.snapshot()).includes('private-user'),'private identity cannot cross the snapshot allowlist');
+  const metadata=await principalAuth.connectionMetadata();
+  assert.match(metadata.accountId,/^[a-f0-9]{64}$/);
+  assert.equal(metadata.loginExpiresAt,new Date(expirySeconds*1000).toISOString());
+  assert.ok(!JSON.stringify(metadata).includes('synthetic-cookie'));
+  principalContext.cookies=async()=>[{value:'synthetic-cookie',expires:-1}];
+  assert.equal((await principalAuth.connectionMetadata()).loginExpiresAt,null,'session cookies have no estimated expiration');
   principalAuth.dispose();
   console.log('PASS authentication: strict server classification, passive cache, bounded probe, merged calls, freshness, redaction, close and listener cleanup');
 }

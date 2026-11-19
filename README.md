@@ -68,7 +68,7 @@ try {
 
 缓存缺失或损坏时，官方机制可能重新联网下载；开启 `electron_use_remote_checksums` 时也可能访问远程校验和。DEBUG 本身不禁止网络，严格离线验收须另有进程网络禁用条件，并记录真实结果。官方缓存读写模式中的 `ReadOnly` 也不是离线开关。正常启动不逐文件校验已解压内容，不能把缓存校验等同于每次启动的完整性检查。
 
-Electron 依赖匹配源码的 Release Sidecar 和不可变前端快照。前端 `npm run build` 生成 UUID Build ID、共享 dist 和 `dist.builds/<Build ID>`，校验清单后原子更新 `current.json`；完整 verify 另外向 `deployments/development/Assets/Prototype.builds` 发布相同快照。Electron 启动时固定选取一代，后续重载及懒加载均使用该目录，WinUI 仍使用共享 dist。旧构建保留，不自动清理。
+Electron 依赖匹配源码的 Release Sidecar 和不可变前端快照。前端 `npm run build` 根据产物内容生成 UUID Build ID，相同产物复用 `dist.builds/<Build ID>` 快照。构建生成共享 dist，校验清单后原子更新 `current.json`。完整 verify 另外向 `deployments/development/Assets/Prototype.builds` 发布相同快照。Electron 启动时固定选取一代，后续重载及懒加载均使用该目录，WinUI 仍使用共享 dist。旧构建保留，不自动清理。
 
 显式设置 `PRODUCTIONASSISTANT_DIST` 时，该值仍指向原 dist 目录，但必须先准备对应快照：`npm.cmd --prefix src\ProductionAssistant.Desktop run prepare:renderer -- <dist目录>`。未准备时明确报错，不回退到可变目录。不同 Build ID 二次启动会提示旧窗口，只有用户选择后才关闭；关闭后再次执行启动命令。`deployments\development\ProductionAssistant.exe` 仍是 WinUI 入口。
 

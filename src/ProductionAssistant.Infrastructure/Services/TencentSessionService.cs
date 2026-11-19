@@ -69,7 +69,7 @@ public sealed class TencentSessionService(TencentSheetService worker)
             {
                 var job = TencentSheetTaskHandler.Find(jobId);
                 if ((configRevision is not null && ((int?)job["configRevision"] ?? 0) != configRevision) ||
-                    (string?)job["config"]?["documentUrl"] != documentUrl)
+                    TencentConnectionDocument.Normalize((string?)job["config"]?["documentUrl"]) != TencentConnectionDocument.Normalize(documentUrl))
                     return new("unavailable", false, "unknown", "unknown", "unknown", null,
                         "文档配置已变化，请重新读取后检测。", "ConfigChanged");
                 config["configRevision"] = (int?)job["configRevision"] ?? 0;
@@ -78,6 +78,7 @@ public sealed class TencentSessionService(TencentSheetService worker)
             var result = await worker.CallAsync(new JsonObject
             {
                 ["operation"] = "session" + action,
+                ["jobId"] = jobId,
                 ["config"] = config
             }, deadline.Token);
             var status = result.Deserialize<TencentSessionStatus>(JsonOptions)
@@ -95,6 +96,9 @@ public sealed class TencentSessionService(TencentSheetService worker)
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            if (!string.IsNullOrWhiteSpace(jobId) && TencentConnectionDocument.Normalize(documentUrl) is { } identity)
+                worker.Connections.TryApply(new(DateTimeOffset.UtcNow, new(jobId, configRevision ?? 0, identity),
+                    Diagnostic: TencentConnectionDiagnostic.Timeout));
             return new("unavailable", false, "unknown", "unknown", "unknown", null,
                 "会话操作超时，结果尚未确认。", "SessionTimeout", "请先回读状态；不要据此判断登录失效或重复创建配置。");
         }

@@ -110,6 +110,19 @@ class TencentAuthentication {
         tokenInUrl:this.tokenInUrl,tokenInResponse:this.tokenInResponse,userInfoRequestsSeen:this.userInfoSeen,userInfoRequestsAccepted:this.userInfoAccepted,
         requests:this.traffic.map(row=>({...row}))}};
   }
+  async connectionMetadata(observedAt=this.snapshot().authenticationObservedAt) {
+    const principal=this.principalScope,token=this.token,version=this.tokenVersion;
+    let loginExpiresAt=null;
+    try {
+      // Only cookies already associated with the naturally observed login probe are relevant.
+      const related=(await this.context.cookies(endpoint)).filter(cookie=>token&&cookie.value===token);
+      if(related.length&&related.every(cookie=>Number.isFinite(cookie.expires)&&cookie.expires*1000>this.now()))
+        loginExpiresAt=new Date(Math.min(...related.map(cookie=>cookie.expires))*1000).toISOString();
+    } catch { /* An unavailable expiry does not affect the authentication result. */ }
+    const latest=this.snapshot();
+    if(this.stopped||this.tokenVersion!==version||this.principalScope!==principal||latest.authentication!=='authenticated'||latest.authenticationObservedAt!==observedAt)return null;
+    return {accountId:principal,loginExpiresAt};
+  }
   verify(timeoutMs=probeTimeoutMs) {
     if(this.flight)return this.flight;
     if(this.stopped)return Promise.resolve({...unknown('session-closed'),authenticationPreviouslyConfirmed:this.everAuthenticated});

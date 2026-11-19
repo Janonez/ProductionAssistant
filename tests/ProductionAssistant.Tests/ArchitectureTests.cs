@@ -176,7 +176,7 @@ public sealed class ArchitectureTests
     public void Prototype_bridge_allowlist_no_longer_contains_native_navigation()
     {
         Assert.DoesNotContain("app.navigateNative", PrototypeBridgeProtocol.AllowedOperations);
-        Assert.Equal(90, PrototypeBridgeProtocol.AllowedOperations.Count);
+        Assert.Equal(92, PrototypeBridgeProtocol.AllowedOperations.Count);
     }
 
     [Fact]

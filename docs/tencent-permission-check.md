@@ -19,7 +19,7 @@ Renderer 经 Electron IPC 和 .NET Sidecar 请求文档级操作。`TencentSessi
 
 文档主字段为 `basicClientVars.authInfo.attribute.canEdit`，仅接受布尔值；辅助字段为 `clientVars.privilegeAttribute.can_edit`，仅接受布尔值或数值 0/1。缺失、冲突、过期或未识别表示均为 unknown。当前真实页面的 `privilegeExpire` 原始值为数值 0；P2 报告将它归一化为 false，本实现严格兼容这两种未过期表示，不接受字符串。
 
-账号身份仅在 Worker 内使用真实响应中已核对的身份字段生成私有摘要，以识别已确认账号的变化。身份值和摘要均不进入快照、Bridge、日志或配置。没有身份关联证据时，不输出目标 eligible。XSRF 沿用原模块的自然观察、当前 Cookie 核对及只读认证请求，不硬编码、不落盘。
+Worker 使用真实响应中已核对的身份字段生成账号摘要，Sidecar 用它识别已确认的换号。原始身份值留在 Worker，账号摘要只随连接摘要持久化。没有身份关联证据时，不输出目标 eligible。XSRF 沿用原模块的自然观察、当前 Cookie 核对及只读认证请求，不硬编码、不落盘。
 
 ## 初始化与范围模型
 
@@ -50,17 +50,21 @@ Renderer 经 Electron IPC 和 .NET Sidecar 请求文档级操作。`TencentSessi
 
 `SessionStatus` 读取时核对页面代次、页面内修订/模型和期限；需要时返回未核验。`SessionVerify` 每次重新读取文档与模型，初始化等待最多 6 秒；需要保护证据时在剩余预算内最多额外观察 1.8 秒。认证仍使用原有 8 秒只读探测和频率限制；外层 .NET 操作截止时间为 45 秒。Worker 内部诊断可显式要求刷新 Headless 页面。人工页面占用时保留其导航和页面状态。
 
-## 存储与后续设计
+## 摘要存储与状态变化
 
 | 资料 | 当前存储 |
 | --- | --- |
 | 登录 Cookie 和站点资料 | 对应运行环境数据目录下的 `tencent-sheet-profile`，由 Playwright 持久化 Edge Context 管理 |
 | 认证、文档与位置的实时证据 | Node Worker 内存。认证快照、文档缓存、模型及区域响应分别受账号、页面和会话变化约束 |
-| 文档行连接摘要 | Electron Renderer 的 `localStorage`，按任务 ID 和配置版本检查。摘要含文档名和核验时间 |
+| 文档行连接摘要 | 运行环境数据目录下的 `tencent-connection-summaries.json`，由 Sidecar 使用 `AtomicJsonStore` 写入 |
 | 文档链接和旧任务规则 | 对应运行环境数据目录下的 `tencent-sheet-jobs.json`。`configRevision` 随文档链接变化，旧任务整体配置的并发检查使用 `jobRevision` |
 | 集团填报业务及执行规则 | 同一数据目录下独立的 `group-submission-configuration.json`，由 Sidecar 原子保存并维护自己的 `revision`。业务位置关联文档 ID 与文档版本 |
 
-后续可由 Sidecar 原子持久化连接摘要和明确的授权状态变化，按环境、Profile 代次、文档身份及目标配置版本关联。界面启动先读取摘要。Worker 在换号、清除登录、收到明确撤权或确定文档变化时更新状态；超时和未知结果作为运行诊断。实时权限仍由 Worker 管理，执行时按实际账号、页面及本次目标决定是否可复用。凭据继续由 Edge Profile 管理。
+摘要根对象保存 Profile 代次、账号摘要、登录预计到期时间和最近一次共享失效。文档记录按任务 ID 保存 `configRevision`、规范化后的文档标识、账号和 Profile 代次、状态、确认时间、原因码、文档名及诊断。配置版本取文档链接版本。Profile 内的 `.metis-generation` 标识实际资料代次，正常关闭或重启浏览器时沿用。
+
+`TencentConnectionSummaryStore.Apply(TencentConnectionEvent)` 接收 Worker 探测、实际填报及用户清除或换号所产生的事件。登录失效、清除、换号及 Profile 更换批量更新共享摘要，访问拒绝和只读作用于对应文档。超时、网络错误、页面未加载完及取消写入最近诊断字段。`StatusChanged` 在提交变更的进程内发送一次受影响记录列表。登录预计到期时间取与已确认登录探测关联的 Cookie 到期元数据，会话 Cookie 或无法核对时为空。摘要里只保留时间。
+
+前端通过 `tencentSheet.getConnectionSummary({ id })` 读取状态和确认时间。启动时用 `tencentSheet.importConnectionSummaries({ entries })` 导入匹配版本的旧确认，再删除原键。首次读取完成前，文档行显示「读取连接状态…」。临时检测失败时保留已连接显示。摘要用于展示连接状况，实际填写仍以执行当时的认证及权限证据为准。
 
 ## 测试与已验证边界
 

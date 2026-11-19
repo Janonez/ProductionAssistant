@@ -82,6 +82,7 @@ public sealed partial class OperationDispatcher
         }
         if (operation == "save")
         {
+            var previousDocument = TencentConnectionDocument.FromJob(job);
             var expectedRevision = payload.TryGetProperty("configRevision", out var revision) ? revision.GetInt32() : 0;
             if (expectedRevision != ((int?)job["configRevision"] ?? 0))
                 throw new InvalidOperationException("任务配置已变化，请重新打开后再修改。");
@@ -97,6 +98,8 @@ public sealed partial class OperationDispatcher
             job["config"] = JsonNode.Parse(validated.GetProperty("config").GetRawText())!;
             job["validated"] = false;
             TencentSheetTaskHandler.Save(job);
+            if (TencentConnectionDocument.FromJob(job) is { } document && document != previousDocument)
+                handler.Service.Connections.TryApply(new(DateTimeOffset.UtcNow, document, TencentConnectionInvalidation.DocumentChanged));
             return TencentSheetPresentation(job);
         }
         var startedAt = DateTimeOffset.Now;
@@ -127,7 +130,7 @@ public sealed partial class OperationDispatcher
             if (!result.Succeeded) throw new InvalidOperationException(result.Message);
             return new { message = result.Message };
         }
-        var request = new JsonObject { ["operation"] = operation, ["jobId"] = (string)job["id"]!, ["config"] = job["config"]!.DeepClone().AsObject(), ["date"] = date.ToString("yyyy-MM-dd") };
+        var request = new JsonObject { ["operation"] = operation, ["jobId"] = (string)job["id"]!, ["configRevision"] = (int?)job["configRevision"] ?? 0, ["config"] = job["config"]!.DeepClone().AsObject(), ["date"] = date.ToString("yyyy-MM-dd") };
         if (executionValues is not null) request["values"] = executionValues.DeepClone();
         if (operation == "teach")
         {
@@ -148,6 +151,27 @@ public sealed partial class OperationDispatcher
         result["config"] = job["config"]!.DeepClone().AsObject();
         result["businessDate"] = TencentSheetService.ResolveBusinessDate(DateTimeOffset.Now, job["config"]!.AsObject()).ToString("yyyy-MM-dd");
         return result;
+    }
+
+    private static object GetTencentConnectionSummary(JsonElement payload)
+    {
+        var document = TencentConnectionDocument.FromJob(TencentSheetTaskHandler.Find(ReadString(payload, "id")))
+            ?? throw new InvalidOperationException("文档链接无效。");
+        var summary = AppServices.TencentSheetTasks.Service.Connections.Read(document);
+        return new { summary.Document.ConfigRevision, summary.State, summary.ConfirmedAt, summary.Reason, summary.DocumentName,
+            summary.LoginExpiresAt, summary.LastDiagnostic, summary.LastDiagnosticAt };
+    }
+
+    private static object ImportTencentConnectionSummaries(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("entries", out var entries) || entries.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("旧连接摘要格式无效。");
+        var legacy = entries.Deserialize<TencentLegacyConnection[]>(JsonOptions)
+            ?? throw new InvalidOperationException("旧连接摘要格式无效。");
+        var documents = TencentSheetTaskHandler.Load().OfType<JsonObject>()
+            .Select(TencentConnectionDocument.FromJob).OfType<TencentConnectionDocument>();
+        AppServices.TencentSheetTasks.Service.Connections.ImportLegacy(legacy, documents);
+        return new { acknowledged = true };
     }
 
     private object GroupSubmissionConfiguration(JsonElement payload, bool save)

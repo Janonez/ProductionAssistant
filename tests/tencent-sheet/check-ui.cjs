@@ -31,6 +31,7 @@ async function main(){
   try{
     await page.addInitScript(()=>{
       let receive;
+      let summary={configRevision:0,state:'NotConnected'};
       const config={documentUrl:'https://docs.qq.com/sheet/fixture',fields:[],rules:{}};
       let groupConfiguration = { revision: 0, businesses: [], hasBusiness: false, nextRunAt: null,
         rules: { automatic: false, time: '08:45', weekdays: [1, 2, 3, 4, 5, 6, 0], missingData: 'wait', retryMinutes: 10, retryUntil: '18:00' },
@@ -41,6 +42,7 @@ async function main(){
         window.operations=(window.operations||[]).concat(request.operation);
         let data=request.operation==='automation.list'?{availableTaskTypes:['daily_report','notion_fill','tencent_sheet_fill'],tasks:[{id:'fixture',taskType:'tencent_sheet_fill',taskTypeName:'腾讯文档填报',name:'生产月报填报（本地测试数据）',schedule:'手动测试',isEnabled:false,schedulingAvailable:false,status:'pending-test',connectionStatus:'腾讯文档',lastRun:'暂无运行记录'}]}:request.operation==='tencentSheet.get'?{id:'fixture',config,businessDate:'2026-08-31'}:{};
         if(request.operation==='tencentSheet.create'){config.documentUrl=request.payload.documentUrl;data={id:'fixture'};}
+        if(request.operation==='tencentSheet.getConnectionSummary')data=summary;
         if(request.operation==='groupSubmission.getConfiguration')data=structuredClone(groupConfiguration);
         if(request.operation==='groupSubmission.saveConfiguration'){
           const {revision, business, deleteBusinessId, rules} = request.payload;
@@ -68,6 +70,7 @@ async function main(){
           if(request.operation==='tencentSheet.sessionVerify' && window.verifyGroupConnection){
             window.verifyGroupConnection=false;
             const checkedAt=new Date().toISOString(), targetDocumentUrl=request.payload.documentUrl;
+            summary={configRevision:0,state:'Connected',confirmedAt:checkedAt};
             data={...data,state:'authenticated',browserOpen:true,authentication:'authenticated',authenticationSource:'server',
               authenticationObservedAt:checkedAt,verifiedAt:checkedAt,documentCheckedAt:checkedAt,documentAccess:'allowed',
               editPermission:'editable',documentType:'spreadsheet',documentIdentity:targetDocumentUrl,targetDocumentUrl,
@@ -145,7 +148,7 @@ async function main(){
     await page.getByRole('menuitem',{name:'更换文档',exact:true}).click();
     const connectionInput=workbench.getByLabel('文档链接',{exact:true});
     await connectionInput.fill('https://docs.qq.com/sheet/t2-saved');
-    assert.equal(await workbench.locator('[data-connection-state=idle]').count(),1);
+    assert.equal(await workbench.locator('[data-connection-state=notConnected]').count(),1);
     assert.equal(await workbench.locator('#submission-settings-web [data-slot=item][data-variant=outline]').count(),1);
     assert.equal((await workbench.locator('#submission-settings-web [data-slot=item]').boundingBox()).height,56);
     await workbench.getByRole('tab',{name:'概览',exact:true}).click();

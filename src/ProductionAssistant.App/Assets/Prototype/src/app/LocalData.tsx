@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { getServiceState, invoke, subscribeServiceState } from '../bridge/index'
+import { startConnectionMigration } from '../features/group-submission/connection-summary'
 
 type Entry = { value?: unknown; pending: Promise<unknown> }
 export type LocalData = {
@@ -42,7 +43,9 @@ export function LocalDataBootstrap({ enabled = true }: { enabled?: boolean }) {
   const data = useLocalData()
   const service = useSyncExternalStore(subscribeServiceState, getServiceState)
   useEffect(() => {
-    if (!enabled || service.state !== 'Ready') return
+    if (service.state !== 'Ready') return
+    void startConnectionMigration().catch(() => {})
+    if (!enabled) return
     // Independent local reads start together. No remote checks, authentication or writes here.
     for (const operation of ['settings.open', 'production.getBindings', 'weld.getState', 'database.getState', 'report.getState']) void data.read(operation).catch(() => {})
     void data.read<{ tasks: { id: string; taskType: string }[] }>('automation.list').then(({ tasks }) => {

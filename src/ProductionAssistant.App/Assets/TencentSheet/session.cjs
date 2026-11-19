@@ -2,6 +2,7 @@
 const crypto=require('node:crypto');
 const {evidenceLifetimeMs}=require('./authentication.cjs');
 const {readEnterpriseLogin}=require('./login.cjs');
+const loginMetadata=Symbol('confirmed-login-metadata');
 const closed=()=>({state:'closed',browserOpen:false,authentication:'unknown',documentAccess:'unknown',editPermission:'unknown',verifiedAt:null,code:null,recoveryHint:null,message:'当前没有受管浏览器会话；持久化资料可能仍在，需要后台核验。'});
 function documentUrl(value) {
   const url=new URL(value);
@@ -57,7 +58,9 @@ class TencentSession {
     if(error.code==='SessionClosed')return this.base(config);
     const code=['ProfileBusy','BrowserUnavailable','ManualSessionBusy'].includes(error.code)?error.code:'DocumentUnavailable';
     const message={ProfileBusy:'专用浏览器配置正被其他进程使用。',BrowserUnavailable:'无法启动受管后台浏览器。',ManualSessionBusy:'人工网页正在使用，未导航或关闭该页面。',DocumentUnavailable:'文档未能完成检测，请检查网络或重试。'}[code];
-    return {...this.unavailable(config,code,message),state:code==='ProfileBusy'?'profile-busy':'unavailable'};
+    const summaryDiagnostic=/ERR_.*TIMED_OUT|timeout|timed out/i.test(error.message)?'Timeout':
+      /net::ERR_/.test(error.message)?'NetworkError':undefined;
+    return {...this.unavailable(config,code,message),state:code==='ProfileBusy'?'profile-busy':'unavailable',summaryDiagnostic};
   }
   async clear(config) {
     if(config.confirmClear!==true)return this.unavailable(config,'ClearConfirmationRequired','请先确认清空当前环境的共享浏览器资料。');
@@ -139,6 +142,28 @@ class TencentSession {
       return this.cached;
     } catch(error){return this.failure(config,error);}
   }
+  async connectionObservation(result,operation) {
+    if(result.code==='LoginCleared')return {invalidation:'LoginCleared'};
+    if(result.loginState==='cancelled'||result.loginState==='timeout')
+      return {diagnostic:result.loginState==='cancelled'?'Cancelled':'Timeout'};
+    if(result.authentication==='required'&&result.authenticationSource==='server'&&!result.authenticationStale||
+       result.code==='LoginCredentialsMissing')return {invalidation:'LoginExpired'};
+    const metadata=result.authentication==='authenticated'&&result.authenticationSource==='server'&&!result.authenticationStale
+      ? await this.browser.authentication?.connectionMetadata?.(result.authenticationObservedAt) : result[loginMetadata];
+    const connection=metadata?{authenticated:true,...metadata}:{};
+    if(result.documentAccess==='denied')return {...connection,invalidation:'AccessDenied'};
+    if(result.documentAccess==='allowed'&&result.editPermission==='read-only')return {...connection,invalidation:'ReadOnly'};
+    if(metadata&&result.documentAccess==='allowed'&&result.editPermission==='editable'&&result.documentType==='spreadsheet'&&result.documentIdentity&&result.documentCheckedAt)
+      return {...connection,documentIdentity:result.documentIdentity,documentName:result.documentName,editableConfirmedAt:result.documentCheckedAt};
+    if(operation==='sessionVerify'||result.loginState==='authenticated'||result.state==='unavailable'||result.state==='profile-busy') {
+      const diagnostic=result.summaryDiagnostic||
+        (result.authenticationReason==='timeout'||result.code==='PermissionInitializationTimeout'?'Timeout':
+          result.authenticationReason==='network-error'?'NetworkError':
+          ['PermissionPageChanged','PermissionConflict','AuthenticationUnknown','LoginFinishing','TargetMismatch',null].includes(result.code)?'PageIncomplete':'Unavailable');
+      return {...connection,diagnostic};
+    }
+    return metadata?connection:null;
+  }
   async inspectDocument(config,page) {
     const base=this.base(config);
     if(!sameTarget(page.url(),config.documentUrl))return this.unavailable(config,'TargetMismatch','当前网页未确认是目标表格。');
@@ -204,8 +229,9 @@ class TencentSession {
     if(Date.now()>job.until){await this.cancelLogin(config);return {...this.base(config),loginState:'timeout',message:'本地等待已超时，请刷新二维码。'};}
     const auth=await this.browser.authentication.verify();
     if(auth.authentication==='authenticated') {
+      const metadata=await this.browser.authentication.connectionMetadata?.(auth.authenticationObservedAt);
       await this.cancelLogin(config);
-      return {...await this.run('sessionVerify',config),loginState:'authenticated',loginOperationId:job.id};
+      return {...await this.run('sessionVerify',config),loginState:'authenticated',loginOperationId:job.id,[loginMetadata]:metadata};
     }
     let result;
     try {result=await readEnterpriseLogin(this.browser,config,job);}

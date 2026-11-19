@@ -31,6 +31,7 @@ beforeEach(async () => {
   invoke.mockReset().mockImplementation(async (operation, payload) => {
     if (operation === 'groupSubmission.getConfiguration') return structuredClone(stored)
     if (operation === 'groupSubmission.saveConfiguration') return save(payload)
+    if (operation === 'tencentSheet.getConnectionSummary') return { state: 'NotConnected', configRevision: 7 }
     if (operation === 'tencentSheet.runs') return { runs: [] }
     return { state: 'closed', browserOpen: false, authentication: 'unknown', documentAccess: 'unknown' }
   })
@@ -47,7 +48,7 @@ it('uses the backend default and keeps the existing section layout', () => {
   expect(container.querySelectorAll('[data-slot=separator]')).toHaveLength(0)
   expect(container.querySelector('nav')).toBeNull()
   expect(container.querySelectorAll('[data-slot=card]')).toHaveLength(1)
-  expect(button('检测').disabled).toBe(false)
+  expect(button('连接').disabled).toBe(false)
   expect(container.textContent).toContain('计划时间：08:45')
   expect(invoke).toHaveBeenCalledWith('groupSubmission.getConfiguration', { documentId: job.id })
 })
