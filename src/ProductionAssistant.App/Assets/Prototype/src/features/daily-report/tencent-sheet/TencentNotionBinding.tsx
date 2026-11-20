@@ -1,3 +1,4 @@
+import { Button } from "../../../components/ui/button";
 import { useEffect, useState } from "react";
 import { invoke } from "../../../bridge/index";
 import { ChoicePicker } from "../../../components/ui/FormPickers";
@@ -43,6 +44,6 @@ export function TencentNotionBinding({ id, field, disabled, continueToTeaching =
     {binding.queryMode === "date" ? <label>统计范围<ChoicePicker value={binding.period} options={[{ value: "day", label: "业务日期当天" }, { value: "month", label: "业务日期所在月月初至该日" }, { value: "year", label: "业务日期所在年年初至该日" }]} placeholder="选择统计范围" disabled={pending} onChange={period => setBinding({ ...binding, period })} /></label> : <p className="tencent-sheet-help">使用该 View 在 Teable 中的真实筛选结果，不额外添加日期条件。需要业务日期当天的数据，请使用按业务日期筛选。</p>}
 
     {error && <p role="alert">{error}</p>}
-    <div className="tencent-sheet-actions"><button className="primary" disabled={pending || !valid} onClick={() => onSave({ ...binding, sourceName: sources.find(source => source.id === binding.sourceId)?.name, valueFieldName: values.find(value => value.id === binding.valueFieldId)?.name, datasetName: views.find(value => value.id === binding.datasetId)?.name })}>{continueToTeaching ? "下一步 · 录制位置" : "保存数据绑定"}</button><button className="secondary" disabled={disabled} onClick={onCancel}>稍后继续</button></div>
+    <div className="tencent-sheet-actions"><Button data-shadcn-surface="" disabled={pending || !valid} onClick={() => onSave({ ...binding, sourceName: sources.find(source => source.id === binding.sourceId)?.name, valueFieldName: values.find(value => value.id === binding.valueFieldId)?.name, datasetName: views.find(value => value.id === binding.datasetId)?.name })}>{continueToTeaching ? "下一步 · 录制位置" : "保存数据绑定"}</Button><Button data-shadcn-surface="" variant="outline" disabled={disabled} onClick={onCancel}>稍后继续</Button></div>
   </fieldset>;
 }

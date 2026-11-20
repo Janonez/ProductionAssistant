@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/button";
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Database, LoaderCircle, Play, Rows3, Sigma } from 'lucide-react'
 import { invoke } from '../../bridge/index'
@@ -90,7 +91,7 @@ export function DatabaseViewerPage() {
         {!needsCustomRange && <label>指定日期<DatePicker value={businessDate} onChange={setBusinessDate} /></label>}
         {needsCustomRange && <><label>开始日期<DatePicker value={startDate} onChange={setStartDate} /></label><label>结束日期<DatePicker value={endDate} onChange={setEndDate} /></label></>}</>}
       </div>
-      <div className="database-query-actions"><button className="primary" disabled={!canQuery || !!busy} onClick={inspect}>{busy === 'query' ? <LoaderCircle className="spin" /> : <Play />}{busy === 'query' ? '正在查询…' : '执行查询'}</button></div>
+      <div className="database-query-actions"><Button data-shadcn-surface="" disabled={!canQuery || !!busy} onClick={inspect}>{busy === 'query' ? <LoaderCircle className="spin" /> : <Play />}{busy === 'query' ? '正在查询…' : '执行查询'}</Button></div>
     </section>
     {error && <div className="notice error" role="alert"><AlertCircle /><div><strong>查询失败</strong><span>{error}</span></div></div>}
     {showSkeleton && <section className="database-result" aria-label="正在加载查询结果" aria-busy="true"><div className="database-result-head"><div><h2>{sources.find(source => source.id === sourceId)?.name} · {selectedDataset?.name}</h2><p>正在查询…</p></div><dl><div><dt><Rows3 />命中记录</dt><dd><span className="skeleton-block" aria-hidden="true">&nbsp;</span></dd></div>{supportsDateRanges && <div><dt><Sigma />{selectedValue?.name || '累计值'}</dt><dd><span className="skeleton-block" aria-hidden="true">&nbsp;</span></dd></div>}</dl></div><div className="database-table-wrap"><RemoteTableSkeleton columns={visibleFields.map(field => field.name)} details={visibleFields.map(field => field.type)} rows={4} /></div></section>}

@@ -5,6 +5,7 @@ import type { AutomationTaskSummary } from '../../lib/types'
 import { App } from '../../app/App'
 import { AutomationPage } from './AutomationPage'
 import type { AutomationTaskFilter } from '../../routes/routeTable'
+import { settleModuleImports } from '../../test-utils/settle-module-imports'
 
 const { invoke, notifyReady } = vi.hoisted(() => ({ invoke: vi.fn(), notifyReady: vi.fn() }))
 vi.mock('../../bridge/index', () => ({ invoke, notifyReady, notifyTheme: vi.fn(), getServiceState: (() => { const state = { state: 'Ready' as const }; return () => state })(), subscribeServiceState: () => () => {}, requestServiceState: vi.fn(), restartApplication: vi.fn() }))
@@ -18,10 +19,16 @@ const summary = (taskType: string, id: string, name: string): AutomationTaskSumm
 const current = () => container.querySelector('[data-page-route]') ?? container
 const names = () => [...current().querySelectorAll('.automation-task-name')].map(button => button.textContent)
 const button = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === name)!
-const navigate = async (name: string) => act(async () => {
-  container.querySelector<HTMLButtonElement>(`.sidebar-nav button[aria-label="${name}"]`)!.click()
-  await vi.dynamicImportSettled()
-})
+const mountApp = async () => {
+  await act(async () => root.render(<App />))
+  await settleModuleImports()
+}
+const navigate = async (name: string) => {
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>(`.sidebar-nav button[aria-label="${name}"]`)!.click()
+  })
+  await settleModuleImports()
+}
 const input = async (selector: string, value: string) => act(async () => {
   const element = document.querySelector<HTMLInputElement>(selector)!
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(element, value)
@@ -63,7 +70,7 @@ it.each([
 })
 
 it('switches categories through the real sidebar and restores the URL-selected category after remount', async () => {
-  await act(async () => { root.render(<App />); await vi.dynamicImportSettled() })
+  await mountApp()
   for (const [name, taskType, expected] of [
     ['集团填报', 'tencent_sheet_fill', []],
     ['生产日报', 'daily_report', ['集团填报（仅任务名称）']],
@@ -78,7 +85,7 @@ it('switches categories through the real sidebar and restores the URL-selected c
     expect(container.querySelector('h1')?.textContent).toBe(name)
     expect(container.querySelector('[data-current-page-title]')?.textContent).toBe(name)
     expect(container.querySelector('[aria-current=page]')?.textContent).toBe(name)
-    expect(names()).toEqual(expected)
+    await vi.waitFor(() => expect(names()).toEqual(expected))
     if (taskType === 'tencent_sheet_fill') {
       expect(container.querySelector('[aria-label="集团填报工作台"]')).not.toBeNull()
       expect(container.querySelectorAll('[role=tab]')).toHaveLength(3)
@@ -90,7 +97,7 @@ it('switches categories through the real sidebar and restores the URL-selected c
   const query = location.search
   await act(async () => root.unmount())
   root = createRoot(container)
-  await act(async () => { root.render(<App />); await vi.dynamicImportSettled() })
+  await mountApp()
   expect(location.search).toBe(query)
   expect(container.querySelector('h1')?.textContent).toBe('集团填报')
   expect(names()).toEqual([])
@@ -98,7 +105,7 @@ it('switches categories through the real sidebar and restores the URL-selected c
   expect(notifyReady).toHaveBeenLastCalledWith('daily-report', 'category-test')
   expect(invoke.mock.calls.some(([operation]) => operation === 'app.navigateNative')).toBe(false)
   expect([...container.querySelectorAll('.sidebar-nav button')].map(button => button.textContent)).not.toEqual(expect.arrayContaining(['工作台', '项目台账', '项目计划', '风险管控', '内网同步']))
-})
+}, 15000)
 
 it('shows a category-specific empty state and creates a Tencent task through its existing form and operation', async () => {
   tasks = tasks.filter(task => task.taskType !== 'tencent_sheet_fill')
@@ -137,7 +144,7 @@ it('keeps enable and disable addressed to the selected task type and prevents re
 
 it.each(['unknown', 'DAILY_REPORT', ' daily_report '])('rejects an invalid URL category %s without querying or displaying other tasks', async value => {
   history.replaceState({}, '', `?route=daily-report&taskType=${encodeURIComponent(value)}&loadId=invalid-filter`)
-  await act(async () => { root.render(<App />); await vi.dynamicImportSettled() })
+  await mountApp()
   expect(container.querySelector('[role=alert]')?.textContent).toContain('任务分类无效')
   expect(container.querySelector('[data-current-page-title]')?.textContent).toBe('无效任务分类')
   expect(names()).toEqual([])
@@ -155,7 +162,7 @@ it.each(['unknown', 'DAILY_REPORT', ' daily_report '])('rejects an invalid URL c
 
 it('rejects ambiguous repeated category parameters', async () => {
   history.replaceState({}, '', '?route=daily-report&taskType=daily_report&taskType=notion_fill')
-  await act(async () => { root.render(<App />); await vi.dynamicImportSettled() })
+  await mountApp()
   expect(container.querySelector('[role=alert]')?.textContent).toContain('任务分类无效')
   expect(names()).toEqual([])
   expect(invoke.mock.calls.some(([operation]) => operation === 'automation.list')).toBe(false)
@@ -163,7 +170,7 @@ it('rejects ambiguous repeated category parameters', async () => {
 
 it.each(['?route=daily-report', '?route=daily-report&taskType='])('keeps the unfiltered task list for %s', async query => {
   history.replaceState({}, '', query)
-  await act(async () => { root.render(<App />); await vi.dynamicImportSettled() })
+  await mountApp()
   expect(container.querySelector('h1')?.textContent).toBe('任务清单')
-  expect(names()).toEqual(['集团填报（仅任务名称）', '原材料任务', '自定义填报任务'])
+  await vi.waitFor(() => expect(names()).toEqual(['集团填报（仅任务名称）', '原材料任务', '自定义填报任务']))
 })

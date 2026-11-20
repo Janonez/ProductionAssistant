@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/button";
 import { useEffect, useMemo, useState } from "react";
 import { Check, RefreshCw, Settings2 } from "lucide-react";
 import { invoke } from "../../bridge/index";
@@ -183,7 +184,7 @@ export default function ProductionMessagePage({ serviceReady = true }: { service
 
   if (completed) return <div className="app-shell"><main className="main-content">
     <div className="production-message-scroll"><PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><StepIndicator current={3} />
-    <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入数据库`}</p><button className="primary-button" onClick={handleNext}>录入下一条</button></section></div>
+    <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入数据库`}</p><Button data-shadcn-surface="" onClick={handleNext}>录入下一条</Button></section></div>
   </main>{bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} close={() => setBindingOpen(false)} save={saveBindings} />}</div>;
 
   return <div className="app-shell"><main className="main-content">
@@ -192,7 +193,7 @@ export default function ProductionMessagePage({ serviceReady = true }: { service
       <section className="message-pane">
         <div className="pane-title"><h2>原始消息</h2><p>输入生产消息，系统将自动解析并检查已有数据。</p></div>
         <textarea className="message-textarea" value={rawMessage} disabled={Boolean(busy)} onChange={(event) => setRawMessage(event.target.value)} placeholder="请输入生产消息" />
-        <div className="parse-action"><button className="primary-button" disabled={!rawMessage.trim() || locked} onClick={handleParse}>{parsed && <RefreshCw className="button-icon refresh-icon" />}<span>{busy === "parse" ? "正在解析…" : parsed ? "重新解析" : "解析消息"}</span></button></div>
+        <div className="parse-action"><Button data-shadcn-surface="" disabled={!rawMessage.trim() || locked} onClick={handleParse}>{parsed && <RefreshCw className="button-icon refresh-icon" />}<span>{busy === "parse" ? "正在解析…" : parsed ? "重新解析" : "解析消息"}</span></Button></div>
       </section>
 
       <section className="review-pane">
@@ -242,7 +243,7 @@ export default function ProductionMessagePage({ serviceReady = true }: { service
               </section>;
             })}
           </div>
-          <div className="review-footer"><span className="review-footer-text">{drafts.length > 1 ? `本次共 ${drafts.length} 条消息，将整批写入数据库。` : "确认后将把本次解析结果写入数据库。"}</span><button className="primary-button confirm-button" disabled={!canSubmit} onClick={() => write()}>{busy === "write" ? "正在入库…" : "确认入库"}</button></div>
+          <div className="review-footer"><span className="review-footer-text">{drafts.length > 1 ? `本次共 ${drafts.length} 条消息，将整批写入数据库。` : "确认后将把本次解析结果写入数据库。"}</span><Button data-shadcn-surface="" className="confirm-button" disabled={!canSubmit} onClick={() => write()}>{busy === "write" ? "正在入库…" : "确认入库"}</Button></div>
         </>}
       </section>
     </div>
@@ -282,7 +283,7 @@ function MatchStatus({ busy, result, error, needsReparse, invalidCount, fieldSta
 function MonthlyPlanDialog({ months, values, setValues, close, submit }: { months: string[]; values: Record<string, string>; setValues: (value: Record<string, string>) => void; close: () => void; submit: (value: Record<string, number>) => void }) {
   const parsed = Object.fromEntries(months.map((month) => [month, Number(values[month])]));
   const valid = months.every((month) => values[month]?.trim() && Number.isFinite(parsed[month]) && parsed[month] >= 0);
-  return <div className="pm-dialog-overlay"><section className="pm-dialog" role="dialog" aria-modal="true" aria-labelledby="monthly-plan-title"><h2 id="monthly-plan-title">补充下料月计划</h2><p>独立月计划库中没有该月份记录，请填写计划下料（吨）。</p>{months.map((month) => <label key={month}>{month}<input type="number" min="0" value={values[month] || ""} onChange={(event) => setValues({ ...values, [month]: event.target.value })} /></label>)}<div className="pm-dialog-actions"><button onClick={close}>取消</button><button className="primary-button" disabled={!valid} onClick={() => submit(parsed)}>创建并继续</button></div></section></div>;
+  return <div className="pm-dialog-overlay"><section className="pm-dialog" role="dialog" aria-modal="true" aria-labelledby="monthly-plan-title"><h2 id="monthly-plan-title">补充下料月计划</h2><p>独立月计划库中没有该月份记录，请填写计划下料（吨）。</p>{months.map((month) => <label key={month}>{month}<input type="number" min="0" value={values[month] || ""} onChange={(event) => setValues({ ...values, [month]: event.target.value })} /></label>)}<div className="pm-dialog-actions"><Button data-shadcn-surface="" variant="outline" onClick={close}>取消</Button><Button data-shadcn-surface="" disabled={!valid} onClick={() => submit(parsed)}>创建并继续</Button></div></section></div>;
 }
 
 function BindingDialog({ state, selections, setSelections, error, close, save }: { state: BindingState; selections: { cutting: string; towerDaily: string }; setSelections: (value: { cutting: string; towerDaily: string }) => void; error: string; close: () => void; save: () => void }) {
@@ -295,7 +296,7 @@ function BindingDialog({ state, selections, setSelections, error, close, save }:
     {state.usesBusinessSections && <label>塔筒业务板块<ChoicePicker value={towerBusiness} ariaLabel="塔筒业务板块" placeholder="请选择业务板块" options={state.businessSections.map(value => ({ value, label: value }))} onChange={value => { setTowerBusiness(value); setSelections({ ...selections, towerDaily: "" }) }} /></label>}
     <label>塔筒产线主数据库<ChoicePicker value={selections.towerDaily} ariaLabel="塔筒产线主数据库" placeholder="请选择具体数据库" disabled={state.usesBusinessSections && !towerBusiness} options={sourcesFor(towerBusiness).map(source => ({ value: source.id, label: source.name }))} onChange={value => setSelections({ ...selections, towerDaily: value })} /></label>
     {error && <div className="pm-notice" role="alert">{error}</div>}
-    <div className="pm-dialog-actions"><button onClick={close}>取消</button><button className="primary-button" disabled={!selections.towerDaily} onClick={save}>保存绑定</button></div>
+    <div className="pm-dialog-actions"><Button data-shadcn-surface="" variant="outline" onClick={close}>取消</Button><Button data-shadcn-surface="" disabled={!selections.towerDaily} onClick={save}>保存绑定</Button></div>
   </section></div>;
 }
 

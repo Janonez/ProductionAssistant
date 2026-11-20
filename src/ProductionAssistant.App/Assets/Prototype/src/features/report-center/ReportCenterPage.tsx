@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/button";
 import { useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Copy, FileSpreadsheet, LoaderCircle, Settings2, X } from 'lucide-react'
@@ -104,10 +105,10 @@ export function ReportCenterPage() {
   return <div className="page report-center-page">
     <header className="report-header"><h1>文件统计汇总</h1><div className="report-header-actions">
       <span className="report-status">{busy === 'load' ? '加载中' : state?.authenticated ? '已验证登录' : '未验证登录'}</span>
-      <button className="secondary report-icon-button" aria-label="报表设置" title="报表设置" disabled={!!busy || !state} onClick={() => changeSettings(true)}><Settings2 /></button>
+      <Button data-shadcn-surface="" variant="outline" className="report-icon-button" aria-label="报表设置" title="报表设置" disabled={!!busy || !state} onClick={() => changeSettings(true)}><Settings2 /></Button>
     </div></header>
     <div className="report-content">
-      {error && <div className="report-error" role="alert"><span>{error}</span>{!state && <button className="secondary" disabled={!!busy} onClick={() => void load()}>重新加载</button>}</div>}
+      {error && <div className="report-error" role="alert"><span>{error}</span>{!state && <Button data-shadcn-surface="" variant="outline" disabled={!!busy} onClick={() => void load()}>重新加载</Button>}</div>}
       <section className="report-workspace">
         <div className="report-pane report-period">
           <div className="report-pane-heading"><h2>统计范围</h2>{!rangeError && <span>{days} 天</span>}</div>
@@ -121,8 +122,8 @@ export function ReportCenterPage() {
             {!state?.credentialsConfigured && state && <p className="report-setup">请先配置报表连接。<button onClick={() => changeSettings(true)}>报表设置</button></p>}
             {state?.credentialsConfigured && !state.authenticated && <p className="report-setup">请先验证登录。</p>}
             <div className="report-actions">
-              {state?.credentialsConfigured && <button className="secondary" disabled={!!busy} onClick={authenticate}>{busy === 'auth' && <LoaderCircle className="spin" />}{busy === 'auth' ? '验证中…' : state?.authenticated ? '重新验证' : '验证登录'}</button>}
-              <button className="primary" disabled={!!busy || !state?.authenticated || !!rangeError} onClick={run}>{busy === 'run' ? '正在汇总…' : failed ? '重新汇总' : '开始汇总'}</button>
+              {state?.credentialsConfigured && <Button data-shadcn-surface="" variant="outline" disabled={!!busy} onClick={authenticate}>{busy === 'auth' && <LoaderCircle className="spin" />}{busy === 'auth' ? '验证中…' : state?.authenticated ? '重新验证' : '验证登录'}</Button>}
+              <Button data-shadcn-surface="" disabled={!!busy || !state?.authenticated || !!rangeError} onClick={run}>{busy === 'run' ? '正在汇总…' : failed ? '重新汇总' : '开始汇总'}</Button>
             </div>
           </div>
         </div>
@@ -131,14 +132,14 @@ export function ReportCenterPage() {
           {result ? <>
             <div className="report-file"><FileSpreadsheet /><div><h3>{monthLabel(result.period.endDate)}设备台时汇总</h3><p>{result.period.startDate} — {result.period.endDate}</p></div></div>
             <dl className="report-result-stats"><div><dt>日报</dt><dd>{result.parsedReports} / {result.plannedReports} 份</dd></div><div><dt>设备</dt><dd>{result.deviceCount} 台</dd></div></dl>
-            <div className="report-output"><span>文件位置</span><p>{result.summaryPath}</p><button className="secondary" onClick={copyPath}><Copy />{copied ? '已复制' : '复制路径'}</button></div>
+            <div className="report-output"><span>文件位置</span><p>{result.summaryPath}</p><Button data-shadcn-surface="" variant="outline" onClick={copyPath}><Copy />{copied ? '已复制' : '复制路径'}</Button></div>
             <details className="report-details"><summary>汇总明细</summary><p>数据点：{result.actualDataPoints} / {result.expectedDataPoints}</p>{result.warnings.map((warning, index) => <p key={index}>{warning}</p>)}</details>
           </> : <div className="report-empty">{busy === 'run' || busy === 'load' ? <LoaderCircle className="spin" /> : <FileSpreadsheet />}<strong>{busy === 'load' ? '正在读取报表配置' : busy === 'run' ? '正在生成汇总' : failed ? '未生成汇总文件' : '尚未生成汇总'}</strong><p>{busy === 'load' ? '配置读取完成后即可选择统计范围。' : busy === 'run' ? '完成后可在这里查看文件。' : failed ? '处理错误后，可重新汇总。' : '选择统计范围后开始汇总。'}</p></div>}
         </div>
       </section>
     </div>
     <Dialog.Root open={settingsOpen} onOpenChange={changeSettings}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="report-settings-dialog">
-      <div className="report-settings-heading"><Dialog.Title>报表设置</Dialog.Title><Dialog.Close asChild><button className="secondary report-icon-button" disabled={!!busy} aria-label="关闭报表设置"><X /></button></Dialog.Close></div>
+      <div className="report-settings-heading"><Dialog.Title>报表设置</Dialog.Title><Dialog.Close asChild><Button data-shadcn-surface="" variant="outline" className="report-icon-button" disabled={!!busy} aria-label="关闭报表设置"><X /></Button></Dialog.Close></div>
       <Dialog.Description className="report-sr-only">设置报表连接与文件保存位置。</Dialog.Description>
       <form onSubmit={saveConfig}>
         <fieldset disabled={!!busy}><legend>报表连接</legend>
@@ -147,7 +148,7 @@ export function ReportCenterPage() {
         </fieldset>
         <fieldset disabled={!!busy}><legend>保存位置</legend><label>原始日报<input required value={config.sourceRoot} onChange={event => setConfig({ ...config, sourceRoot: event.target.value })} /></label><label>汇总文件<input required value={config.outputRoot} onChange={event => setConfig({ ...config, outputRoot: event.target.value })} /></label></fieldset>
         {settingsError && <p className="report-error" role="alert">{settingsError}</p>}
-        <div className="report-settings-actions"><Dialog.Close asChild><button className="secondary" type="button" disabled={!!busy}>取消</button></Dialog.Close><button className="primary" type="submit" disabled={!!busy}>{busy === 'save' ? '保存中…' : '保存设置'}</button></div>
+        <div className="report-settings-actions"><Dialog.Close asChild><Button data-shadcn-surface="" variant="outline" type="button" disabled={!!busy}>取消</Button></Dialog.Close><Button data-shadcn-surface="" type="submit" disabled={!!busy}>{busy === 'save' ? '保存中…' : '保存设置'}</Button></div>
       </form>
     </Dialog.Content></Dialog.Portal></Dialog.Root>
   </div>

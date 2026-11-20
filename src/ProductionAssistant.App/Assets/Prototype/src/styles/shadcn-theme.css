@@ -33,6 +33,14 @@
   --sidebar-accent-foreground: var(--accent-foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
+  --shadcn-primary: var(--primary);
+  --shadcn-border: var(--border);
+}
+
+.pa-shell-theme .pa-legacy-content [data-shadcn-surface] {
+  /* The legacy page overrides these tokens before they reach the control. */
+  --primary: var(--shadcn-primary);
+  --border: var(--shadcn-border);
 }
 
 .pa-shell-theme.dark {
