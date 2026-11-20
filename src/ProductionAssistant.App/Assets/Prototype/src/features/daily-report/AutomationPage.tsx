@@ -1,3 +1,4 @@
+import { Button } from "../../components/ui/button";
 import { TencentSheetPage } from "./tencent-sheet/TencentSheetPage";
 import { MessageTemplatePage } from "./MessageTemplatePage";
 import { NotionFillPage } from "./notion-fill/NotionFillPage";
@@ -105,7 +106,7 @@ export function AutomationPage({ openSettings, taskType = "" }: { openSettings?:
     <header>
       <div><h1>{title}</h1><p>{taskType === "tencent_sheet_fill" ? "先新建任务并保存文档链接，再打开浏览器登录和检查；网页控件、业务字段及定时配置保留在任务详情中。" : "管理定时推送与自动填报，查看任务配置和运行情况。"}</p></div>
       <div className="header-actions">
-        <button className="primary" disabled={loading || !creatableTypes.length} onClick={() => { setCreateType(taskType); setCreateOpen(true); }}><Plus />新建任务</button>
+        <Button data-shadcn-surface="" disabled={loading || !creatableTypes.length} onClick={() => { setCreateType(taskType); setCreateOpen(true); }}><Plus />新建任务</Button>
       </div>
     </header>
     {notice && <div className={`notice ${notice.tone}`} role="status"><div><strong>{notice.title}</strong><span>{notice.message}</span></div></div>}
@@ -134,7 +135,7 @@ export function AutomationPage({ openSettings, taskType = "" }: { openSettings?:
     </div>}
     <Dialog.Root open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(undefined)}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" />
       <Dialog.Content className="dialog"><Dialog.Title>删除自动化任务？</Dialog.Title><Dialog.Description>将删除“{deleteTarget?.name}”及其业务记录，此操作无法撤销。</Dialog.Description>
-        <div className="dialog-actions"><button className="secondary" onClick={() => setDeleteTarget(undefined)}>取消</button><button className="danger" disabled={!!busy} onClick={() => deleteTarget && remove(deleteTarget)}>确认删除</button></div>
+        <div className="dialog-actions"><Button data-shadcn-surface="" variant="outline" onClick={() => setDeleteTarget(undefined)}>取消</Button><Button data-shadcn-surface="" variant="destructive" disabled={!!busy} onClick={() => deleteTarget && remove(deleteTarget)}>确认删除</Button></div>
       </Dialog.Content></Dialog.Portal></Dialog.Root>
     <Dialog.Root open={createOpen} onOpenChange={open => { setCreateOpen(open); if (!open) setCreateType(""); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" />
       <Dialog.Content className="dialog automation-create-dialog"><Dialog.Title>新建自动化任务</Dialog.Title><Dialog.Description>{createType ? "填写任务信息，创建后可随时通过 Tab 修改。" : "先选择任务类型，后续配置由对应任务自己提供。"}</Dialog.Description>
@@ -223,7 +224,7 @@ function AutomationTaskDetail({ openSettings, task, definition, focusStep, notic
     </section>}
     <div className="automation-tab-panel" role="tabpanel" id={`automation-panel-${tab}`} aria-labelledby={`automation-tab-${tab}`}>
       <div hidden={tab === "runs"}>{definition.renderEditor({ id: task.id, section: tab, openSettings, navigate: setTab, changed: () => { refresh().catch(() => undefined); } })}</div>
-      {(tab === "runs") && <section className="surface automation-runs"><div className="automation-runs-heading"><div><h2>运行记录</h2><p>查看任务执行结果和错误详情。</p></div><button className="secondary" disabled={loadingRuns} onClick={loadRuns}>{loadingRuns ? <LoaderCircle className="spin" /> : <RotateCw />}刷新</button></div>
+      {(tab === "runs") && <section className="surface automation-runs"><div className="automation-runs-heading"><div><h2>运行记录</h2><p>查看任务执行结果和错误详情。</p></div><Button data-shadcn-surface="" variant="outline" disabled={loadingRuns} onClick={loadRuns}>{loadingRuns ? <LoaderCircle className="spin" /> : <RotateCw />}刷新</Button></div>
         {runsError && <div className="notice error" role="alert"><div><strong>运行记录读取失败</strong><span>{runsError}</span></div></div>}
         <div className="automation-run-list">{runs?.map(run => <details key={run.id}><summary><span>{run.time}</span><span>{run.source}</span><strong>{run.title}</strong><b className={run.error ? "error-text" : ""}>{run.status}</b></summary><div>{run.details.map(detail => <p key={detail}>{detail}</p>)}{run.error && <p className="run-error">错误：{run.error}</p>}</div></details>)}</div>
         {loadingRuns && !runs && <p role="status"><LoaderCircle className="spin" />正在读取运行记录…</p>}

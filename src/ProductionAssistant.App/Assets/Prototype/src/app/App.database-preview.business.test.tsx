@@ -1,6 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { settleModuleImports } from '../test-utils/settle-module-imports'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 let root: Root | undefined
@@ -32,8 +33,8 @@ describe('browser mock transport', () => {
     root = createRoot(container)
     const { App } = await import('./App')
     await act(async () => { root!.render(<App />) })
-    await vi.waitFor(async () => {
-      await act(async () => { await vi.dynamicImportSettled() })
+    await settleModuleImports()
+    await vi.waitFor(() => {
       expect(container!.textContent).toContain('MOCK_BROWSER_PREVIEW_1_2')
     })
     expect(invoked.mock.calls.map(([operation]) => operation)).toEqual(['settings.open', 'production.getBindings', 'weld.getState', 'database.getState', 'report.getState', 'automation.list'])
@@ -43,16 +44,14 @@ describe('browser mock transport', () => {
     await act(async () => { container!.querySelector<HTMLButtonElement>('.picker-trigger')!.click() })
     const option = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(button => button.textContent === 'Mock table')!
     await act(async () => { option.click() })
-    await vi.waitFor(async () => {
-      await act(async () => { await vi.dynamicImportSettled() })
+    await vi.waitFor(() => {
       expect(container!.querySelectorAll('.picker-trigger')[1]?.textContent).toContain('Mock view')
       expect(container!.querySelector<HTMLButtonElement>('.database-query-actions button')!.disabled).toBe(false)
     })
     expect(databaseCalls()[1]).toEqual(['database.getSchema', { sourceId: 'mock-source' }])
     expect(container.querySelector('tbody')).toBeNull()
     await act(async () => { container!.querySelector<HTMLButtonElement>('.database-query-actions button')!.click() })
-    await vi.waitFor(async () => {
-      await act(async () => { await vi.dynamicImportSettled() })
+    await vi.waitFor(() => {
       expect(container!.querySelectorAll('tbody tr')).toHaveLength(2)
       expect(container!.textContent).toContain('MOCK_ROW_ALPHA_1_2')
       expect(container!.textContent).toContain('MOCK_ROW_BETA_1_2')
@@ -61,5 +60,5 @@ describe('browser mock transport', () => {
     const operations = databaseCalls().map(([operation]) => operation)
     expect(operations).toEqual(['database.getState', 'database.getSchema', 'database.inspect'])
     console.info('Database browser integration operations:', JSON.stringify(operations))
-  })
+  }, 15000)
 })

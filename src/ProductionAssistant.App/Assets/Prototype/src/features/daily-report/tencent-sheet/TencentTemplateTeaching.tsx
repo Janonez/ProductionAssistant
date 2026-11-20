@@ -1,3 +1,4 @@
+import { Button } from "../../../components/ui/button";
 import { useState } from "react";
 import DatePicker from "../../../components/ui/DatePicker";
 import { ChoicePicker } from "../../../components/ui/FormPickers";
@@ -58,13 +59,13 @@ export function TencentTemplateTeaching({ id, metrics, initialMetric, businessDa
       <label>要示范哪个项目？<ChoicePicker value={metric} options={metrics} placeholder="选择项目" disabled={disabled} ariaLabel="要示范的项目" onChange={setMetric} /></label>
       <div className="tencent-sheet-grid"><DatePicker value={firstDate} onChange={setFirstDate} label="第一个示范日期" disabled={disabled} /><DatePicker value={secondDate} onChange={setSecondDate} label="第二个示范日期" disabled={disabled} /></div>
       <p className="tencent-sheet-help">先在网页选中要配置的工作表。两个日期必须在同一个月，建议使用 1 日和 2 日。</p>
-      <button className="secondary" disabled={disabled || !metric || !firstDate || !secondDate} onClick={() => call("start")}>{rules?.[metric] ? "重新示范此项目" : "开始示范此项目"}</button>
+      <Button data-shadcn-surface="" variant="outline" disabled={disabled || !metric || !firstDate || !secondDate} onClick={() => call("start")}>{rules?.[metric] ? "重新示范此项目" : "开始示范此项目"}</Button>
     </> : <>
       <ol className="tencent-teaching-steps" aria-label="示范进度">{slots.map((slot, index) => <li key={slot} aria-current={draft.step === slot ? "step" : undefined} className={captures[slot] ? "done" : ""}><span>{index + 1}. {labels[slot]}</span><strong>{captures[slot]?.address || "待选取"}</strong></li>)}</ol>
-      {slots.includes(draft.step) && <div className="tencent-teaching-prompt"><strong>请在网页中单击：{labels[draft.step]}</strong><p>{draft.step === "dateHeader" ? "选择显示该日期的单元格，程序会检查后续日期是否按同样间隔排列。" : draft.step === "label" ? "选择一处固定的文字标志，用于确认每次填写的仍是这个项目。" : "只选中单元格即可。受保护或已有数据的格子也可示范，无需解除保护或输入数据。"}</p><button className="primary" onClick={() => call("capture")}>记住当前选中的单元格</button></div>}
-      {draft.step === "preview" && <button className="primary" onClick={() => call("preview")}>验证规则并查看第三个位置</button>}
-      {draft.step === "confirm" && draft.rule && draft.prediction && <div className="tencent-teaching-prompt"><strong>{label}：{direction(draft.rule)}</strong><p>程序已选中 {draft.prediction.date} 的预测位置 <b>{draft.prediction.address}</b>。请查看网页，确认它确实是当天的填报格。</p><p>日期及“{draft.rule.labelAnchor.expected}”已通过只读校验。</p>{(draft.sheetMode === "fixed" || (!draft.sheetMode && fixedSheet)) && !draft.rule.dateAnchor.format.includes("{yyyy}") && <p>日期未包含完整年月。此固定工作表跨月时需重新示范确认。</p>}<div className="tencent-sheet-actions"><button className="secondary" onClick={() => call("preview")}>再次定位预测位置</button><button className="primary" onClick={() => call("confirm")}>位置正确，保存此项目</button></div></div>}
-      <button className="ghost" onClick={() => call("cancel")}>取消示范，保留原配置</button>
+      {slots.includes(draft.step) && <div className="tencent-teaching-prompt"><strong>请在网页中单击：{labels[draft.step]}</strong><p>{draft.step === "dateHeader" ? "选择显示该日期的单元格，程序会检查后续日期是否按同样间隔排列。" : draft.step === "label" ? "选择一处固定的文字标志，用于确认每次填写的仍是这个项目。" : "只选中单元格即可。受保护或已有数据的格子也可示范，无需解除保护或输入数据。"}</p><Button data-shadcn-surface="" onClick={() => call("capture")}>记住当前选中的单元格</Button></div>}
+      {draft.step === "preview" && <Button data-shadcn-surface="" onClick={() => call("preview")}>验证规则并查看第三个位置</Button>}
+      {draft.step === "confirm" && draft.rule && draft.prediction && <div className="tencent-teaching-prompt"><strong>{label}：{direction(draft.rule)}</strong><p>程序已选中 {draft.prediction.date} 的预测位置 <b>{draft.prediction.address}</b>。请查看网页，确认它确实是当天的填报格。</p><p>日期及“{draft.rule.labelAnchor.expected}”已通过只读校验。</p>{(draft.sheetMode === "fixed" || (!draft.sheetMode && fixedSheet)) && !draft.rule.dateAnchor.format.includes("{yyyy}") && <p>日期未包含完整年月。此固定工作表跨月时需重新示范确认。</p>}<div className="tencent-sheet-actions"><Button data-shadcn-surface="" variant="outline" onClick={() => call("preview")}>再次定位预测位置</Button><Button data-shadcn-surface="" onClick={() => call("confirm")}>位置正确，保存此项目</Button></div></div>}
+      <Button data-shadcn-surface="" variant="ghost" onClick={() => call("cancel")}>取消示范，保留原配置</Button>
     </>}
   </fieldset>;
 }

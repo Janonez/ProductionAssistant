@@ -1,5 +1,11 @@
 # ProductionAssistant 交接状态
 
+## 业务页面 shadcn 统一（2026-11-20，Development 已发布）
+
+- `codex/electron-shadcn-consolidation` 已替换各业务页的主要操作按钮，并恢复 shadcn 控件在旧页面中的主色和边框主题变量。日报分类与数据库预览测试改用现有模块等待方法。
+- `verify.ps1 -SkipRestore` 通过，Development Renderer Build ID 为 `d7c9e145-8470-8914-adff-e857d814b39e`，发布 125 个文件。前端 476 项通过、1 项跳过，.NET 408 项通过。
+- 下次入口：重启 Electron Development，检查浅色和深色下的操作按钮，再继续替换表单、表格和弹窗。当前待人工验收，稳定版未发布。
+
 ## 企业微信扫码登录（2026-11-19，Development 已验证，待真人扫码）
 
 - 需求分支 `codex/tencent-qr-login` 基于 `d72f61e`。按用户导出画布组合 shadcn Dialog、Checkbox、Label、Button 和 Skeleton。亮暗主题多状态测得弹窗 360×403、二维码框 212×212、图像 180×180、四边留白 16px。开窗即可勾选，预热时仅记录当前弹窗的同意意图，Worker 请求协议后发送一次；标题区和按钮同为 44px，标题水平垂直居中，标题与码框留白 12px。未出码和取码中用虚线边框，提示同为 13px 浅色字。180×180 Skeleton 以 1.1 秒一周期脉动，与实码同尺寸、同位置。用隔离 Profile 核对了腾讯协议链接和真实页面选择器，另加 Playwright 夹具覆盖首次同意和 Profile 已同意路径。
