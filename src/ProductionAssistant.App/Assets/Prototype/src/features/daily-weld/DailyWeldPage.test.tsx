@@ -64,10 +64,9 @@ async function enterTotalAndGenerate(value: string) {
 }
 
 describe('daily weld workflow', () => {
-  it('uses the shared production-message progress component and tonnes', async () => {
+  it('shows the planning phase and uses tonnes', async () => {
     await renderPage()
-    expect(container.querySelector('.step-bar')).toBeTruthy()
-    expect([...container.querySelectorAll('.step span')].map(item => item.textContent)).toEqual(['录入计划', '拆分预览', '完成'])
+    expect(container.querySelector('[data-slot="badge"][role="status"][aria-label="焊接计划拆分进度"]')?.textContent).toBe('第 1 步 · 录入计划')
     expect(container.textContent).toContain('计划焊接总量吨')
     expect(container.textContent).not.toContain('米')
     expect(invoke).toHaveBeenCalledWith('weld.getState')
@@ -113,6 +112,7 @@ describe('daily weld workflow', () => {
     expect(invoke).toHaveBeenCalledWith('weld.generate', { month, total: '16' })
     expect(container.querySelectorAll('tbody tr')).toHaveLength(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate())
     expect(container.textContent).toContain('拆分合计 16 吨')
+    expect(container.querySelector('[data-slot="badge"][aria-label="焊接计划拆分进度"]')?.textContent).toBe('第 2 步 · 拆分预览')
   })
 
   it('checks and writes the complete month to Notion', async () => {
@@ -124,6 +124,7 @@ describe('daily weld workflow', () => {
     expect(invoke.mock.calls.map(call => call[0])).toContain('weld.write')
     expect(container.textContent).toContain('入库完成')
     expect(container.textContent).toContain('已写入 Teable。')
+    expect(container.querySelector('[data-slot="badge"][aria-label="焊接计划拆分进度"]')?.textContent).toBe('第 3 步 · 完成')
   })
 
   it('requires explicit confirmation before overwriting an existing month', async () => {

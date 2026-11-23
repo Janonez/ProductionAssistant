@@ -1,12 +1,19 @@
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Textarea } from "../../components/ui/textarea";
+import { Card, CardContent } from "../../components/ui/card";
+import { Separator } from "../../components/ui/separator";
+import { PageHeader, PageShell } from "../../components/layout/PageShell";
 import { useEffect, useMemo, useState } from "react";
-import { Check, RefreshCw, Settings2 } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
 import { invoke } from "../../bridge/index";
+import { isOperationAvailable } from "../../app/operationAvailability";
 import { useLocalData } from '../../app/LocalData';
 import DatePicker from "../../components/ui/DatePicker";
 import { ChoicePicker } from "../../components/ui/FormPickers";
 import type { BindingState, Draft, ImportField, ImportResult } from "../../lib/types";
-import { ThreeStepProgress } from "../../components/ui/ThreeStepProgress";
+
+const PRODUCTION_STEPS = ["录入消息", "解析确认", "完成"] as const;
 
 type BusyState = "parse" | "check" | "write";
 type ConflictChoice = "keep" | "use";
@@ -68,6 +75,7 @@ export default function ProductionMessagePage({ serviceReady = true }: { service
   const parsed = drafts.length > 0;
   const needsReparse = parsed && rawMessage !== parsedMessage;
   const locked = Boolean(busy) || !serviceReady;
+  const canSaveBindings = isOperationAvailable("production.saveBindings");
   useEffect(() => {
     if (!serviceReady) return;
     let active = true;
@@ -79,8 +87,14 @@ export default function ProductionMessagePage({ serviceReady = true }: { service
     return () => { active = false; };
   }, [local, serviceReady]);
 
+  function openBindings() {
+    if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" });
+    setBindingError("");
+    setBindingOpen(true);
+  }
+
   async function saveBindings() {
-    if (!serviceReady) return;
+    if (!serviceReady || !canSaveBindings) return;
     setBindingError("");
     try {
       await invoke("production.saveBindings", bindingSelections, 120000);
@@ -182,76 +196,87 @@ export default function ProductionMessagePage({ serviceReady = true }: { service
     && fields.every((field) => field.status !== "exception" && field.status !== "unchecked")
     && confirmFields.every((field) => Boolean(conflictChoices[`${field.draft.index}:${field.key}`]));
 
-  if (completed) return <div className="app-shell"><main className="main-content">
-    <div className="production-message-scroll"><PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><StepIndicator current={3} />
-    <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入数据库`}</p><Button data-shadcn-surface="" onClick={handleNext}>录入下一条</Button></section></div>
-  </main>{bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} close={() => setBindingOpen(false)} save={saveBindings} />}</div>;
+  const step = completed ? 3 : parsed ? 2 : 1;
 
-  return <div className="app-shell"><main className="main-content">
-    <div className="production-message-scroll"><PageTitle disabled={locked} configure={() => { if (bindings) setBindingSelections({ cutting: bindings.selected.cutting || "", towerDaily: bindings.selected.towerDaily || "" }); setBindingError(""); setBindingOpen(true); }} /><StepIndicator current={parsed ? 2 : 1} />
-    <div className="workspace-panel">
-      <section className="message-pane">
-        <div className="pane-title"><h2>原始消息</h2><p>输入生产消息，系统将自动解析并检查已有数据。</p></div>
-        <textarea className="message-textarea" value={rawMessage} disabled={Boolean(busy)} onChange={(event) => setRawMessage(event.target.value)} placeholder="请输入生产消息" />
-        <div className="parse-action"><Button data-shadcn-surface="" disabled={!rawMessage.trim() || locked} onClick={handleParse}>{parsed && <RefreshCw className="button-icon refresh-icon" />}<span>{busy === "parse" ? "正在解析…" : parsed ? "重新解析" : "解析消息"}</span></Button></div>
-      </section>
+  return <PageShell>
+    <PageHeader title="生产消息入库" description="解析生产消息，核对数据后入库。" actions={<>
+      <Badge variant="secondary" role="status" aria-label="生产消息入库进度">第 {step} 步 · {PRODUCTION_STEPS[step - 1]}</Badge>
+      <Button type="button" variant="outline" aria-haspopup="dialog" disabled={locked} onClick={openBindings}>数据库绑定</Button>
+    </>} />
 
-      <section className="review-pane">
-        {!parsed ? <div className="review-empty"><h2>解析结果</h2>{busy === 'parse' ? <p role="status"><span className="status-loader" />正在解析消息…</p> : <p>解析消息后，数据库检查结果将在这里显示。</p>}
-          {(bindingError || bindings?.configured === false || bindings && (!bindings.cutting.bound || !bindings.towerDaily.bound)) && <div className="pm-notice" role="alert">{bindingError || (bindings?.configured === false ? "数据库连接尚未配置。" : "数据库已变更，请点击右上角“数据库绑定”重新选择下料和塔筒主数据库。")}</div>}
-        </div> : <>
-          <div className="review-header"><h2>解析结果</h2><div className="review-summary"><span>新增<strong>{summary.newFields}</strong></span><i>·</i><span>一致<strong>{summary.same}</strong></span><i>·</i><span>待确认<strong>{summary.confirm}</strong></span><i>·</i><span>异常<strong>{summary.exception}</strong></span></div></div>
-          <div className="date-groups">
-            {drafts.map((draft) => {
-              const draftFields = fields.filter((field) => field.draft.index === draft.index);
-              const draftConfirmFields = draftFields.filter((field) => field.status === "confirm");
-              const draftResult = checkResult ? { ...checkResult, items: checkResult.items.filter((item) => item.index === draft.index) } : undefined;
-              return <section className="date-group" data-business-date={draft.businessDate} key={draft.index}>
-                <div className="identity-section">
-                  <div className="identity-field"><DatePicker label="日期" value={draft.businessDate || ""} disabled={locked} onChange={(value) => handleDateChange(draft.index, value)} /></div>
-                  <div className="identity-field"><label>业务 / 产线</label><input className="field-input" value={draft.typeDisplay || ""} readOnly disabled={locked} /></div>
-                </div>
-                <MatchStatus busy={busy === "check"} result={draftResult} error={error} needsReparse={needsReparse} invalidCount={draft.canWrite ? 0 : 1} fieldStatuses={draftFields.map((field) => field.status)} />
-                <div className="data-title">数据字段</div>
-                <div className="field-table">
-                  <div className="field-table-header"><div>字段</div><div>本次解析值</div><div>数据库值</div><div className="header-status">状态</div></div>
-                  {draftFields.map((field) => {
-                    const parsed = splitUnit(field.parsedValue, field.propertyType === "number" ? FIELD_UNITS[field.key] || "" : "");
-                    const choiceKey = `${field.draft.index}:${field.key}`;
-                    return <div className="field-row" key={choiceKey}>
-                      <div className="field-name">{field.name}</div>
-                      <div className="field-editor"><div className="input-unit-wrap"><input
-                        className="field-input compact-input"
-                        value={parsed.value}
-                        disabled={locked}
-                        aria-invalid={field.status === "exception"}
-                        onChange={(event) => handleFieldChange(field.draft.index, field.key, withUnit(event.target.value, parsed.unit))}
-                        onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-                      />{parsed.unit && <span>{parsed.unit}</span>}</div></div>
-                      <div className="database-value">{field.databaseValue || "—"}</div>
-                      <div className="field-status">{field.status !== "unchecked" && <span className={`pill pill-${field.status}`} title={field.message}>{fieldStatus(field.status)}</span>}</div>
-                    </div>;
-                  })}
-                </div>
-                {draftConfirmFields.length > 0 && <section className="conflict-section" aria-label={`${draft.businessDate} 待确认字段`}><div className="conflict-section-title">待确认字段</div>{draftConfirmFields.map((field) => {
-                  const choiceKey = `${field.draft.index}:${field.key}`;
-                  return <div className="conflict-panel" key={choiceKey}><div className="conflict-message"><strong>{field.name}</strong><span>原值与新值不同，请选择保留项。</span></div><div className="conflict-options">
-                    <label><input type="radio" name={`conflict-${choiceKey}`} checked={conflictChoices[choiceKey] === "keep"} onChange={() => setConflictChoices((current) => ({ ...current, [choiceKey]: "keep" }))} /><span><small>原值</small><strong>{field.databaseValue || "—"}</strong></span></label>
-                    <label><input type="radio" name={`conflict-${choiceKey}`} checked={conflictChoices[choiceKey] === "use"} onChange={() => setConflictChoices((current) => ({ ...current, [choiceKey]: "use" }))} /><span><small>新值</small><strong>{field.parsedValue || "—"}</strong></span></label>
-                  </div></div>;
-                })}</section>}
-              </section>;
-            })}
-          </div>
-          <div className="review-footer"><span className="review-footer-text">{drafts.length > 1 ? `本次共 ${drafts.length} 条消息，将整批写入数据库。` : "确认后将把本次解析结果写入数据库。"}</span><Button data-shadcn-surface="" className="confirm-button" disabled={!canSubmit} onClick={() => write()}>{busy === "write" ? "正在入库…" : "确认入库"}</Button></div>
-        </>}
-      </section>
-    </div>
-    </div>
-  </main>
-  {requiredMonths.length > 0 && <MonthlyPlanDialog months={requiredMonths} values={monthlyPlans} setValues={setMonthlyPlans} close={() => setRequiredMonths([])} submit={(plans) => { setRequiredMonths([]); write(plans); }} />}
-  {bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} close={() => setBindingOpen(false)} save={saveBindings} />}
-  </div>;
+    {completed ? <div className="production-message-demo pm-retained">
+      <section className="complete-view"><div className="complete-icon"><Check /></div><h2>入库完成</h2><p>{writeResult?.message || `${drafts.length} 条消息已写入数据库`}</p><Button data-shadcn-surface="" onClick={handleNext}>录入下一条</Button></section>
+    </div> : <Card className="@container/message gap-0 py-0">
+      <CardContent className="grid min-w-0 px-0 @min-[880px]/message:grid-cols-[minmax(0,2fr)_auto_minmax(0,3fr)]">
+        <section data-shadcn-surface="" className="message-pane flex min-w-0 flex-col gap-5 p-6">
+          <div><h2 className="font-semibold">原始消息</h2><p className="mt-2 text-sm text-muted-foreground">输入生产消息，系统将自动解析并检查已有数据。</p></div>
+          <Textarea className="message-textarea min-h-[260px] flex-1 resize-none" aria-label="原始消息" value={rawMessage} disabled={Boolean(busy)} onChange={(event) => setRawMessage(event.target.value)} placeholder="请输入生产消息" />
+          <Button className="self-end" disabled={!rawMessage.trim() || locked} onClick={handleParse}>{parsed && <RefreshCw className="refresh-icon" />}<span>{busy === "parse" ? "正在解析…" : parsed ? "重新解析" : "解析消息"}</span></Button>
+        </section>
+
+        <Separator className="@min-[880px]/message:hidden" />
+        <Separator orientation="vertical" className="hidden self-stretch @min-[880px]/message:block" />
+
+        <div className="production-message-demo pm-retained">
+          <section className="review-pane">
+            {!parsed ? <div className="review-empty"><h2>解析结果</h2>{busy === 'parse' ? <p role="status"><span className="status-loader" />正在解析消息…</p> : <p>解析消息后，数据库检查结果将在这里显示。</p>}
+              {(bindingError || bindings?.configured === false || bindings && (!bindings.cutting.bound || !bindings.towerDaily.bound)) && <div className="pm-notice" role="alert">{bindingError || (bindings?.configured === false ? "数据库连接尚未配置。" : "数据库已变更，请点击右上角“数据库绑定”重新选择下料和塔筒主数据库。")}</div>}
+            </div> : <>
+              <div className="review-header"><h2>解析结果</h2><div className="review-summary"><span>新增<strong>{summary.newFields}</strong></span><i>·</i><span>一致<strong>{summary.same}</strong></span><i>·</i><span>待确认<strong>{summary.confirm}</strong></span><i>·</i><span>异常<strong>{summary.exception}</strong></span></div></div>
+              <div className="date-groups">
+                {drafts.map((draft) => {
+                  const draftFields = fields.filter((field) => field.draft.index === draft.index);
+                  const draftConfirmFields = draftFields.filter((field) => field.status === "confirm");
+                  const draftResult = checkResult ? { ...checkResult, items: checkResult.items.filter((item) => item.index === draft.index) } : undefined;
+                  return <section className="date-group" data-business-date={draft.businessDate} key={draft.index}>
+                    <div className="identity-section">
+                      <div className="identity-field"><DatePicker label="日期" value={draft.businessDate || ""} disabled={locked} onChange={(value) => handleDateChange(draft.index, value)} /></div>
+                      <div className="identity-field"><label>业务 / 产线</label><input className="field-input" value={draft.typeDisplay || ""} readOnly disabled={locked} /></div>
+                    </div>
+                    <MatchStatus busy={busy === "check"} result={draftResult} error={error} needsReparse={needsReparse} invalidCount={draft.canWrite ? 0 : 1} fieldStatuses={draftFields.map((field) => field.status)} />
+                    <div className="data-title">数据字段</div>
+                    <div className="field-table">
+                      <div className="field-table-header"><div>字段</div><div>本次解析值</div><div>数据库值</div><div className="header-status">状态</div></div>
+                      {draftFields.map((field) => {
+                        const parsed = splitUnit(field.parsedValue, field.propertyType === "number" ? FIELD_UNITS[field.key] || "" : "");
+                        const choiceKey = `${field.draft.index}:${field.key}`;
+                        return <div className="field-row" key={choiceKey}>
+                          <div className="field-name">{field.name}</div>
+                          <div className="field-editor"><div className="input-unit-wrap"><input
+                            className="field-input compact-input"
+                            value={parsed.value}
+                            disabled={locked}
+                            aria-invalid={field.status === "exception"}
+                            onChange={(event) => handleFieldChange(field.draft.index, field.key, withUnit(event.target.value, parsed.unit))}
+                            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                          />{parsed.unit && <span>{parsed.unit}</span>}</div></div>
+                          <div className="database-value">{field.databaseValue || "—"}</div>
+                          <div className="field-status">{field.status !== "unchecked" && <span className={`pill pill-${field.status}`} title={field.message}>{fieldStatus(field.status)}</span>}</div>
+                        </div>;
+                      })}
+                    </div>
+                    {draftConfirmFields.length > 0 && <section className="conflict-section" aria-label={`${draft.businessDate} 待确认字段`}><div className="conflict-section-title">待确认字段</div>{draftConfirmFields.map((field) => {
+                      const choiceKey = `${field.draft.index}:${field.key}`;
+                      return <div className="conflict-panel" key={choiceKey}><div className="conflict-message"><strong>{field.name}</strong><span>原值与新值不同，请选择保留项。</span></div><div className="conflict-options">
+                        <label><input type="radio" name={`conflict-${choiceKey}`} checked={conflictChoices[choiceKey] === "keep"} onChange={() => setConflictChoices((current) => ({ ...current, [choiceKey]: "keep" }))} /><span><small>原值</small><strong>{field.databaseValue || "—"}</strong></span></label>
+                        <label><input type="radio" name={`conflict-${choiceKey}`} checked={conflictChoices[choiceKey] === "use"} onChange={() => setConflictChoices((current) => ({ ...current, [choiceKey]: "use" }))} /><span><small>新值</small><strong>{field.parsedValue || "—"}</strong></span></label>
+                      </div></div>;
+                    })}</section>}
+                  </section>;
+                })}
+              </div>
+              <div className="review-footer"><span className="review-footer-text">{drafts.length > 1 ? `本次共 ${drafts.length} 条消息，将整批写入数据库。` : "确认后将把本次解析结果写入数据库。"}</span><Button data-shadcn-surface="" className="confirm-button" disabled={!canSubmit} onClick={() => write()}>{busy === "write" ? "正在入库…" : "确认入库"}</Button></div>
+            </>}
+          </section>
+        </div>
+      </CardContent>
+    </Card>}
+
+    {(requiredMonths.length > 0 || bindingOpen && bindings) && <div className="production-message-demo pm-retained">
+      {requiredMonths.length > 0 && <MonthlyPlanDialog months={requiredMonths} values={monthlyPlans} setValues={setMonthlyPlans} close={() => setRequiredMonths([])} submit={(plans) => { setRequiredMonths([]); write(plans); }} />}
+      {bindingOpen && bindings && <BindingDialog state={bindings} selections={bindingSelections} setSelections={setBindingSelections} error={bindingError} canSave={canSaveBindings} close={() => setBindingOpen(false)} save={saveBindings} />}
+    </div>}
+  </PageShell>;
 }
 
 function MatchStatus({ busy, result, error, needsReparse, invalidCount, fieldStatuses }: { busy: boolean; result?: ImportResult; error: string; needsReparse: boolean; invalidCount: number; fieldStatuses: string[] }) {
@@ -286,7 +311,7 @@ function MonthlyPlanDialog({ months, values, setValues, close, submit }: { month
   return <div className="pm-dialog-overlay"><section className="pm-dialog" role="dialog" aria-modal="true" aria-labelledby="monthly-plan-title"><h2 id="monthly-plan-title">补充下料月计划</h2><p>独立月计划库中没有该月份记录，请填写计划下料（吨）。</p>{months.map((month) => <label key={month}>{month}<input type="number" min="0" value={values[month] || ""} onChange={(event) => setValues({ ...values, [month]: event.target.value })} /></label>)}<div className="pm-dialog-actions"><Button data-shadcn-surface="" variant="outline" onClick={close}>取消</Button><Button data-shadcn-surface="" disabled={!valid} onClick={() => submit(parsed)}>创建并继续</Button></div></section></div>;
 }
 
-function BindingDialog({ state, selections, setSelections, error, close, save }: { state: BindingState; selections: { cutting: string; towerDaily: string }; setSelections: (value: { cutting: string; towerDaily: string }) => void; error: string; close: () => void; save: () => void }) {
+function BindingDialog({ state, selections, setSelections, error, canSave, close, save }: { state: BindingState; selections: { cutting: string; towerDaily: string }; setSelections: (value: { cutting: string; towerDaily: string }) => void; error: string; canSave: boolean; close: () => void; save: () => void }) {
   const [cuttingBusiness, setCuttingBusiness] = useState(state.sources.find(source => source.id === selections.cutting)?.businessSection || "");
   const [towerBusiness, setTowerBusiness] = useState(state.sources.find(source => source.id === selections.towerDaily)?.businessSection || "");
   const sourcesFor = (business: string) => state.usesBusinessSections ? state.sources.filter(source => source.businessSection === business) : state.sources;
@@ -296,11 +321,10 @@ function BindingDialog({ state, selections, setSelections, error, close, save }:
     {state.usesBusinessSections && <label>塔筒业务板块<ChoicePicker value={towerBusiness} ariaLabel="塔筒业务板块" placeholder="请选择业务板块" options={state.businessSections.map(value => ({ value, label: value }))} onChange={value => { setTowerBusiness(value); setSelections({ ...selections, towerDaily: "" }) }} /></label>}
     <label>塔筒产线主数据库<ChoicePicker value={selections.towerDaily} ariaLabel="塔筒产线主数据库" placeholder="请选择具体数据库" disabled={state.usesBusinessSections && !towerBusiness} options={sourcesFor(towerBusiness).map(source => ({ value: source.id, label: source.name }))} onChange={value => setSelections({ ...selections, towerDaily: value })} /></label>
     {error && <div className="pm-notice" role="alert">{error}</div>}
-    <div className="pm-dialog-actions"><Button data-shadcn-surface="" variant="outline" onClick={close}>取消</Button><Button data-shadcn-surface="" disabled={!selections.towerDaily} onClick={save}>保存绑定</Button></div>
+    <div className="pm-dialog-actions">
+      {!canSave && <span id="binding-save-unavailable" className="mr-auto min-w-0 self-center text-sm text-muted-foreground">当前版本暂不支持在此保存绑定</span>}
+      <Button data-shadcn-surface="" variant="outline" onClick={close}>取消</Button>
+      <Button data-shadcn-surface="" aria-describedby={canSave ? undefined : "binding-save-unavailable"} disabled={!canSave || !selections.towerDaily} onClick={save}>保存绑定</Button>
+    </div>
   </section></div>;
-}
-
-function PageTitle({ configure, disabled }: { configure: () => void; disabled: boolean }) { return <header className="content-header"><h1>生产消息入库</h1><button type="button" className="template-config-button" disabled={disabled} aria-label="数据库绑定" title="数据库绑定" onClick={configure}><Settings2 /></button></header>; }
-function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
-  return <ThreeStepProgress current={current} titles={["录入消息", "解析确认", "完成"]} label="生产消息入库进度" />;
 }

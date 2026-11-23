@@ -82,7 +82,7 @@ it('reports renderer readiness while local service initialization still gates bu
     expect(invoke).not.toHaveBeenCalled()
     expect(container.querySelector('h1')?.textContent).toBe('生产消息入库')
     expect(container.querySelector<HTMLTextAreaElement>('.message-textarea')?.disabled).toBe(false)
-    expect(container.querySelector<HTMLButtonElement>('.parse-action button')?.disabled).toBe(true)
+    expect([...container.querySelectorAll<HTMLButtonElement>('.message-pane button')].find(button => button.textContent?.trim() === '解析消息')?.disabled).toBe(true)
     expect(container.textContent).not.toContain('正在初始化本地服务')
     expect(container.querySelector('.skeleton-block, [data-slot=skeleton]')).toBeNull()
   } finally { await act(async () => root.unmount()); container.remove(); service.state = 'Ready'; vi.unstubAllGlobals() }

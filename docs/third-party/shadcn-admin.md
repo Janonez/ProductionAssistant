@@ -9,6 +9,7 @@
 | 固定提交中的来源 | 本项目文件 | 适配 |
 |---|---|---|
 | `src/components/ui/{sidebar,button,separator,tooltip,dropdown-menu,sheet,input,skeleton}.tsx` | `components/ui/` 同名文件 | 保留实际 JSX、Tailwind 类和 Radix 交互；改相对导入；Sidebar 使用会话内状态替代 cookie；触发器中文与 ARIA；新 portal 加主题/reset 边界 |
+| `src/components/ui/textarea.tsx` | `components/ui/textarea.tsx` | 保留 JSX、原生 textarea 和 Tailwind 类，仅改 `cn` 相对导入。生产消息页用 `data-shadcn-surface` 隔离旧样式，无新增依赖。 |
 | `src/components/layout/app-sidebar.tsx`、`app-title.tsx` | `components/layout/OperationSidebar.tsx` | 保留 Header/Content/Footer/Rail 和菜单结构；使用生产助手品牌、七个入口和设置，移除团队与账号 |
 | `src/components/layout/nav-group.tsx` 的 `NavGroup` / `SidebarMenuLink` | `components/layout/NavGroup.tsx` | 使用平级业务组；TanStack Link/位置判断替换为现有 query 导航回调和 route；没有复制无业务需求的子菜单、徽标 |
 | `src/components/layout/header.tsx` | `components/layout/AppHeader.tsx` | 保留上游布局、64px 高度、SidebarTrigger 和 Separator；加入当前业务名称、真实设置入口及上游 ThemeSwitch |

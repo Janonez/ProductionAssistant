@@ -44,7 +44,7 @@ export function AppLayout({ route, taskType = '', navigate, openSettings, childr
         </div>
       </Header>
       <div className="pa-page-scroll min-h-0 flex-1 overflow-auto" style={{ scrollbarGutter: route === ROUTES.dailyReport && taskType === 'tencent_sheet_fill' ? 'stable' : undefined }}>
-        <PageContainer fluid className="min-w-0">{children}</PageContainer>
+        <PageContainer fluid className={route === ROUTES.productionMessage ? "min-w-0 p-0" : "min-w-0"}>{children}</PageContainer>
       </div>
     </SidebarInset>
   </SidebarProvider>

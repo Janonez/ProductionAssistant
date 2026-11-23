@@ -192,7 +192,7 @@
   scrollbar-gutter: stable;
 }
 
-.production-message-content .template-config-button {
+.production-message-content:has(.daily-weld-page) .template-config-button {
   height: 44px;
   width: 44px;
   padding: 0;
@@ -220,13 +220,10 @@
 .production-message-demo .review-header h2,
 .production-message-demo .review-empty h2,
 .production-message-demo .complete-view h2 { font-size: var(--font-body); font-weight: var(--fw-semibold); }
-.production-message-demo .step,
-.production-message-demo .message-textarea,
 .production-message-demo .primary-button,
 .production-message-demo .field-input,
 .production-message-demo .field-name,
-.production-message-demo .database-value,
-.production-message-demo .template-config-button { font-size: var(--font-control); }
+.production-message-demo .database-value { font-size: var(--font-control); }
 .production-message-demo .review-summary,
 .production-message-demo .identity-field label,
 .production-message-demo .field-table-header,
@@ -243,18 +240,16 @@
 .production-message-demo .field-table-header,
 .production-message-demo .pill,
 .production-message-demo .conflict-message strong { font-weight: var(--fw-semibold); }
-.production-message-demo .message-textarea,
 .production-message-demo .field-input,
 .production-message-demo .field-name,
-.production-message-demo .database-value,
-.production-message-demo .template-config-button { font-weight: var(--fw-regular); }
+.production-message-demo .database-value { font-weight: var(--fw-regular); }
 
 /* Keep the approved page on the same application-wide font stack. */
 .production-message-demo, body:has(.production-message-demo) { font-family: var(--font-ui); }
 
-.production-message-content .template-config-button svg { width: 18px; height: 18px; }
-.production-message-content .template-config-button:hover:not(:disabled) { background: var(--surface-muted); }
-.production-message-content .template-config-button:disabled { opacity: .5; cursor: default; }
+.production-message-content:has(.daily-weld-page) .template-config-button svg { width: 18px; height: 18px; }
+.production-message-content:has(.daily-weld-page) .template-config-button:hover:not(:disabled) { background: var(--surface-muted); }
+.production-message-content:has(.daily-weld-page) .template-config-button:disabled { opacity: .5; cursor: default; }
 
 /* ===== 视觉对齐修正 ===== */
 
@@ -277,11 +272,6 @@
 }
 /* 24px 标题 + 8px 间距 + 24px 描述行。 */
 .production-message-demo .review-header { min-height: 56px; }
-.production-message-demo .message-textarea {
-  flex: 1;
-  height: auto;
-  min-height: 260px;
-}
 .production-message-demo .parse-action,
 .production-message-demo .review-footer {
   margin-top: auto;
@@ -340,4 +330,40 @@
     --col-db: 76px;
     --col-gap: 12px;
   }
+}
+
+/* The new page shell owns its surface. Keep the legacy controls scoped to their content. */
+.production-message-demo.pm-retained {
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  color: var(--foreground);
+  --bg-card: var(--card);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --border-subtle: var(--border);
+  --border-soft: var(--border);
+  --input-bg: var(--background);
+  --input-border: var(--input);
+  --input-border-hover: var(--ring);
+  --input-border-focus: var(--ring);
+}
+
+.production-message-demo.pm-retained .review-pane {
+  min-height: 100%;
+  padding: 1.5rem;
+}
+
+.production-message-demo.pm-retained .field-table { overflow-x: auto; }
+.production-message-demo.pm-retained .complete-view { width: 100%; margin: 0; }
+.production-message-demo.pm-retained .pm-dialog-overlay { background: rgb(0 0 0 / 35%); }
+
+.production-message-demo.pm-retained .pill-new,
+.production-message-demo.pm-retained .pill-same,
+.production-message-demo.pm-retained .pill-unchecked { background: var(--muted); }
+
+.production-message-demo.pm-retained .conflict-panel,
+.production-message-demo.pm-retained .pill-confirm {
+  --text-primary: #292524;
+  --text-secondary: #57534e;
 }

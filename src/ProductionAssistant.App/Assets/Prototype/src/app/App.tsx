@@ -67,18 +67,19 @@ export function App() {
       <LocalDataBootstrap enabled={taskType !== null} />{pages.map(page => {
         const active = page.key === pageKey
         const group = page.route === ROUTES.dailyReport && page.taskType === 'tencent_sheet_fill'
+        const productionMessage = page.route === ROUTES.productionMessage
         return <div
         key={page.key}
         hidden={!active}
         style={active ? undefined : { display: 'none' }}
-        className={group ? 'min-w-0' : `pa-legacy-content ${page.route === ROUTES.productionMessage || page.route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}`}
+        className={group || productionMessage ? 'min-w-0' : `pa-legacy-content ${page.route === ROUTES.dailyWeld ? 'production-message-demo production-message-content' : 'app-shell'}`}
         data-shadcn-surface={group ? '' : undefined}
         data-page-route={active ? page.route : undefined}
       >
         <LoadBoundary>
           <Suspense fallback={<p role="status" aria-label="正在加载页面" className="flex items-center gap-2"><Spinner />正在加载页面…</p>}>
             {active && <RouteReady route={page.route} loadId={loadId} />}
-            {page.route === ROUTES.productionMessage && page.taskType !== null
+            {productionMessage && page.taskType !== null
               ? <LocalServiceBoundary>{ready => <ProductionMessagePage serviceReady={ready} />}</LocalServiceBoundary>
               : <LocalServiceBoundary>
                 {page.taskType === null ? <p role="alert">任务分类无效，请从左侧重新选择业务分类。</p> : page.route === ROUTES.dailyWeld ? <DailyWeldPage openSettings={() => setSettingsOpen(true)} /> : <main>{page.route === ROUTES.productionMeeting ? <ProductionMeetingPage /> : page.route === ROUTES.planPdf ? <PlanPdfPage /> : page.route === ROUTES.databaseViewer ? <DatabaseViewerPage /> : group ? <GroupSubmissionRoute /> : page.route === ROUTES.dailyReport ? <AutomationPage taskType={page.taskType} openSettings={() => setSettingsOpen(true)} /> : <ReportCenterPage />}</main>}

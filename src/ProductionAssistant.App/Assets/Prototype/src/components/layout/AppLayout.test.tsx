@@ -85,7 +85,7 @@ describe('transplanted shadcn application shell', () => {
         expect(content.querySelector('[aria-label="集团填报工作台"]')).not.toBeNull()
       } else {
         expect(container.querySelector<HTMLDivElement>('.pa-page-scroll')!.style.scrollbarGutter).toBe('')
-        expect(content.classList.contains('pa-legacy-content')).toBe(true)
+        expect(content.classList.contains('pa-legacy-content')).toBe(module.route !== routeTable.ROUTES.productionMessage)
         expect(content.hasAttribute('data-shadcn-surface')).toBe(false)
       }
       expect(new URLSearchParams(location.search).get('loadId')).toBe('document-one')
