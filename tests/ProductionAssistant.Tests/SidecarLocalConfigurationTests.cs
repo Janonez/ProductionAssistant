@@ -14,7 +14,7 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
     // Independent test expectations; never derive these from the production allowlist.
     internal static readonly string[] ExpectedAllowedOperations =
     [
-        "production.cancel", "production.getBindings", "weld.getState", "weld.generate",
+        "production.cancel", "production.parse", "production.check", "production.getBindings", "weld.getState", "weld.generate",
         "database.getState", "database.getSchema", "database.inspect",
         "tencentSheet.get", "tencentSheet.runs", "tencentSheet.sources", "tencentSheet.schema", "tencentSheet.views",
         // T1-A migrates local document configuration; document writes remain blocked below.
@@ -35,7 +35,7 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
         "meeting.export", "meeting.openOutput", "meeting.pickFile",
         "notionFill.create", "notionFill.get", "notionFill.runNow", "notionFill.save", "notionFill.test", "notionFill.testSource",
         "plan.audit", "plan.export", "plan.openOutput", "plan.pickFolder", "plan.repair",
-        "production.check", "production.parse", "production.saveBindings", "production.write",
+        "production.saveBindings", "production.write",
         "report.authenticate", "report.run", "report.saveConfig",
         "settings.refreshDataSources", "settings.saveConnection", "settings.testNotification",
         "tencentSheet.addField", "tencentSheet.backgroundTest", "tencentSheet.deleteField", "tencentSheet.fetch",
@@ -127,7 +127,7 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
     }
 
     [Fact]
-    public void Allowlist_includes_T1_session_and_local_document_configuration_only()
+    public void Allowlist_matches_the_operations_migrated_to_sidecar()
     {
         Assert.True(StdioHost.AllowedOperations.SetEquals(ExpectedAllowedOperations));
         Assert.Equal(ExpectedAllowedOperations.Length, StdioHost.AllowedOperations.Count);
@@ -751,6 +751,41 @@ public sealed class SidecarLocalConfigurationTests : IDisposable
             Assert.NotEqual(originalName, NotificationSettingsStore.MutexName());
         }
         finally { Environment.SetEnvironmentVariable("PRODUCTIONASSISTANT_DATA_DIR", _folder); }
+    }
+
+    [Fact]
+    public async Task Production_parse_and_check_dispatch_without_a_live_database()
+    {
+        BusinessDatabaseSettingsStore.Save(new NotionSettings
+        {
+            Targets =
+            [
+                new NotionTargetSettings
+                {
+                    ModuleKey = ProductionMessageKinds.CuttingModuleKey,
+                    PropertyMappings = new() { [ProductionMessageFields.Weight] = "下料（吨）" }
+                }
+            ]
+        });
+        var bindings = BusinessDatabaseSettingsStore.FilePath;
+        var before = await File.ReadAllTextAsync(bindings);
+        const string date = "2026-08-13";
+
+        var parsed = await SendAsync("production.parse", new { text = date + "\n下料重量：2吨", defaultDate = date });
+        AssertSuccess(parsed);
+        var drafts = parsed.GetProperty("data");
+        var draft = Assert.Single(drafts.EnumerateArray());
+        Assert.True(draft.GetProperty("canWrite").GetBoolean());
+        Assert.Equal(date, draft.GetProperty("businessDate").GetString());
+        Assert.Equal("MaterialCutting", draft.GetProperty("kind").GetString());
+
+        var check = await SendAsync("production.check", new { drafts, defaultDate = date });
+        AssertSuccess(check);
+        var result = check.GetProperty("data");
+        Assert.False(result.GetProperty("succeeded").GetBoolean());
+        Assert.Contains("请先在", result.GetProperty("message").GetString());
+        Assert.Empty(result.GetProperty("items").EnumerateArray());
+        Assert.Equal(before, await File.ReadAllTextAsync(bindings));
     }
 
     [Fact]

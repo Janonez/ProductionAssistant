@@ -38,9 +38,6 @@ button { cursor: pointer; }
 .surface-title, .surface-title > div { display: flex; align-items: center; justify-content: space-between; }
 .surface-title > div { justify-content: flex-start; gap: 12px; }
 .surface-title h2 { margin: 0 0 4px; font-size: var(--font-body); font-weight: var(--fw-semibold); }
-.step { display: grid; width: 36px; height: 36px; place-items: center; border-radius: var(--radius-control); background: var(--primary-soft); color: var(--primary-strong); font-weight: var(--fw-semibold); }
-.step svg { width: 18px; }
-
 .primary, .secondary, .ghost, .danger { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; border-radius: var(--radius-control); font-weight: var(--fw-semibold); }
 .primary { border: 1px solid var(--primary); background: var(--primary); color: var(--surface); }
 .primary:hover:not(:disabled) { border-color: var(--primary-strong); background: var(--primary-strong); }

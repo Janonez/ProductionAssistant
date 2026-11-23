@@ -70,9 +70,7 @@ body:has([data-slot='sidebar-wrapper']) { margin: 0; min-width: 0; overflow: hid
 .pa-shell-theme .pa-legacy-content .production-message-scroll {
   height: auto; overflow: visible; scrollbar-gutter: auto;
 }
-.pa-shell-theme .pa-legacy-content .workspace-panel,
-.pa-shell-theme .pa-legacy-content .step-bar { width: 100%; }
-.pa-shell-theme .pa-legacy-content .workspace-panel { margin-bottom: 0; }
+.pa-shell-theme .pa-legacy-content .workspace-panel { width: 100%; margin-bottom: 0; }
 .pa-shell-theme .pa-legacy-content .message-template-host {
   height: calc(100svh - var(--host-titlebar) - 128px);
 }

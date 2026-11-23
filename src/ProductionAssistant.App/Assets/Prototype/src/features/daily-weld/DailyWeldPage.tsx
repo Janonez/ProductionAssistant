@@ -6,8 +6,10 @@ import { useLocalData } from '../../app/LocalData'
 import DatePicker from '../../components/ui/DatePicker'
 import { ChoicePicker } from '../../components/ui/FormPickers'
 import { NumericInput } from '../../components/ui/NumericInput'
-import { ThreeStepProgress } from '../../components/ui/ThreeStepProgress'
+import { Badge } from '../../components/ui/badge'
 import type { WeldCheckResult, WeldProgress, WeldRow, WeldState } from '../../lib/types'
+
+const WELD_STEPS = ['录入计划', '拆分预览', '完成'] as const
 
 const EMPTY_STATE: WeldState = { configured: false, binding: { bound: false, name: '', path: '' }, usesBusinessSections: false, businessSections: [], sources: [], selected: '' }
 
@@ -114,7 +116,7 @@ export function DailyWeldPage({ openSettings }: { openSettings: () => void }) {
     <header className="content-header"><h1>每日焊接数据模拟</h1><button type="button" className="template-config-button" disabled={locked} aria-label="焊接设置" title="焊接设置" onClick={openBinding}><Settings2 /></button></header>
     <div className="production-message-scroll daily-weld-page">
       {busy === 'state' && <p role="status">正在读取焊接配置…</p>}
-      <ThreeStepProgress current={step} titles={['录入计划', '拆分预览', '完成']} label="焊接计划拆分进度" />
+      <Badge data-shadcn-surface="" variant="secondary" role="status" aria-label="焊接计划拆分进度" className="mb-4">第 {step} 步 · {WELD_STEPS[step - 1]}</Badge>
 
       {error && <div className="weld-notice error" role="alert">{error}</div>}
       {step === 1 && <section className="weld-plan-card" aria-labelledby="weld-plan-title">

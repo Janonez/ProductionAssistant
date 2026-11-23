@@ -9,6 +9,8 @@ internal sealed class StdioHost : IBridgeHost
     internal static readonly HashSet<string> AllowedOperations = new(StringComparer.Ordinal)
     {
         "production.cancel",
+        "production.parse",
+        "production.check",
         "production.getBindings",
         "weld.getState",
         "weld.generate",

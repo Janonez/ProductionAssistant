@@ -2,6 +2,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Draft } from '../lib/types'
+import * as operationAvailability from './operationAvailability'
 
 const invoke = vi.fn();
 const notifyReady = vi.fn();
@@ -54,10 +55,10 @@ describe('connected production message workflow', () => {
   afterEach(() => { vi.useRealTimers(); container.remove() })
 
   it('keeps field edits local and only rechecks after the target date changes', async () => {
-    expect(container.querySelector('.content-header h1')?.textContent).toBe('生产消息入库')
+    expect(container.querySelector('main header h1')?.textContent).toBe('生产消息入库')
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('生产消息')
-    expect(container.querySelector('.workspace-panel')).toBeTruthy()
+    expect(container.querySelector('[data-slot=card]')).toBeTruthy()
     const textarea = container.querySelector('textarea')!
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, '8.13下料2吨'); textarea.dispatchEvent(new Event('input', { bubbles: true })) })
     const button = (label: string) => [...container.querySelectorAll('button')].find(item => item.textContent?.includes(label)) as HTMLButtonElement
@@ -263,8 +264,8 @@ describe('connected production message workflow', () => {
     await act(async () => { button('解析消息').click(); await Promise.resolve() })
     expect(container.textContent).toContain('解析结果')
     expect(container.querySelector('.match-status')?.textContent).toContain('正在检查已有数据')
-    expect(container.querySelector('.step-done .step-circle svg')).toBeTruthy()
-    expect(container.querySelector('.step-done')?.firstElementChild?.nextElementSibling?.textContent).toBe('录入消息')
+    const progress = container.querySelector('[data-slot="badge"][role="status"][aria-label="生产消息入库进度"]')
+    expect(progress?.textContent).toBe('第 2 步 · 解析确认')
     expect(button('重新解析').disabled).toBe(true)
     expect((container.querySelector('.message-textarea') as HTMLTextAreaElement).disabled).toBe(true)
     expect((container.querySelector('.identity-section .date-picker-trigger') as HTMLButtonElement).disabled).toBe(true)
@@ -299,7 +300,12 @@ describe('connected production message workflow', () => {
     await act(async () => { button('确认入库').click(); await Promise.resolve() })
     expect(invoke).toHaveBeenCalledWith('production.write', expect.objectContaining({ overwriteExisting: false, fieldChoices: { '1:weight': 'use' } }), 120000)
     expect(container.textContent).toContain('入库完成')
-    expect(container.querySelectorAll('.step-done .step-circle svg')).toHaveLength(2)
+    const progress = container.querySelector('[data-slot="badge"][role="status"][aria-label="生产消息入库进度"]')
+    expect(progress?.textContent).toBe('第 3 步 · 完成')
+    const binding = button('数据库绑定')
+    expect(binding.disabled).toBe(false)
+    await act(async () => { binding.click() })
+    expect(container.querySelector('[role="dialog"][aria-labelledby="binding-title"]')).toBeTruthy()
     expect(container.querySelector('.complete-icon svg')).toBeTruthy()
   })
 
@@ -346,7 +352,10 @@ describe('connected production message workflow', () => {
 })
 
 describe('production message Demo UI', () => {
-  it('renders the approved UI without sample input and reads the Notion binding', async () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('reads and saves a database binding when the operation is available', async () => {
+    vi.spyOn(operationAvailability, 'isOperationAvailable').mockReturnValue(true)
     history.replaceState({}, '', '?route=production-message')
     const container = document.createElement('div')
     document.body.append(container)
@@ -360,13 +369,17 @@ describe('production message Demo UI', () => {
     await act(async () => { await vi.dynamicImportSettled() })
 
     expect(container.querySelectorAll('.desktop-shell > .desktop-shell-navigation .sidebar')).toHaveLength(1)
-    expect(container.querySelector('.production-message-content')).toBeTruthy()
-    expect(container.querySelector('.content-header h1')?.textContent).toBe('生产消息入库')
-    expect(container.querySelector('.production-message-scroll > .content-header')).toBeTruthy()
-    const templateConfig = container.querySelector('.template-config-button') as HTMLButtonElement
-    expect(templateConfig.getAttribute('aria-label')).toBe('数据库绑定')
+    const route = container.querySelector('[data-page-route="production-message"]')
+    expect(route?.querySelector('main header h1')?.textContent).toBe('生产消息入库')
+    expect(route?.matches('.pa-legacy-content')).toBe(false)
+    expect(route?.querySelector('.pa-legacy-content')).toBeNull()
+    expect(route?.querySelector('[data-slot=card] [data-slot=separator]')).toBeTruthy()
+    const progress = container.querySelector('[data-slot="badge"][role="status"][aria-label="生产消息入库进度"]')
+    expect(progress?.textContent).toBe('第 1 步 · 录入消息')
+    const templateConfig = [...container.querySelectorAll('header button')].find(button => button.textContent === '数据库绑定') as HTMLButtonElement
+    expect(templateConfig.getAttribute('aria-haspopup')).toBe('dialog')
     expect(templateConfig.disabled).toBe(false)
-    expect((container.querySelector('.message-textarea') as HTMLTextAreaElement).value).toBe('')
+    expect(container.querySelector<HTMLTextAreaElement>('textarea[data-slot="textarea"][aria-label="原始消息"]')?.value).toBe('')
     expect(invoke).toHaveBeenCalledWith('production.getBindings')
 
     await act(async () => { templateConfig.click() })
@@ -379,6 +392,8 @@ describe('production message Demo UI', () => {
     await choose('下料主数据库', '下料数据库')
     await choose('塔筒产线主数据库', '塔筒产线数据库')
     const save = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '保存绑定')!
+    expect(save.disabled).toBe(false)
+    expect(container.textContent).not.toContain('当前版本暂不支持在此保存绑定')
     await act(async () => { save.click(); await Promise.resolve() })
     expect(invoke).toHaveBeenCalledWith('production.saveBindings', { cutting: 'cutting', towerDaily: 'tower' }, 120000)
 
@@ -386,7 +401,7 @@ describe('production message Demo UI', () => {
     container.remove()
   })
 
-  it('uses direct database selectors for a flat local provider', async () => {
+  it('allows choosing databases but blocks saving when the operation is unavailable', async () => {
     history.replaceState({}, '', '?route=production-message')
     const container = document.createElement('div')
     document.body.append(container)
@@ -397,12 +412,24 @@ describe('production message Demo UI', () => {
     const root = createRoot(container)
     await act(async () => { root.render(<App />) })
     await act(async () => { await vi.dynamicImportSettled() })
-    await act(async () => { (container.querySelector('.template-config-button') as HTMLButtonElement).click() })
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('header button')].find(button => button.textContent === '数据库绑定')!.click() })
 
     expect(container.querySelectorAll('.pm-binding-dialog .picker-trigger')).toHaveLength(2)
     expect(container.textContent).not.toContain('下料业务板块')
     await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="下料主数据库"]')!.click() })
     expect(container.textContent).toContain('本地生产表')
+    await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="下料主数据库"]')!.click() })
+    const tower = container.querySelector<HTMLButtonElement>('[aria-label="塔筒产线主数据库"]')!
+    await act(async () => { tower.click() })
+    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(option => option.textContent === '本地生产表')!.click() })
+    expect(tower.textContent).toContain('本地生产表')
+    const save = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '保存绑定')!
+    expect(save.disabled).toBe(true)
+    const hint = container.querySelector('#binding-save-unavailable')
+    expect(hint?.textContent).toBe('当前版本暂不支持在此保存绑定')
+    expect(save.getAttribute('aria-describedby')).toBe(hint?.id)
+    await act(async () => { save.click() })
+    expect(invoke.mock.calls.some(([operation]) => operation === 'production.saveBindings')).toBe(false)
 
     await act(async () => root.unmount())
     container.remove()
@@ -432,7 +459,7 @@ describe('shared operation sidebar', () => {
     await act(async () => { root.render(<App />) })
     await act(async () => { await vi.dynamicImportSettled() })
 
-    expect(container.querySelector('.production-message-content h1')?.textContent).toBe('每日焊接数据模拟')
+    expect(container.querySelector('.pa-legacy-content.production-message-content h1')?.textContent).toBe('每日焊接数据模拟')
     expect(container.querySelector('[aria-current="page"]')?.textContent).toContain('每日焊接')
 
     await act(async () => { root.unmount() })
